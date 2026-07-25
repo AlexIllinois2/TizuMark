@@ -164,6 +164,7 @@ const I18N = {
     softBreaksHint: '开启后，段落内单个回车直接换行（与「空格+空格+回车」一致），更符合日常写作习惯，也便于从其他笔记软件迁移。关闭则恢复 CommonMark 标准（回车视为空格）。',
     showTrayIcon: '显示托盘图标',
     showTrayIconHint: '关闭后隐藏系统托盘图标；此时关闭窗口会直接退出应用（否则无法通过托盘恢复窗口）。',
+    tabSizeHint: '每按一次 Tab 键缩进几个空格。列表要往里缩一级（做子列表）也靠这个宽度，建议用 4，最稳。',
     closeAction: '关闭窗口时',
     closeActionAsk: '每次询问',
     closeActionQuit: '退出应用',
@@ -476,6 +477,7 @@ const I18N = {
     softBreaksHint: 'When enabled, a single Enter inside a paragraph creates a line break (same as "two spaces + Enter"), matching everyday writing and easing migration from other note apps. When disabled, CommonMark standard applies (Enter is treated as a space).',
     showTrayIcon: 'Show tray icon',
     showTrayIconHint: 'When disabled, the system tray icon is hidden; closing the window then quits the app directly (otherwise the window could not be restored via the tray).',
+    tabSizeHint: 'How many spaces a Tab press indents. Indenting a list one level (to make a sub-list) also uses this width; 4 is recommended for the safest nesting.',
     closeAction: 'On window close',
     closeActionAsk: 'Ask every time',
     closeActionQuit: 'Quit app',
@@ -923,6 +925,8 @@ class MarkdownEditor {
     setRowLabel('set-soft-breaks', t('softBreaks'));
     const softBreaksHint = document.querySelector('#setting-soft-breaks-hint .hint-text');
     if (softBreaksHint) softBreaksHint.textContent = t('softBreaksHint');
+    const tabSizeHint = document.querySelector('#setting-tab-size-hint .hint-text');
+    if (tabSizeHint) tabSizeHint.textContent = t('tabSizeHint');
     setText('setting-image-store-assets', t('imageSettingAssets'));
     setText('setting-image-store-base64', t('imageSettingBase64'));
     document.querySelector('#setting-image-store-hint .hint-text').textContent = t('imageSettingHint');
@@ -1197,7 +1201,7 @@ class MarkdownEditor {
   defaultSettings() {
     return {
       fontSize: 14,
-      tabSize: 2,
+      tabSize: 4,
       lineWrap: true,
       lineNumbers: true,
       previewFontSize: 16,
@@ -1315,6 +1319,7 @@ class MarkdownEditor {
     document.getElementById('set-tab-size').addEventListener('change', (e) => {
       this.settings.tabSize = Number(e.target.value);
       this.cm.setOption('tabSize', this.settings.tabSize);
+      this.cm.setOption('indentUnit', this.settings.tabSize);
       this.saveSettings();
     });
     document.getElementById('set-line-wrap').addEventListener('change', (e) => {
@@ -1699,6 +1704,7 @@ class MarkdownEditor {
     const s = this.settings;
     this.cm.getWrapperElement().style.fontSize = s.fontSize + 'px';
     this.cm.setOption('tabSize', s.tabSize);
+    this.cm.setOption('indentUnit', s.tabSize);
     this.cm.setOption('lineWrapping', s.lineWrap);
     this.cm.setOption('lineNumbers', s.lineNumbers);
     this.preview.style.fontSize = s.previewFontSize + 'px';
@@ -2312,14 +2318,21 @@ class MarkdownEditor {
 
   applyShortcuts() {
     const s = this.shortcuts;
+    const LIST_LINE_RE = /^(\s*)(?:>[> ]*|[*+-]\s\[[xX ]\]\s|[*+-]\s|\d+[.)]\s)/;
     this.cm.setOption('extraKeys', {
       'Enter': 'newlineAndIndentContinueMarkdownList',
       'Tab': (cm) => {
         if (cm.somethingSelected()) {
           cm.indentSelection('add');
-        } else {
-          cm.replaceSelection('  ', 'end');
+          return;
         }
+        // 列表/引用行无选区：缩进整行形成子级（支持多级列表层级调整）
+        const lineText = cm.getLine(cm.getCursor().line);
+        if (LIST_LINE_RE.test(lineText)) {
+          cm.indentSelection('add');
+          return;
+        }
+        cm.replaceSelection(' '.repeat(this.settings.tabSize), 'end');
       },
       'Shift-Tab': (cm) => cm.indentSelection('subtract'),
     });
@@ -2343,7 +2356,7 @@ class MarkdownEditor {
       blockquote: () => this.insertLinePrefix('> '),
       insertTable: () => this.insertBlock('| 列1 | 列2 | 列3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |', 2),
       insertUl: () => this.insertLinePrefix('- '),
-      insertOl: () => this.insertLinePrefix('1. '),
+      insertOl: () => this.insertLinePrefix('1. ', true),
       insertTask: () => this.insertLinePrefix('- [ ] '),
       insertHr: () => this.insertBlock('---'),
       insertLink: () => this.showInsertLinkDialog(),
@@ -2396,6 +2409,7 @@ class MarkdownEditor {
   }
 
   initEditor() {
+    const LIST_LINE_RE = /^(\s*)(?:>[> ]*|[*+-]\s\[[xX ]\]\s|[*+-]\s|\d+[.)]\s)/;
     this.cm = CodeMirror(document.getElementById('editor-wrapper'), {
       value: '',
       mode: 'gfm',
@@ -2405,14 +2419,21 @@ class MarkdownEditor {
       styleActiveLine: true,
       matchBrackets: true,
       autoCloseBrackets: true,
+      indentUnit: this.settings.tabSize,
       extraKeys: {
         'Enter': 'newlineAndIndentContinueMarkdownList',
         'Tab': (cm) => {
           if (cm.somethingSelected()) {
             cm.indentSelection('add');
-          } else {
-            cm.replaceSelection('  ', 'end');
+            return;
           }
+          // 列表/引用行无选区：缩进整行形成子级（支持多级列表层级调整）
+          const lineText = cm.getLine(cm.getCursor().line);
+          if (LIST_LINE_RE.test(lineText)) {
+            cm.indentSelection('add');
+            return;
+          }
+          cm.replaceSelection(' '.repeat(this.settings.tabSize), 'end');
         },
         'Shift-Tab': (cm) => cm.indentSelection('subtract'),
       }
@@ -2517,21 +2538,28 @@ class MarkdownEditor {
         await this.ensureTabLoaded(newTab);
       }
 
+      // 关键：先把恢复值读到局部变量。setValue 会同步触发 scroll / cursorActivity 事件，
+      // 此刻 this.activeTab 已是 newTab，事件处理器会把 newTab.scrollPos / cursorPos 覆盖为 0，
+      // 所以恢复必须用这里的快照副本，不能再回头读 newTab.*（否则会读到被污染的 0 → 回到顶部）。
+      const restoreCursor = newTab.cursorPos || { line: 0, ch: 0 };
+      const restoreScroll = newTab.scrollPos || { top: 0, left: 0 };
+      const restorePreviewTop = newTab.previewScrollTop || 0;
+
       this.cm.setValue(newTab.content || '');
       clearTimeout(this.debounceTimer);
-      this.cm.setCursor(newTab.cursorPos || { line: 0, ch: 0 });
-      this.cm.scrollTo((newTab.scrollPos && newTab.scrollPos.left) || 0, (newTab.scrollPos && newTab.scrollPos.top) || 0);
+      this.cm.setCursor(restoreCursor);
+      this.cm.scrollTo(restoreScroll.left || 0, restoreScroll.top || 0);
       this.cm.clearHistory();
 
       this.updateTabDisplay();
       await this.updatePreview();
       if (!this.settings.scrollSync) {
         const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
-        this.preview.scrollTop = Math.min(newTab.previewScrollTop, maxScroll);
+        this.preview.scrollTop = Math.min(restorePreviewTop, maxScroll);
       } else if (document.querySelector('.editor-container').classList.contains('preview-mode')) {
         setTimeout(() => {
           const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
-          this.preview.scrollTop = Math.min(newTab.previewScrollTop, maxScroll);
+          this.preview.scrollTop = Math.min(restorePreviewTop, maxScroll);
         }, 0);
       }
       this.updateWordCount();
@@ -3354,6 +3382,15 @@ class MarkdownEditor {
         return;
       }
 
+      // 任务列表 checkbox：点击切换 [ ] <-> [x] 并回写源码
+      const checkbox = e.target.closest('input[type="checkbox"]');
+      if (checkbox) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleTaskCheckboxToggle(checkbox);
+        return;
+      }
+
       const link = e.target.closest('a');
       if (!link) return;
 
@@ -4086,6 +4123,7 @@ class MarkdownEditor {
           filePath: t.filePath,
           cursorPos: t.cursorPos || { line: 0, ch: 0 },
           scrollPos: t.scrollPos || { top: 0, left: 0 },
+          previewScrollTop: t.previewScrollTop || 0,
           fileMeta: t.fileMeta || null,
         }));
       const data = {
@@ -4112,6 +4150,7 @@ class MarkdownEditor {
       const tab = new Tab(st.name || st.filePath.split(/[/\\]/).pop(), '', st.filePath);
       tab.cursorPos = st.cursorPos || { line: 0, ch: 0 };
       tab.scrollPos = st.scrollPos || { top: 0, left: 0 };
+      tab.previewScrollTop = st.previewScrollTop || 0;
       tab.fileMeta = st.fileMeta || null;
       tab._loaded = false;
       restored.push(tab);
@@ -4149,13 +4188,27 @@ class MarkdownEditor {
 
     await Promise.all(this.tabs.map(t => this.refreshFileMeta(t)));
 
+    // 同 switchTab：setValue 会同步触发 scroll / cursorActivity 事件，污染 activeTab.scrollPos / cursorPos，先取快照
+    const restoreCursor = (active && active.cursorPos) || { line: 0, ch: 0 };
+    const restoreScroll = (active && active.scrollPos) || { top: 0, left: 0 };
+    const restorePreviewTop = (active && active.previewScrollTop) || 0;
+
     this.cm.setValue(this.activeTab.content || '');
-    this.cm.setCursor(this.activeTab.cursorPos || { line: 0, ch: 0 });
-    this.cm.scrollTo((this.activeTab.scrollPos && this.activeTab.scrollPos.left) || 0, (this.activeTab.scrollPos && this.activeTab.scrollPos.top) || 0);
+    this.cm.setCursor(restoreCursor);
+    this.cm.scrollTo(restoreScroll.left || 0, restoreScroll.top || 0);
     this.cm.clearHistory();
     this.updateTabBar();
     this.updateTabDisplay();
     this.updatePreview();
+    if (!this.settings.scrollSync) {
+      const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
+      this.preview.scrollTop = Math.min(restorePreviewTop, maxScroll);
+    } else if (document.querySelector('.editor-container').classList.contains('preview-mode')) {
+      setTimeout(() => {
+        const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
+        this.preview.scrollTop = Math.min(restorePreviewTop, maxScroll);
+      }, 0);
+    }
     this.updateOutline();
     this.updateWordCount();
     this.highlightTreeActiveFile();
@@ -5504,6 +5557,8 @@ input[type="checkbox"]:checked::after { display: none !important; }
       }
 
       this.preview.querySelectorAll('details:not([open])').forEach(el => el.open = true);
+      // 任务列表 checkbox：remark-gfm 默认输出 disabled 不可交互，渲染后移除 disabled 使其可点击
+      this.preview.querySelectorAll('input[type="checkbox"][disabled]').forEach(cb => cb.removeAttribute('disabled'));
 
       try { await this.processImages(); } catch (e) { console.warn('[preview] Images error:', e); }
       if (gen !== this._renderGeneration) { this._resumeScroll(); return; }
@@ -6451,15 +6506,66 @@ input[type="checkbox"]:checked::after { display: none !important; }
     this.cm.focus();
   }
 
-  insertLinePrefix(prefix) {
+  handleTaskCheckboxToggle(checkbox) {
+    // 通过 li 的 data-source-line 反查源码行（remark plugin 给所有节点标注，1-based）
+    const li = checkbox.closest('li');
+    if (!li) return;
+    const lineAttr = li.getAttribute('data-source-line');
+    if (!lineAttr) return;
+    const lineNum = parseInt(lineAttr, 10) - 1;  // 转 0-based
+    if (isNaN(lineNum) || lineNum < 0 || lineNum >= this.cm.lineCount()) return;
+    const lineText = this.cm.getLine(lineNum);
+    // 匹配任务列表行：前缀（- * + 或 数字.）+ [ ] / [x] + 可选内容
+    const taskRe = /^(\s*(?:[*+-]|\d+[.)])\s+)\[([ xX])\](\s.*)?$/;
+    const m = lineText.match(taskRe);
+    if (!m) return;
+    // checkbox.checked 已被浏览器在 click 时切换；据此决定写 x 还是空格
+    const newMark = checkbox.checked ? 'x' : ' ';
+    const newLine = m[1] + '[' + newMark + ']' + (m[3] || '');
     const cursor = this.cm.getCursor();
-    const line = this.cm.getLine(cursor.line);
-    const prevLine = cursor.line > 0 ? this.cm.getLine(cursor.line - 1) : '';
+    this.cm.replaceRange(newLine, { line: lineNum, ch: 0 }, { line: lineNum, ch: lineText.length });
+    this.cm.setCursor(cursor);  // 保持光标位置不跳动
+    // activeTab.content 由 change 事件同步；预览由 change 事件 debounce 自动刷新（会重新启用 checkbox）
+  }
+
+  insertLinePrefix(prefix, ordered = false) {
+    const cm = this.cm;
+    // 有选区（跨行 / 多选区）：对选区覆盖的每一行逐行加前缀，用 operation 包裹保证一次 undo 撤销整批
+    if (cm.somethingSelected()) {
+      cm.operation(() => {
+        const selections = cm.listSelections();
+        const newSelections = [];
+        for (const sel of selections) {
+          const startLine = Math.min(sel.anchor.line, sel.head.line);
+          const endLine = Math.max(sel.anchor.line, sel.head.line);
+          let n = 1;
+          for (let ln = startLine; ln <= endLine; ln++) {
+            const text = cm.getLine(ln);
+            // 单行替换不增删行，行号在循环中保持有效
+            const linePrefix = ordered ? (n++) + '. ' : prefix;
+            cm.replaceRange(linePrefix + text, { line: ln, ch: 0 }, { line: ln, ch: text.length });
+          }
+          // 选中整批改动行（行首到末行行尾），让用户直观看到加前缀后的范围
+          const lastLineText = cm.getLine(endLine);
+          newSelections.push({
+            anchor: { line: startLine, ch: 0 },
+            head: { line: endLine, ch: lastLineText.length },
+          });
+        }
+        cm.setSelections(newSelections);
+      });
+      cm.focus();
+      return;
+    }
+    // 无选区：原单行行为（含上一行非空时自动换行再加前缀）
+    const cursor = cm.getCursor();
+    const line = cm.getLine(cursor.line);
+    const prevLine = cursor.line > 0 ? cm.getLine(cursor.line - 1) : '';
     const needNewline = cursor.line > 0 && prevLine.trim() !== '';
     const newLine = needNewline ? '\n' : '';
-    this.cm.replaceRange(newLine + prefix + line, { line: cursor.line, ch: 0 }, { line: cursor.line, ch: line.length });
-    this.cm.setCursor({ line: cursor.line + (needNewline ? 1 : 0), ch: prefix.length + cursor.ch });
-    this.cm.focus();
+    cm.replaceRange(newLine + prefix + line, { line: cursor.line, ch: 0 }, { line: cursor.line, ch: line.length });
+    cm.setCursor({ line: cursor.line + (needNewline ? 1 : 0), ch: prefix.length + cursor.ch });
+    cm.focus();
   }
 
   insertBlock(text, cursorOffset) {
@@ -6688,7 +6794,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
       case 'insert-callout-important': this.insertBlock('> [!IMPORTANT]\n> 重要内容', 17); break;
 
       case 'insert-ul': this.insertLinePrefix('- '); break;
-      case 'insert-ol': this.insertLinePrefix('1. '); break;
+      case 'insert-ol': this.insertLinePrefix('1. ', true); break;
       case 'insert-task': this.insertLinePrefix('- [ ] '); break;
 
       case 'insert-link': this.showInsertLinkDialog(); break;

@@ -24318,12 +24318,53 @@ var UnifiedRenderer = (() => {
             if (!node2.children || node2.children.length !== 1 || node2.children[0].type !== "text") return;
             const text10 = node2.children[0].value;
             if (!/^\$+[^\n]+\$+$/.test(text10)) return;
+            const normalized = text10.replace(/^\$\$(.*?)\$\$$/, (_, inner) => `$${inner}$`);
             node2.type = "text";
-            node2.value = text10;
+            node2.value = normalized;
             delete node2.tagName;
             delete node2.children;
             delete node2.properties;
           });
+        };
+      }
+      function rehypeInlineDollarBacktickMath() {
+        const transform2 = (nodes) => {
+          const out = [];
+          let i = 0;
+          while (i < nodes.length) {
+            const n = nodes[i];
+            if (n.type === "element" && n.tagName !== "code") {
+              n.children = transform2(n.children || []);
+            }
+            const prev = out.length ? out[out.length - 1] : null;
+            const next2 = nodes[i + 1];
+            if (n.type === "element" && n.tagName === "code" && n.children && n.children.length === 1 && n.children[0].type === "text" && next2 && next2.type === "text" && next2.value.startsWith("$")) {
+              const codeText2 = n.children[0].value;
+              if (!/[\n\r]/.test(codeText2)) {
+                let removedOpener = false;
+                if (prev && prev.type === "text" && prev.value.endsWith("$")) {
+                  prev.value = prev.value.slice(0, -1);
+                  removedOpener = true;
+                } else if (prev && prev.type === "element" && prev.tagName === "code" && prev.children && prev.children.length === 1 && prev.children[0].type === "text" && prev.children[0].value === "$") {
+                  out.pop();
+                  removedOpener = true;
+                }
+                if (removedOpener) {
+                  out.push({ type: "text", value: "$" + codeText2 + "$" });
+                  const rest = next2.value.slice(1);
+                  if (rest.length) out.push({ type: "text", value: rest });
+                  i += 2;
+                  continue;
+                }
+              }
+            }
+            out.push(n);
+            i++;
+          }
+          return out;
+        };
+        return (tree) => {
+          transform2(tree.children);
         };
       }
       function guardMathBlocks(content3) {
@@ -24429,7 +24470,7 @@ var UnifiedRenderer = (() => {
               result += "$$";
               i = start + 2;
             }
-          } else if (!inBacktick && content3[i] === "$" && i + 1 < len && content3[i + 1] !== " " && content3[i + 1] !== "\n" && content3[i + 1] !== "\r" && content3[i + 1] !== "$") {
+          } else if (!inBacktick && content3[i] === "$" && i + 1 < len && content3[i + 1] !== " " && content3[i + 1] !== "\n" && content3[i + 1] !== "\r" && content3[i + 1] !== "$" && content3[i + 1] !== "`") {
             const start = i;
             i += 1;
             let foundEnd = false;
@@ -24512,7 +24553,7 @@ var UnifiedRenderer = (() => {
         if (lower.startsWith("> [!caution]")) return "caution";
         return null;
       }
-      function getAlertTitleHTML(type) {
+      function getAlertTitleHTML(type, customTitle) {
         const icons = {
           note: '<svg class="alert-icon" viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="7" x2="8" y2="11.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="5" r="0.8" fill="currentColor"/></svg>',
           tip: '<svg class="alert-icon" viewBox="0 0 16 16" width="16" height="16"><path d="M8 1.5c-2.5 0-4.5 2-4.5 4.5 0 1.8 1 3 2.2 3.8.3.2.3.5.3.8v1.4h4v-1.4c0-.3.1-.6.3-.8 1.2-.8 2.2-2 2.2-3.8 0-2.5-2-4.5-4.5-4.5z" fill="none" stroke="currentColor" stroke-width="1.3"/><line x1="6" y1="14" x2="10" y2="14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
@@ -24521,7 +24562,11 @@ var UnifiedRenderer = (() => {
           caution: '<svg class="alert-icon" viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.3"/><line x1="8" y1="4.5" x2="8" y2="8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="10.5" r="0.8" fill="currentColor"/></svg>'
         };
         const titles = { note: "Note", tip: "Tip", important: "Important", warning: "Warning", caution: "Caution" };
-        return '<div class="alert-title">' + (icons[type] || "") + (titles[type] || type) + "</div>";
+        let label = titles[type] || type;
+        if (customTitle) {
+          label = customTitle.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        }
+        return '<div class="alert-title">' + (icons[type] || "") + label + "</div>";
       }
       function convertAlerts(content3) {
         const lines = content3.split("\n");
@@ -24544,6 +24589,11 @@ var UnifiedRenderer = (() => {
           }
           const alertType = getAlertType(line);
           if (alertType) {
+            let customTitle = null;
+            const titleMatch = line.match(/^\s*>\s*\[!\w+\]\s*(.*)$/i);
+            if (titleMatch && titleMatch[1].trim()) {
+              customTitle = titleMatch[1].trim();
+            }
             const contentLines = [];
             i++;
             while (i < lines.length && lines[i].startsWith(">")) {
@@ -24554,7 +24604,7 @@ var UnifiedRenderer = (() => {
               i++;
             }
             const idx = alertBlocks.length;
-            alertBlocks.push({ type: alertType, content: contentLines.join("\n") });
+            alertBlocks.push({ type: alertType, title: customTitle, content: contentLines.join("\n") });
             if (contentLines.length > 0) {
               contentLines[contentLines.length - 1] += "<!--ALERTBLOCK_" + idx + "_END-->";
             }
@@ -24580,7 +24630,7 @@ var UnifiedRenderer = (() => {
             const before = result.substring(0, startPos);
             const inner = result.substring(startPos + startMarker.length, endPos);
             const after = result.substring(endPos + endMarker.length);
-            const titleHTML = getAlertTitleHTML(block.type);
+            const titleHTML = getAlertTitleHTML(block.type, block.title);
             result = before + '<div class="alert alert-' + block.type + '">' + titleHTML + '<div class="alert-content">' + inner + "</div></div>" + after;
           }
         }
@@ -25164,6 +25214,7 @@ var UnifiedRenderer = (() => {
           }
           processor.use(rehypeHeadingIds);
           processor.use(rehypeInlineBacktickMath);
+          processor.use(rehypeInlineDollarBacktickMath);
           processor.use(rehypeStringify2, { allowDangerousHtml: true });
           html7 = processor.processSync(processed).toString();
         } catch (e) {

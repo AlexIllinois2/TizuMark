@@ -1502,6 +1502,26 @@ body.is-resizing .side-btn {
 .preview-content li { margin-bottom: 4px; }
 .preview-content li > p { margin-bottom: 4px; }
 
+/* 显式多级 list-style-type，确保跨浏览器一致；用 :where() 零特异性，绝不覆盖下方任务列表去 marker 规则 */
+:where(.preview-content) ul { list-style-type: disc; }
+:where(.preview-content) ul ul { list-style-type: circle; }
+:where(.preview-content) ul ul ul { list-style-type: square; }
+:where(.preview-content) ul ul ul ul { list-style-type: disc; }
+/* 有序列表三级：1. / 1) / ①（源码仍是合法 1.，标记样式纯 CSS，不影响解析与续行） */
+@counter-style paren-decimal {
+  system: extends decimal;
+  suffix: ") ";
+}
+@counter-style circled-decimal {
+  system: numeric;
+  symbols: ⓪ ① ② ③ ④ ⑤ ⑥ ⑦ ⑧ ⑨;
+  suffix: " ";
+}
+:where(.preview-content) ol { list-style-type: decimal; }
+:where(.preview-content) ol ol { list-style-type: paren-decimal; }
+:where(.preview-content) ol ol ol { list-style-type: circled-decimal; }
+:where(.preview-content) ol ol ol ol { list-style-type: circled-decimal; }
+
 /* Task list items */
 .preview-content ul:has(input[type="checkbox"]) { list-style: none; padding-left: 0; }
 .preview-content li input[type="checkbox"] {
@@ -3066,15 +3086,23 @@ body.is-resizing .side-btn {
 
 .settings-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   padding: 6px 0;
+}
+.settings-row > .form-hint {
+  flex-basis: 100%;
+  margin-top: 10px;
 }
 
 .settings-row.settings-row-stacked {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+}
+.settings-row.settings-row-stacked > .form-hint {
+  margin-top: 4px;
 }
 
 .settings-row label:first-child {
