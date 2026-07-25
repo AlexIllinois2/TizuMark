@@ -260,11 +260,37 @@ fn safe_write_target(path: &str) -> Result<std::path::PathBuf, String> {
     let canonical = p
         .canonicalize()
         .or_else(|_| {
-            // 目标尚不存在时，基于父目录规范化为绝对路径再判断
-            let parent = p.parent().unwrap_or_else(|| std::path::Path::new("."));
-            let base = parent.canonicalize().map_err(|e| format!("Invalid path {}: {}", path, e))?;
+            // 目标尚不存在时，向上递归找到第一个存在的祖先目录再 canonicalize，
+            // 然后逐级 join 不存在的路径段，得到规范化的绝对路径。
+            // 修复：ensure_dir 创建多级子树（如 app_data/tizu-mark/fonts）时，
+            // 父目录也不存在，parent.canonicalize() 会失败报"系统找不到指定路径"。
+            let mut components: Vec<std::ffi::OsString> = Vec::new();
+            let mut cur = p;
+            let mut base: Option<std::path::PathBuf> = None;
+            while let Some(parent) = cur.parent() {
+                if let Ok(canon) = parent.canonicalize() {
+                    base = Some(canon);
+                    break;
+                }
+                if let Some(name) = cur.file_name() {
+                    components.push(name.to_os_string());
+                }
+                cur = parent;
+                if cur.as_os_str().is_empty() { break; }
+            }
+            let base = base.ok_or_else(|| format!("Invalid path {}: cannot resolve ancestor", path))?;
             let file_name = p.file_name().ok_or_else(|| format!("Invalid path {}", path))?;
-            Ok::<std::path::PathBuf, String>(base.join(file_name))
+            // 确保最后一段（目标本身）也在 components 里
+            if components.is_empty() || components.last().map(|s| s.as_os_str()) != Some(file_name) {
+                components = components.into_iter().rev().collect();
+            } else {
+                components.reverse();
+            }
+            let mut result = base;
+            for name in &components {
+                result = result.join(name);
+            }
+            Ok::<std::path::PathBuf, String>(result)
         })?;
 
     let canonical_str = canonical.to_string_lossy().replace('/', "\\").to_lowercase();

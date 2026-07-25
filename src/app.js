@@ -243,7 +243,7 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: '本软件基于 GPL v3 开源协议发布。',
     noUnauthorized: '欢迎自由使用、修改和分发，衍生作品须延续 GPL v3 协议。',
-    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找（编辑器）', findReplace: '查找替换', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', previewFind: '预览查找', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记' },
+    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找（编辑器）', findReplace: '查找替换', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', previewFind: '预览查找', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意', insertCalloutImportant: 'Important 重要' },
     modify: '修改',
     clear: '清除',
     none: '无',
@@ -559,7 +559,7 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: 'This software is released under the GPL v3 open-source license.',
     noUnauthorized: 'Free to use, modify, and distribute. Derivative works must remain under GPL v3.',
-    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find (Editor)', findReplace: 'Find & Replace', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', previewFind: 'Find in Preview', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight' },
+    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find (Editor)', findReplace: 'Find & Replace', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', previewFind: 'Find in Preview', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution', insertCalloutImportant: 'Callout Important' },
     modify: 'Modify',
     clear: 'Clear',
     none: 'None',
@@ -2141,6 +2141,22 @@ class MarkdownEditor {
       insertTask: { key: '', label: '任务列表' },
       insertHr: { key: '', label: '水平线' },
       highlight: { key: '', label: '高亮标记' },
+      insertSuperscript: { key: '', label: '上标' },
+      insertSubscript: { key: '', label: '下标' },
+      insertH1: { key: '', label: '标题1' },
+      insertH2: { key: '', label: '标题2' },
+      insertH3: { key: '', label: '标题3' },
+      insertH4: { key: '', label: '标题4' },
+      insertH5: { key: '', label: '标题5' },
+      insertH6: { key: '', label: '标题6' },
+      insertMathBlock: { key: '', label: '数学公式' },
+      insertMermaid: { key: '', label: 'Mermaid 图表' },
+      insertToc: { key: '', label: '目录' },
+      insertCalloutNote: { key: '', label: 'Note 提示' },
+      insertCalloutTip: { key: '', label: 'Tip 建议' },
+      insertCalloutWarning: { key: '', label: 'Warning 警告' },
+      insertCalloutCaution: { key: '', label: 'Caution 注意' },
+      insertCalloutImportant: { key: '', label: 'Important 重要' },
     };
   }
 
@@ -2190,6 +2206,22 @@ class MarkdownEditor {
       'insert-image': 'insertImage',
       'find-replace': 'findReplace',
       'preview-find': 'previewFind',
+      'insert-superscript': 'insertSuperscript',
+      'insert-subscript': 'insertSubscript',
+      'insert-h1': 'insertH1',
+      'insert-h2': 'insertH2',
+      'insert-h3': 'insertH3',
+      'insert-h4': 'insertH4',
+      'insert-h5': 'insertH5',
+      'insert-h6': 'insertH6',
+      'insert-math-block': 'insertMathBlock',
+      'insert-mermaid': 'insertMermaid',
+      'insert-toc': 'insertToc',
+      'insert-callout-note': 'insertCalloutNote',
+      'insert-callout-tip': 'insertCalloutTip',
+      'insert-callout-warning': 'insertCalloutWarning',
+      'insert-callout-caution': 'insertCalloutCaution',
+      'insert-callout-important': 'insertCalloutImportant',
     };
     const idMap = {
       'btn-new': 'newFile',
@@ -2245,6 +2277,22 @@ class MarkdownEditor {
       { id: 'insertImage', label: labels.insertImage || 'Insert Image' },
       { id: 'toggleView', label: labels.toggleView || 'Toggle View' },
       { id: 'toggleTheme', label: labels.toggleTheme || 'Toggle Theme' },
+      { id: 'insertSuperscript', label: labels.insertSuperscript || 'Superscript' },
+      { id: 'insertSubscript', label: labels.insertSubscript || 'Subscript' },
+      { id: 'insertH1', label: labels.insertH1 || 'Heading 1' },
+      { id: 'insertH2', label: labels.insertH2 || 'Heading 2' },
+      { id: 'insertH3', label: labels.insertH3 || 'Heading 3' },
+      { id: 'insertH4', label: labels.insertH4 || 'Heading 4' },
+      { id: 'insertH5', label: labels.insertH5 || 'Heading 5' },
+      { id: 'insertH6', label: labels.insertH6 || 'Heading 6' },
+      { id: 'insertMathBlock', label: labels.insertMathBlock || 'Math Block' },
+      { id: 'insertMermaid', label: labels.insertMermaid || 'Mermaid Diagram' },
+      { id: 'insertToc', label: labels.insertToc || 'Table of Contents' },
+      { id: 'insertCalloutNote', label: labels.insertCalloutNote || 'Callout Note' },
+      { id: 'insertCalloutTip', label: labels.insertCalloutTip || 'Callout Tip' },
+      { id: 'insertCalloutWarning', label: labels.insertCalloutWarning || 'Callout Warning' },
+      { id: 'insertCalloutCaution', label: labels.insertCalloutCaution || 'Callout Caution' },
+      { id: 'insertCalloutImportant', label: labels.insertCalloutImportant || 'Callout Important' },
     ];
 
     container.innerHTML = actions.map(action => {
@@ -2405,6 +2453,22 @@ class MarkdownEditor {
       insertHr: () => this.insertBlock('---'),
       insertLink: () => this.showInsertLinkDialog(),
       insertImage: () => this.showInsertImageDialog(),
+      insertSuperscript: () => this.executeMenuAction('insert-superscript'),
+      insertSubscript: () => this.executeMenuAction('insert-subscript'),
+      insertH1: () => this.executeMenuAction('insert-h1'),
+      insertH2: () => this.executeMenuAction('insert-h2'),
+      insertH3: () => this.executeMenuAction('insert-h3'),
+      insertH4: () => this.executeMenuAction('insert-h4'),
+      insertH5: () => this.executeMenuAction('insert-h5'),
+      insertH6: () => this.executeMenuAction('insert-h6'),
+      insertMathBlock: () => this.executeMenuAction('insert-math-block'),
+      insertMermaid: () => this.executeMenuAction('insert-mermaid'),
+      insertToc: () => this.executeMenuAction('insert-toc'),
+      insertCalloutNote: () => this.executeMenuAction('insert-callout-note'),
+      insertCalloutTip: () => this.executeMenuAction('insert-callout-tip'),
+      insertCalloutWarning: () => this.executeMenuAction('insert-callout-warning'),
+      insertCalloutCaution: () => this.executeMenuAction('insert-callout-caution'),
+      insertCalloutImportant: () => this.executeMenuAction('insert-callout-important'),
     };
 
     // Global actions (work anywhere via document keydown handler)
@@ -2704,6 +2768,56 @@ class MarkdownEditor {
     this.saveSession();
   }
 
+  // ---- 标签页拖拽排序 ----
+  reorderTab(from, to) {
+    if (from === to || from < 0 || from >= this.tabs.length || to < 0 || to >= this.tabs.length) return;
+    const [moved] = this.tabs.splice(from, 1);
+    this.tabs.splice(to, 0, moved);
+    // 跟踪 activeTab 跟随移动
+    if (this.activeTabIndex === from) {
+      this.activeTabIndex = to;
+    } else if (from < this.activeTabIndex && to >= this.activeTabIndex) {
+      this.activeTabIndex--;
+    } else if (from > this.activeTabIndex && to <= this.activeTabIndex) {
+      this.activeTabIndex++;
+    }
+    this.updateTabBar();
+    this.saveSession();
+  }
+
+  // 拖拽排序辅助（基于指针事件，不依赖原生 HTML5 DnD）
+  _tabElAt(index) {
+    return document.querySelector(`.tab[data-index="${index}"]`);
+  }
+
+  _tabIndexAtPoint(x, y) {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    const tab = el.closest('.tab');
+    if (!tab || tab.dataset.index == null) return null;
+    return parseInt(tab.dataset.index, 10);
+  }
+
+  _startTabDrag(from) {
+    const tab = this._tabElAt(from);
+    if (tab) tab.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+  }
+
+  _updateTabDragTarget(x, y) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('drag-over'));
+    const idx = this._tabIndexAtPoint(x, y);
+    if (idx != null) {
+      const t = this._tabElAt(idx);
+      if (t) t.classList.add('drag-over');
+    }
+  }
+
+  _endTabDrag() {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('drag-over', 'dragging'));
+    document.body.style.userSelect = '';
+  }
+
   // ---- 最近文件 ----
   loadRecentFiles() {
     try {
@@ -2854,7 +2968,18 @@ class MarkdownEditor {
         tabEl.appendChild(closeBtn);
       }
 
-      tabEl.addEventListener('click', () => this.switchTab(i));
+      tabEl.addEventListener('click', () => {
+        if (this._suppressClick) { this._suppressClick = false; return; }
+        this.switchTab(i);
+      });
+      // 中键点击关闭标签页；左键按下准备拖拽排序（用指针事件实现，绕过 Tauri 默认 dragDropEnabled 接管原生 DnD 导致拖不动的问题）
+      tabEl.addEventListener('mousedown', (e) => {
+        this._suppressClick = false;
+        if (e.button === 1) { e.preventDefault(); this.closeTab(i); return; }
+        if (e.button === 0) {
+          this._dragState = { from: i, startX: e.clientX, startY: e.clientY, active: false };
+        }
+      });
       fragment.appendChild(tabEl);
     });
 
@@ -2931,6 +3056,30 @@ class MarkdownEditor {
     document.addEventListener('click', () => {
       toolbarDropdowns.forEach(d => document.getElementById(d.menu).classList.add('hidden'));
       this.hideAllContextMenus();
+    });
+    // 标签页拖拽排序：用指针事件实现，避免 Tauri 默认开启 dragDropEnabled 接管原生 DnD 导致拖不动
+    document.addEventListener('mousemove', (e) => {
+      const ds = this._dragState;
+      if (!ds) return;
+      if (!ds.active) {
+        const dx = e.clientX - ds.startX;
+        const dy = e.clientY - ds.startY;
+        if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+        ds.active = true;
+        this._startTabDrag(ds.from);
+      }
+      this._updateTabDragTarget(e.clientX, e.clientY);
+    });
+    document.addEventListener('mouseup', (e) => {
+      const ds = this._dragState;
+      if (!ds) return;
+      if (ds.active) {
+        const to = this._tabIndexAtPoint(e.clientX, e.clientY);
+        if (to != null && to !== ds.from) this.reorderTab(ds.from, to);
+        this._endTabDrag();
+        this._suppressClick = true;
+      }
+      this._dragState = null;
     });
     document.getElementById('btn-sidebar-toggle').addEventListener('click', () => {
       this.toggleSidebar();
@@ -5834,6 +5983,13 @@ input[type="checkbox"]:checked::after { display: none !important; }
         // 仅大纲跳转 / 打开文件等显式跳转才贴顶定位
         if (!this._previewScrollDriven) this._focusPreviewToLine(this._previewFocusLine);
         this._previewScrollDriven = false;
+        // 预览发起的编辑（如 checkbox toggle）需保留预览滚动位置，不被 scrollSync 覆盖
+        if (this._previewEditPreserveScroll) {
+          const maxPS = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
+          this.preview.scrollTop = Math.min(this._restorePreviewScrollTop || 0, maxPS);
+          this._previewEditPreserveScroll = false;
+          this._restorePreviewScrollTop = 0;
+        }
         requestAnimationFrame(() => {
           if (gen === this._renderGeneration) this._resumeScroll();
         });
@@ -5875,6 +6031,13 @@ input[type="checkbox"]:checked::after { display: none !important; }
       } else {
         const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
         if (this.preview.scrollTop > maxScroll) this.preview.scrollTop = maxScroll;
+      }
+      // 预览发起的编辑（如 checkbox toggle）需保留预览滚动位置
+      if (this._previewEditPreserveScroll) {
+        const maxPS = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
+        this.preview.scrollTop = Math.min(this._restorePreviewScrollTop || 0, maxPS);
+        this._previewEditPreserveScroll = false;
+        this._restorePreviewScrollTop = 0;
       }
       requestAnimationFrame(() => {
         if (gen === this._renderGeneration) this._resumeScroll();
@@ -6887,14 +7050,18 @@ input[type="checkbox"]:checked::after { display: none !important; }
     const lineNum = parseInt(lineAttr, 10) - 1;  // 转 0-based
     if (isNaN(lineNum) || lineNum < 0 || lineNum >= this.cm.lineCount()) return;
     const lineText = this.cm.getLine(lineNum);
-    // 匹配任务列表行：前缀（- * + 或 数字.）+ [ ] / [x] + 可选内容
-    const taskRe = /^(\s*(?:[*+-]|\d+[.)])\s+)\[([ xX])\](\s.*)?$/;
+    // 匹配任务列表行：可选 > 前缀（引用块嵌套）+ 前缀（- * + 或 数字.）+ [ ] / [x] + 可选内容
+    const taskRe = /^(\s*(?:>\s*)*(?:[*+-]|\d+[.)])\s+)\[([ xX])\](\s.*)?$/;
     const m = lineText.match(taskRe);
     if (!m) return;
     // checkbox.checked 已被浏览器在 click 时切换；据此决定写 x 还是空格
     const newMark = checkbox.checked ? 'x' : ' ';
     const newLine = m[1] + '[' + newMark + ']' + (m[3] || '');
     const cursor = this.cm.getCursor();
+    // 捕获预览当前滚动位置：replaceRange 会同步触发 change → debounceUpdatePreview → updatePreview
+    // → preview.innerHTML 替换后 scrollTop 归零。在此保存，供 updatePreview 内恢复使用。
+    this._restorePreviewScrollTop = this.preview.scrollTop;
+    this._previewEditPreserveScroll = true;
     this.cm.replaceRange(newLine, { line: lineNum, ch: 0 }, { line: lineNum, ch: lineText.length });
     this.cm.setCursor(cursor);  // 保持光标位置不跳动
     // activeTab.content 由 change 事件同步；预览由 change 事件 debounce 自动刷新（会重新启用 checkbox）

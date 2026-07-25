@@ -1014,6 +1014,10 @@ body {
 
 .tab.modified .tab-name::after { content: " *"; color: var(--accent-color); }
 
+/* 拖拽排序视觉反馈 */
+.tab.dragging { opacity: 0.4; }
+.tab.drag-over { border-left: 2px solid var(--accent-color); }
+
 /* 外部文件已变更待处理：标签左侧琥珀色圆点（与未保存的 * 区分） */
 .tab.external-change::before {
   content: '';
