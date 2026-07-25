@@ -374,6 +374,11 @@ fn file_meta(path: String) -> Result<Option<FileMeta>, String> {
     }))
 }
 
+#[tauri::command]
+fn is_directory(path: String) -> bool {
+    std::path::Path::new(&path).is_dir()
+}
+
 #[derive(serde::Serialize, Clone)]
 struct DirEntryInfo {
     name: String,
@@ -1353,7 +1358,10 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 show_window(&window);
-                let _ = app.emit("file-open", argv);
+                // 插件转发的 argv 含 argv[0]（第二实例 exe 自身路径），滤掉，
+                // 避免前端误把 exe 当文件打开；与 get_cli_args 的 skip(1) 对齐
+                let args: Vec<String> = argv.into_iter().skip(1).collect();
+                let _ = app.emit("file-open", args);
             }
         }))
         .on_window_event(|window, event| {
@@ -1386,6 +1394,7 @@ pub fn run() {
             read_file,
             write_file,
             file_meta,
+            is_directory,
             list_dir,
             write_binary_file,
             ensure_dir,

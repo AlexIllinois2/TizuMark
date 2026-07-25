@@ -3687,8 +3687,22 @@ class MarkdownEditor {
         this.showLoading();
         try {
           const paths = event.payload.paths || [];
+          let dirOpened = false;
           for (const filePath of paths) {
             try {
+              // 先判断是否目录：是目录则加载为工作区（只取第一个目录，多目录时其余忽略并提示）
+              let isDir = false;
+              try { isDir = await invoke('is_directory', { path: filePath }); }
+              catch (_) { /* 非 Tauri 环境或路径不存在，按文件处理 */ }
+              if (isDir) {
+                if (dirOpened) {
+                  this.setStatus(`${this.t('openFailed')}: ${filePath}`);
+                  continue;
+                }
+                dirOpened = true;
+                await this.openFolderPath(filePath);
+                continue;
+              }
               const content = await this.readFileNormalized(filePath);
               const name = filePath.split(/[/\\]/).pop();
               const existingIndex = this.tabs.findIndex(t => t.filePath === filePath);
@@ -4257,7 +4271,18 @@ class MarkdownEditor {
       if (!selected) return;
       const folderPath = Array.isArray(selected) ? selected[0] : selected;
       if (!folderPath) return;
-      this.showLoading();
+      await this.openFolderPath(folderPath);
+    } catch (e) {
+      this.setStatus(this.t('openFailed') + ': ' + e);
+    }
+  }
+
+  // 直接按给定路径加载为工作区目录（不走 dialog）。
+  // CLI 参数 / file-open 事件 / drag-drop 都复用此入口。
+  async openFolderPath(folderPath) {
+    if (!folderPath) return;
+    this.showLoading();
+    try {
       this.workspaceFolder = folderPath;
       this.expandedFolders = new Set();
       await this.renderFolderTree();
@@ -7145,9 +7170,20 @@ window.addEventListener('DOMContentLoaded', async () => {
 
       window.editor.showLoading();
       try {
+        let dirOpened = false;
         for (const filePath of args) {
           if (filePath.startsWith('-')) continue;
-          await window.editor.openFilePath(filePath);
+          let isDir = false;
+          try { isDir = await invoke('is_directory', { path: filePath }); }
+          catch (_) { /* 路径不存在或不可访问，按文件处理 */ }
+          if (isDir) {
+            // 只接受第一个目录作为工作区，多目录时后续忽略
+            if (dirOpened) continue;
+            dirOpened = true;
+            await window.editor.openFolderPath(filePath);
+          } else {
+            await window.editor.openFilePath(filePath);
+          }
         }
       } finally {
         window.editor.hideLoading();
@@ -7159,9 +7195,19 @@ window.addEventListener('DOMContentLoaded', async () => {
       const args = await invoke('get_cli_args');
       const hadSession = await window.editor.restoreSession();
       if (args && args.length > 0) {
+        let dirOpened = false;
         for (const filePath of args) {
           if (filePath.startsWith('-')) continue;
-          await window.editor.openFilePath(filePath);
+          let isDir = false;
+          try { isDir = await invoke('is_directory', { path: filePath }); }
+          catch (_) { /* 路径不存在或不可访问，按文件处理 */ }
+          if (isDir) {
+            if (dirOpened) continue;
+            dirOpened = true;
+            await window.editor.openFolderPath(filePath);
+          } else {
+            await window.editor.openFilePath(filePath);
+          }
         }
       } else if (!hadSession && isFirstLaunch) {
         window.editor.openUserGuide();
