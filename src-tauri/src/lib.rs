@@ -1,4 +1,5 @@
 use std::fs;
+use encoding_rs::{Encoding, GB18030};
 use std::sync::Mutex;
 use notify::{Watcher, RecursiveMode, RecommendedWatcher, Config as NotifyConfig, Event as NotifyEvent};
 use tauri::{Emitter, Manager};
@@ -288,7 +289,43 @@ fn safe_write_target(path: &str) -> Result<std::path::PathBuf, String> {
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|e| e.to_string())
+    let raw = fs::read(&path).map_err(|e| {
+        // 结构化错误 JSON，前端按 kind 映射到错误码（E_NOT_FOUND / E_PERMISSION / E_LOCKED / E_IO）
+        let kind = if e.kind() == std::io::ErrorKind::NotFound {
+            "NotFound"
+        } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+            // Windows 上文件被独占锁定（ERROR_SHARING_VIOLATION=32）也归为锁定
+            match e.raw_os_error() {
+                Some(32) => "Locked",
+                _ => "PermissionDenied",
+            }
+        } else {
+            "Io"
+        };
+        format!(
+            "{{\"kind\":\"{}\",\"path\":\"{}\",\"message\":\"{}\"}}",
+            kind,
+            path.replace('\\', "\\\\").replace('"', "\\\""),
+            e.to_string().replace('"', "\\\"")
+        )
+    })?;
+
+    // 剥离 UTF-8 BOM（EF BB BF）
+    let stripped: &[u8] = if raw.len() >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF {
+        &raw[3..]
+    } else {
+        &raw
+    };
+
+    // 优先尝试 UTF-8
+    if let Ok(s) = String::from_utf8(stripped.to_vec()) {
+        return Ok(s);
+    }
+
+    // 非 UTF-8：用 GB18030 解码（覆盖 GBK / GB2312 / 简繁中文）。
+    // 绝大多数中文 Windows 文件由此可被正常打开，不再因编码失败导致空白。
+    let (cow, _enc, _had_errors) = GB18030.decode(stripped);
+    Ok(cow.into_owned())
 }
 
 // 托盘可见性状态，由前端设置同步。

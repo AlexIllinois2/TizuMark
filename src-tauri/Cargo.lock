@@ -4552,6 +4552,7 @@ version = "1.0.6"
 dependencies = [
  "base64 0.22.1",
  "dirs",
+ "encoding_rs",
  "imagesize",
  "md-5",
  "notify",

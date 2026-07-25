@@ -37,6 +37,28 @@ class Tab {
   }
 }
 
+// ====== 错误码文案字典（用户友好 + 开发可诊断） ======
+// code -> { zh/en: { title, detail } }，detail 支持 {param} 插值
+const ERROR_MESSAGES = {
+  E_ENCODING: { zh: { title: '文件编码不被支持', detail: '该文件使用了 {encoding} 编码，当前仅支持 UTF-8' }, en: { title: 'Unsupported file encoding', detail: 'This file uses {encoding} encoding, only UTF-8 is supported' } },
+  E_ENCODING_UNKNOWN: { zh: { title: '无法识别文件编码', detail: '文件包含无法识别的字符编码' }, en: { title: 'Unrecognized file encoding', detail: 'The file contains an unrecognized encoding' } },
+  E_NOT_FOUND: { zh: { title: '文件不存在', detail: '文件「{name}」可能已被移动或删除' }, en: { title: 'File not found', detail: 'File "{name}" may have been moved or deleted' } },
+  E_LOCKED: { zh: { title: '文件正被其他程序占用', detail: '请关闭占用「{name}」的程序后重试' }, en: { title: 'File is locked by another program', detail: 'Please close the program using "{name}" and retry' } },
+  E_PERMISSION: { zh: { title: '没有访问权限', detail: '系统拒绝访问该文件' }, en: { title: 'Permission denied', detail: 'The system denied access to this file' } },
+  E_PATH_TOO_LONG: { zh: { title: '文件路径过长', detail: '路径超过 260 字符，请缩短路径或移动文件' }, en: { title: 'File path too long', detail: 'Path exceeds 260 chars, please shorten or move it' } },
+  E_EMPTY: { zh: { title: '无法读取文件内容', detail: '文件内容为空或读取失败' }, en: { title: 'Unable to read file content', detail: 'File is empty or reading failed' } },
+  E_IO: { zh: { title: '读取文件时出错', detail: '发生未知读写错误' }, en: { title: 'Error reading file', detail: 'An unknown read/write error occurred' } },
+  E_SAVE: { zh: { title: '保存失败', detail: '无法写入「{name}」，请检查路径和权限' }, en: { title: 'Save failed', detail: 'Cannot write to "{name}", check path and permissions' } },
+  E_INIT: { zh: { title: '编辑器初始化失败', detail: '程序启动异常，请重启应用' }, en: { title: 'Editor initialization failed', detail: 'Startup error, please restart the app' } },
+  E_RENDER: { zh: { title: '内容渲染失败', detail: '部分内容无法正常显示' }, en: { title: 'Content rendering failed', detail: 'Some content could not be displayed' } },
+  E_UNKNOWN: { zh: { title: '发生未知错误', detail: '程序遇到意外问题' }, en: { title: 'An unexpected error occurred', detail: 'An unexpected problem occurred' } },
+  // 迁移的硬编码中文错误
+  openLink: { zh: { title: '无法打开文件', detail: '{href}' }, en: { title: 'Cannot open file', detail: '{href}' } },
+  devtools: { zh: { title: '无法打开开发者工具', detail: '' }, en: { title: 'Cannot open DevTools', detail: '' } },
+  clipboardImage: { zh: { title: '无法读取剪贴板图片', detail: '' }, en: { title: 'Cannot read clipboard image', detail: '' } },
+  guide: { zh: { title: '打开使用说明失败', detail: '' }, en: { title: 'Failed to open guide', detail: '' } },
+};
+
 const I18N = {
   zh: {
     file: '文件',
@@ -119,6 +141,9 @@ const I18N = {
     closeOther: '关闭其他',
     closeAll: '关闭所有',
     copyFilePath: '复制文件路径',
+    recentFiles: '打开最近的文件',
+    noRecentFiles: '暂无最近文件',
+    clearRecentFiles: '清空最近文件',
     newFileCreated: '新文件已创建',
     opened: '已打开',
     openedFiles: '已打开 {n} 个文件',
@@ -355,6 +380,9 @@ const I18N = {
     file: 'File',
     new: 'New',
     open: 'Open',
+    recentFiles: 'Open Recent',
+    noRecentFiles: 'No recent files',
+    clearRecentFiles: 'Clear Recent Files',
     save: 'Save',
     saveAs: 'Save As',
     exportHTML: 'Export HTML',
@@ -699,6 +727,9 @@ class MarkdownEditor {
 
     this.settings = this.loadSettings();
     this.shortcuts = this.loadShortcuts();
+    this._recentFiles = [];
+    this._recentSubmenuVisible = false;
+    this.loadRecentFiles();
     this.recordingAction = null;
     this.tabs.push(new Tab(this.t('untitled') + this.untitledCounter++));
 
@@ -849,6 +880,7 @@ class MarkdownEditor {
 
     updateMenuText('btn-new', t('new'));
     updateMenuText('btn-open', t('open'));
+    updateMenuText('btn-recent', t('recentFiles'));
     updateMenuText('btn-save', t('save'));
     updateMenuText('btn-save-as', t('saveAs'));
     updateMenuText('btn-export-html', t('exportHTML'));
@@ -1260,8 +1292,20 @@ class MarkdownEditor {
 
   // 读取文件并归一化换行符为 \n：处理 CRLF 与单独 CR（混合/老 Mac 换行），避免保存时把单 CR 当作换行制造多余空行
   async readFileNormalized(path) {
-    const content = await invoke('read_file', { path });
-    return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    let raw;
+    try {
+      raw = await invoke('read_file', { path });
+    } catch (e) {
+      // Rust 返回结构化错误 JSON，映射为带错误码（E_NOT_FOUND/E_PERMISSION/...）的 Error 抛出
+      throw this._mapReadFileError(e, path);
+    }
+    if (raw == null) {
+      const err = new Error('读取返回空，可能是编码无法识别');
+      err.code = 'E_EMPTY';
+      err.path = path;
+      throw err;
+    }
+    return raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   }
 
   // 校验从 localStorage 读取的配置为纯对象，避免畸形 JSON（数组/字符串/null）污染设置并原样回写
@@ -2473,11 +2517,14 @@ class MarkdownEditor {
 
     // 编辑器滚动 → 同步预览（demo 的 onScroll 思路）
     this.cm.on('scroll', () => {
+      const container = document.querySelector('.editor-container');
+      // 编辑器被隐藏（纯预览模式 / 编辑器折叠）时 getScrollInfo().top 恒为 0，
+      // 若写回 scrollPos 会把已保存位置清零，导致切回编辑跳顶部。仅当编辑器可见才更新快照。
+      if (container.classList.contains('preview-mode') || container.classList.contains('editor-collapsed')) return;
       const info = this.cm.getScrollInfo();
       this.activeTab.scrollPos = { top: info.top, left: info.left };
 
       if (!this.settings.scrollSync || !this._canScroll.editor) return;
-      const container = document.querySelector('.editor-container');
       if (container.classList.contains('preview-collapsed') || container.classList.contains('preview-mode')) return;
 
       this._canScroll.preview = false;
@@ -2488,6 +2535,11 @@ class MarkdownEditor {
     // 预览滚动 → 同步编辑器（demo 的 onScroll 思路，方向相反）
     this.preview.addEventListener('scroll', () => {
       const container = document.querySelector('.editor-container');
+      // 持续记录预览滚动位置（预览可见时）。edit/preview 切换恢复以及滚动同步都依赖它；
+      // 预览折叠时其 scrollTop 不可靠，跳过以免覆盖有效值。
+      if (this.activeTab && !container.classList.contains('preview-collapsed')) {
+        this.activeTab.previewScrollTop = this.preview.scrollTop;
+      }
       // 纯预览模式 + 大文档虚拟滚动：驱动预览自身懒加载（拖到任意位置查看全文）
       if (container.classList.contains('preview-mode') && this._previewVirtual && this.previewWindow) {
         this._syncPreviewVirtualScroll();
@@ -2511,8 +2563,11 @@ class MarkdownEditor {
       tab.savedContent = content;
       await this.refreshFileMeta(tab);
     } catch (e) {
+      // 懒加载失败（文件被删/锁定/无权限）：标记错误并提示，避免静默空白
+      tab._loadError = true;
       tab.content = '';
       tab.savedContent = '';
+      this.reportError(e.code || 'E_IO', { context: { path: tab.filePath }, error: e, params: e.params, detail: e.detail });
     }
     tab._loaded = true;
   }
@@ -2582,6 +2637,11 @@ class MarkdownEditor {
     this.refreshFileMeta(tab);
     await this.switchTab(this.tabs.length - 1);
     this.updateTabBar();
+    try {
+      if (filePath) this.addRecentFile(filePath);
+    } catch (e) {
+      console.error('[TizuMark] addRecentFile failed:', e);
+    }
     this.saveSession();
   }
 
@@ -2642,6 +2702,125 @@ class MarkdownEditor {
       this.updatePreview();
     }
     this.saveSession();
+  }
+
+  // ---- 最近文件 ----
+  loadRecentFiles() {
+    try {
+      const raw = localStorage.getItem('tizumark-recent-files');
+      const arr = raw ? JSON.parse(raw) : [];
+      this._recentFiles = Array.isArray(arr) ? arr.filter(p => typeof p === 'string') : [];
+    } catch {
+      this._recentFiles = [];
+    }
+  }
+
+  saveRecentFiles() {
+    try {
+      localStorage.setItem('tizumark-recent-files', JSON.stringify(this._recentFiles || []));
+    } catch {}
+  }
+
+  addRecentFile(filePath) {
+    if (!filePath) return;
+    const list = this._recentFiles || (this._recentFiles = []);
+    const idx = list.indexOf(filePath);
+    if (idx !== -1) list.splice(idx, 1);
+    list.unshift(filePath);
+    if (list.length > 10) list.length = 10;
+    this.saveRecentFiles();
+    if (this._recentSubmenuVisible) this.renderRecentFilesSubmenu();
+  }
+
+  clearRecentFiles() {
+    this._recentFiles = [];
+    this.saveRecentFiles();
+    if (this._recentSubmenuVisible) this.renderRecentFilesSubmenu();
+  }
+
+  async refreshRecentFiles() {
+    if (!this._recentFiles || this._recentFiles.length === 0) return;
+    const fileMenu = document.getElementById('file-menu');
+    if (!fileMenu || fileMenu.classList.contains('hidden')) return;
+    let changed = false;
+    const survivors = [];
+    for (const p of this._recentFiles) {
+      let exists = true;
+      try {
+        const meta = await invoke('file_meta', { path: p });
+        exists = meta !== null && meta !== undefined;
+      } catch {
+        exists = true; // 查询失败保守保留，避免误删
+      }
+      if (exists) survivors.push(p); else changed = true;
+    }
+    if (changed) {
+      this._recentFiles = survivors;
+      this.saveRecentFiles();
+      this.renderRecentFilesSubmenu();
+    }
+  }
+
+  hideRecentSubmenu() {
+    const sm = document.getElementById('recent-files-submenu');
+    if (sm) sm.classList.add('hidden');
+    this._recentSubmenuVisible = false;
+  }
+
+  showRecentSubmenu() {
+    const trigger = document.getElementById('btn-recent');
+    const submenu = document.getElementById('recent-files-submenu');
+    if (!trigger || !submenu) return;
+    this.renderRecentFilesSubmenu();
+    submenu.classList.remove('hidden');
+    this._recentSubmenuVisible = true;
+    const rect = trigger.getBoundingClientRect();
+    submenu.style.left = (rect.right - 1) + 'px';
+    submenu.style.top = rect.top + 'px';
+    requestAnimationFrame(() => {
+      const sr = submenu.getBoundingClientRect();
+      if (sr.right > window.innerWidth) submenu.style.left = (rect.left - sr.width + 1) + 'px';
+      if (sr.bottom > window.innerHeight) submenu.style.top = (window.innerHeight - sr.height - 4) + 'px';
+    });
+  }
+
+  renderRecentFilesSubmenu() {
+    const submenu = document.getElementById('recent-files-submenu');
+    if (!submenu) return;
+    const list = this._recentFiles || [];
+    submenu.innerHTML = '';
+    if (list.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'dropdown-item disabled';
+      empty.textContent = this.t('noRecentFiles');
+      submenu.appendChild(empty);
+      return;
+    }
+    list.forEach(p => {
+      const item = document.createElement('div');
+      item.className = 'dropdown-item recent-file-item';
+      item.dataset.path = p;
+      const name = p.split(/[/\\]/).pop() || p;
+      const dir = p.slice(0, Math.max(0, p.length - name.length)).replace(/[/\\]$/, '');
+      const nameEl = document.createElement('span');
+      nameEl.className = 'recent-file-name';
+      nameEl.textContent = name;
+      const dirEl = document.createElement('span');
+      dirEl.className = 'recent-file-dir';
+      dirEl.textContent = dir;
+      item.appendChild(nameEl);
+      item.appendChild(dirEl);
+      item.title = p;
+      submenu.appendChild(item);
+    });
+    const sep = document.createElement('div');
+    sep.className = 'dropdown-separator';
+    submenu.appendChild(sep);
+    const clear = document.createElement('div');
+    clear.className = 'dropdown-item recent-clear';
+    clear.dataset.action = 'clear';
+    clear.textContent = this.t('clearRecentFiles');
+    submenu.appendChild(clear);
   }
 
   updateTabBar() {
@@ -2732,6 +2911,7 @@ class MarkdownEditor {
         const isOpening = menuEl.classList.contains('hidden');
         menuEl.classList.toggle('hidden');
         anyToolbarOpen = isOpening;
+        if (menu === 'file-menu' && !menuEl.classList.contains('hidden')) this.refreshRecentFiles();
       });
 
       dropdown.addEventListener('mouseenter', () => {
@@ -2741,6 +2921,7 @@ class MarkdownEditor {
             document.getElementById(d.menu).classList.add('hidden');
           });
           menuEl.classList.remove('hidden');
+          if (menu === 'file-menu') this.refreshRecentFiles();
         }
       });
 
@@ -2768,6 +2949,36 @@ class MarkdownEditor {
     document.getElementById('btn-open-folder').addEventListener('click', () => {
       document.getElementById('file-menu').classList.add('hidden');
       this.openFolder();
+    });
+    // 最近文件子菜单交互
+    document.getElementById('btn-recent').addEventListener('mouseenter', () => {
+      this.showRecentSubmenu();
+    });
+    document.getElementById('btn-recent').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.showRecentSubmenu();
+    });
+    document.getElementById('file-menu').addEventListener('mouseover', (e) => {
+      if (e.target.closest('#recent-files-submenu')) return;
+      if (e.target.closest('#btn-recent')) return;
+      this.hideRecentSubmenu();
+    });
+    const recentSubmenu = document.getElementById('recent-files-submenu');
+    recentSubmenu.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const clearItem = e.target.closest('[data-action="clear"]');
+      if (clearItem) {
+        this.clearRecentFiles();
+        this.hideRecentSubmenu();
+        return;
+      }
+      const item = e.target.closest('.recent-file-item');
+      if (item && item.dataset.path) {
+        const path = item.dataset.path;
+        document.getElementById('file-menu').classList.add('hidden');
+        this.hideRecentSubmenu();
+        this.openFilePath(path);
+      }
     });
     document.getElementById('folder-close').addEventListener('click', () => {
       this.closeFolder();
@@ -2825,7 +3036,7 @@ class MarkdownEditor {
       try {
         window.__TAURI__.core.invoke('plugin:webview|internal_toggle_devtools');
       } catch (e) {
-        this.setStatus('无法打开开发者工具');
+        this.reportError('devtools');
       }
     });
     document.querySelector('.tab-bar-wrapper').addEventListener('dblclick', (e) => {
@@ -3469,7 +3680,7 @@ class MarkdownEditor {
                 }
               } catch (err) {
                 console.error('Failed to open absolute markdown link:', href, err);
-                this.setStatus(`无法打开文件: ${href}`);
+                this.reportError('openLink', { params: { href }, error: err });
                 return;
               }
             }
@@ -3494,7 +3705,7 @@ class MarkdownEditor {
               }
             } catch (err) {
               console.error('Failed to open bundled markdown link:', href, err);
-              this.setStatus(`无法打开文件: ${href}`);
+              this.reportError('openLink', { params: { href }, error: err });
             }
           } else {
             const resp = await fetch(href);
@@ -3509,7 +3720,7 @@ class MarkdownEditor {
           }
         } catch (err) {
           console.error('Failed to open markdown link:', href, err);
-          this.setStatus(`无法打开文件: ${href}`);
+          this.reportError('openLink', { params: { href }, error: err });
           return;
         }
       }
@@ -3845,7 +4056,7 @@ class MarkdownEditor {
             this.setStatus(this.t('imagePasteFailed') + ': ' + err);
           });
         } else {
-          this.showToast('无法读取剪贴板图片');
+          this.reportError('clipboardImage');
         }
       }
     });
@@ -4055,7 +4266,7 @@ class MarkdownEditor {
       this.updateTabDisplay();
       this.setStatus(`${this.t('reloaded') || '已重新加载'}: ${tab.name}`);
     } catch (err) {
-      this.setStatus(`${this.t('reloadFailed') || '重新加载失败'}: ${err}`);
+      this.reportError('E_IO', { context: { path: tab.filePath }, error: err, params: { name: tab.name } });
     } finally {
       this.hideLoading();
     }
@@ -4096,7 +4307,8 @@ class MarkdownEditor {
       this.updateWordCount();
       this.setStatus(openedCount > 0 ? this.t('openedFiles', { n: openedCount }) : this.t('alreadyOpen'));
     } catch (error) {
-      this.setStatus(`${this.t('openFailed')}: ${error}`);
+      // 多选打开时单个文件失败：弹 toast 而非仅 console，避免用户无感
+      this.reportError(error.code || 'E_IO', { context: { path: error.path }, error, params: error.params, detail: error.detail });
     } finally {
       this.hideLoading();
     }
@@ -4179,7 +4391,7 @@ class MarkdownEditor {
         active.content = '';
         active.savedContent = '';
         active._loadError = true;
-        this.setStatus(`${this.t('sessionLoadFailed')}: ${active.filePath}`);
+        this.reportError('E_NOT_FOUND', { context: { path: active.filePath }, params: { name: active.name }, error: e });
       }
       active._loaded = true;
     } else if (active) {
@@ -4245,7 +4457,8 @@ class MarkdownEditor {
       this.setStatus(this.t('fileOpened', { name }));
       this.saveSession();
     } catch (e) {
-      this.setStatus(this.t('openFailed') + ': ' + e);
+      // 打开失败：结构化错误码（E_NOT_FOUND/E_PERMISSION/...）或兜底 E_IO，用户可见 toast + 开发可见 console
+      this.reportError(e.code || 'E_IO', { context: { path: filePath }, error: e, params: e.params, detail: e.detail });
     } finally {
       this._endPaneLoad();
     }
@@ -4594,7 +4807,7 @@ ${clone.innerHTML}
 
   async exportImage() {
     if (typeof html2canvas === 'undefined') {
-      this.setStatus(`${this.t('exportFailed')}: html2canvas not loaded`);
+      this.reportError('E_RENDER', { detail: '导出组件未加载（html2canvas not loaded）' });
       return;
     }
 
@@ -5042,6 +5255,22 @@ input[type="checkbox"]:checked::after { display: none !important; }
     this._previewElementList = rawPreviewList;
   }
 
+  // 返回预览视口顶部对应的源码行号（1-based）；测量失败返回 null。
+  // 用于切换模式时把「预览像素位置」转成宽度无关的行锚点。
+  _lineAtPreviewTop(pvTop) {
+    this._computedPosition();
+    const list = this._previewElementList;
+    if (!list || list.length < 2) return null;
+    // 二分找 previewList 中 <= pvTop 的最大行索引
+    let lo = 0, hi = list.length - 1, ans = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (list[mid] <= pvTop) { ans = mid; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    return ans + 1; // 1-based 源码行
+  }
+
   // 根据 unified 渲染结果重建滚动同步数据（仅在内容变化时调用）
   rebuildScrollSync() {
     const content = this.cm.getValue();
@@ -5135,7 +5364,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
   }
 
   // 编辑器 → 预览同步（逐行密集插值）
-  _syncEditorToPreview() {
+  _syncEditorToPreview(editorTop) {
     if (this.previewWindow) { this._syncEditorToPreviewWindow(); return; }
     this._computedPosition();
 
@@ -5145,7 +5374,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
 
     const { scrollHeight, clientHeight } = this.preview;
     const cmInfo = this.cm.getScrollInfo();
-    const top = cmInfo.top;
+    const top = (editorTop != null) ? editorTop : cmInfo.top;
 
     if (top <= 0.5) { this.preview.scrollTop = 0; return; }
     if (top + clientHeight >= cmInfo.height - 0.5) {
@@ -5181,7 +5410,9 @@ input[type="checkbox"]:checked::after { display: none !important; }
   }
 
   // 预览 → 编辑器同步（逐行密集插值）
-  _syncPreviewToEditor() {
+  // previewTop 可选：指定预览滚动位置作为来源；省略则读当前预览 scrollTop。
+  // 切换模式时用它传入「已保存的预览位置」，避免依赖此刻可能不可靠的实时值。
+  _syncPreviewToEditor(previewTop) {
     if (this.previewWindow) { this._syncPreviewToEditorWindow(); return; }
     this._computedPosition();
 
@@ -5189,8 +5420,9 @@ input[type="checkbox"]:checked::after { display: none !important; }
     const editorList = this._editorElementList;
     if (!previewList || previewList.length < 2) return;
 
-    const { scrollTop: pvTop, scrollHeight, clientHeight } = this.preview;
+    const { scrollHeight, clientHeight } = this.preview;
     const cmInfo = this.cm.getScrollInfo();
+    const pvTop = (previewTop != null) ? previewTop : this.preview.scrollTop;
 
     if (pvTop <= 0.5) { this.cm.scrollTo(0, 0); return; }
     if (pvTop + clientHeight >= scrollHeight - 0.5) {
@@ -5251,6 +5483,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
       if (top <= st + 1 && top > bestTop) { bestLine = ln - 1; bestTop = top; }
     }
     const targetTop = this.cm.heightAtLine(bestLine, 'local');
+    if (this.activeTab) this.activeTab.scrollPos = { top: targetTop, left: 0 };
     this.cm.scrollTo(0, targetTop);
   }
 
@@ -5765,23 +5998,104 @@ input[type="checkbox"]:checked::after { display: none !important; }
     });
   }
 
-  showToast(text, type = 'danger') {
+  showToast(text, type = 'danger', opts = {}) {
     const container = document.getElementById('toast-container');
+    if (!container) return;
     const el = document.createElement('div');
     el.className = 'toast ' + type;
-    el.innerHTML = '<span class="toast-icon">'
-      + (type === 'danger'
-        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'
-        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>')
-      + '</span><span class="toast-text"></span>';
-    el.querySelector('.toast-text').textContent = text;
+
+    const iconSvg = type === 'danger'
+      ? '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>'
+      : type === 'warning'
+        ? '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
+        : type === 'info'
+          ? '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>'
+          : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>';
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'toast-icon';
+    iconSpan.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + iconSvg + '</svg>';
+
+    const body = document.createElement('div');
+    body.className = 'toast-body';
+    if (typeof text === 'object' && text !== null) {
+      const titleEl = document.createElement('div');
+      titleEl.className = 'toast-title';
+      titleEl.textContent = text.title || '';
+      body.appendChild(titleEl);
+      if (text.detail) {
+        const detailEl = document.createElement('div');
+        detailEl.className = 'toast-detail';
+        detailEl.textContent = text.detail;
+        body.appendChild(detailEl);
+      }
+      if (text.code) {
+        const codeEl = document.createElement('div');
+        codeEl.className = 'toast-code';
+        codeEl.textContent = '错误码 ' + text.code;
+        body.appendChild(codeEl);
+      }
+    } else {
+      body.textContent = text;
+    }
+
+    el.appendChild(iconSpan);
+    el.appendChild(body);
     container.appendChild(el);
+
+    const duration = opts.duration || (type === 'danger' ? 5000 : type === 'warning' ? 4000 : 3000);
     setTimeout(() => {
       el.style.transition = 'opacity 0.3s, transform 0.3s';
       el.style.opacity = '0';
       el.style.transform = 'translateY(-20px)';
       setTimeout(() => el.remove(), 300);
-    }, 3000);
+    }, duration);
+  }
+
+  // 统一错误上报：用户友好提示 + 开发可诊断（错误码 + 上下文写入 console）
+  reportError(code, opts = {}) {
+    const lang = this.settings && this.settings.language === 'en' ? 'en' : 'zh';
+    const dict = ERROR_MESSAGES[code] || {};
+    const entry = dict[lang] || dict.zh || { title: code, detail: '' };
+    let detail = opts.detail || entry.detail || '';
+    if (detail && opts.params) {
+      for (const [k, v] of Object.entries(opts.params)) {
+        detail = detail.replace('{' + k + '}', v == null ? '' : v);
+      }
+    }
+    const title = opts.title || entry.title || code;
+    const context = opts.context || {};
+    // 开发可诊断：错误码 + 上下文 + 完整堆栈写入 console（用户不可见，但开发可查）
+    console.error('[TizuMark]', code, JSON.stringify(context), opts.error && (opts.error.stack || opts.error));
+    if (opts.toast === false) {
+      this.setStatus(title + (detail ? '：' + detail : ''));
+    } else {
+      this.showToast({ title, detail, code }, opts.type || 'danger', { duration: opts.duration });
+    }
+  }
+
+  // 解析 Rust read_file 的结构化错误 JSON，返回带 .code 的 Error 供上层 reportError 使用
+  _mapReadFileError(e, path) {
+    let kind = 'Io';
+    try {
+      const raw = typeof e === 'string' ? e : (e && e.message ? e.message : null);
+      const obj = raw ? JSON.parse(raw) : null;
+      if (obj && obj.kind) kind = obj.kind;
+    } catch (_) { /* 非结构化错误，按 Io 处理 */ }
+    const codeMap = {
+      NotFound: 'E_NOT_FOUND',
+      PermissionDenied: 'E_PERMISSION',
+      Locked: 'E_LOCKED',
+      PathTooLong: 'E_PATH_TOO_LONG',
+      InvalidEncoding: 'E_ENCODING',
+      Io: 'E_IO',
+    };
+    const code = codeMap[kind] || 'E_IO';
+    const name = path ? path.split(/[/\\]/).pop() : '';
+    const err = new Error('读取文件失败: ' + kind);
+    err.code = code;
+    err.path = path;
+    err.params = { name };
+    return err;
   }
 
   // ====== 外部文件变更检测 ======
@@ -5811,7 +6125,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
       }
       this.updateTabDisplay();
     } catch (e) {
-      this.showToast(this.t('reloadFailed') + ': ' + e, 'danger');
+      this.reportError(e.code || 'E_IO', { context: { path: tab.filePath }, error: e, params: e.params, detail: e.detail });
     }
   }
 
@@ -6020,7 +6334,27 @@ input[type="checkbox"]:checked::after { display: none !important; }
       document.getElementById('preview-find-panel').classList.add('hidden');
       this.clearPreviewHighlight();
     }
-    
+
+    // 切换前保存滚动位置 + 行锚点。
+    // 关键：像素位置（scrollPos / previewScrollTop）与宽度绑定——纯预览 100% 宽与分屏 50% 宽
+    // 下同一像素对应不同段落。切换会让预览重排，跨宽度用旧像素定位必然错位。
+    // 因此额外算出「视口顶部对应的源码行号」作为宽度无关的锚点，切换后按该行在新宽度下定位。
+    this._pendingSwitchAnchorLine = null;
+    const swTab = this.activeTab;
+    if (swTab) {
+      // 预览在分屏/纯预览两种模式都可见，始终记录其像素位置（锚点失效时回退用）
+      if (this.preview) swTab.previewScrollTop = this.preview.scrollTop;
+      if (this.cm && this.viewMode === 'edit') {
+        // 离开编辑（分屏）：编辑器可见，存像素 + 视口顶部源码行
+        const si = this.cm.getScrollInfo();
+        swTab.scrollPos = { top: si.top, left: si.left };
+        try { this._pendingSwitchAnchorLine = this.cm.lineAtHeight(si.top, 'local') + 1; } catch (_) {}
+      } else if (this.preview && this.viewMode === 'preview') {
+        // 离开纯预览（100% 宽）：预览可见，存视口顶部源码行
+        this._pendingSwitchAnchorLine = this._lineAtPreviewTop(this.preview.scrollTop);
+      }
+    }
+
     this.viewMode = mode;
     this.applyViewMode();
   }
@@ -6068,6 +6402,44 @@ input[type="checkbox"]:checked::after { display: none !important; }
       if (this.previewWindow && this._previewVirtual !== (this.viewMode === 'preview')) {
         this.updatePreview();
       }
+      // 恢复滚动位置：用切换前算出的「源码行锚点」在新宽度下定位目标面板。
+      // 行锚点与宽度无关，能正确跨越分屏(50%)↔纯预览(100%)的重排；像素值只在锚点失效时回退。
+      const rTab = this.activeTab;
+      if (rTab) {
+        const anchor = this._pendingSwitchAnchorLine;
+        this._pendingSwitchAnchorLine = null;
+        if (this.viewMode === 'preview') {
+          // 进入纯预览（100% 宽）：预览已重排，用锚点行在新布局下的预览位置定位
+          let restored = false;
+          if (anchor != null) {
+            this._computedPosition();
+            const list = this._previewElementList;
+            if (list && anchor - 1 < list.length) {
+              const pMax = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
+              this.preview.scrollTop = Math.min(Math.max(0, list[anchor - 1] || 0), pMax);
+              restored = true;
+            }
+          }
+          if (!restored) {
+            const pMax = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
+            this.preview.scrollTop = Math.min(rTab.previewScrollTop || 0, pMax);
+          }
+        } else {
+          // 切回编辑（分屏）：编辑器已 refresh，用锚点行在编辑器里的像素位置定位
+          let restored = false;
+          if (anchor != null && this.cm) {
+            try {
+              const targetTop = this.cm.heightAtLine(Math.max(0, anchor - 1), 'local');
+              if (typeof targetTop === 'number') { this.cm.scrollTo(0, targetTop); restored = true; }
+            } catch (_) {}
+          }
+          if (!restored) {
+            const sp = rTab.scrollPos || { top: 0, left: 0 };
+            this.cm.scrollTo(sp.left || 0, sp.top || 0);
+          }
+        }
+      }
+      requestAnimationFrame(() => this._resumeScroll());
     }, 50);
   }
 
@@ -6153,7 +6525,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
         const p = baseDir ? (baseDir.replace(/[/\\]$/, '') + '/' + fileName) : fileName;
         content = await invoke('read_file', { path: p });
       } catch (e) {
-        this.setStatus(isEn ? this.t('failedGuideEn') : `${this.t('failedGuide')}: ${e}`);
+        this.reportError('guide', { error: e });
         return;
       }
       // read_file 也可能返回 HTML（某些资源目录解析不符预期），同样排除
@@ -6162,7 +6534,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
       }
     }
     if (content === null) {
-      this.setStatus(isEn ? this.t('failedGuideEn') : this.t('failedGuide'));
+      this.reportError('guide');
       return;
     }
     this.addTab(tabName, content, null);
@@ -7175,6 +7547,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     await new Promise(r => setTimeout(r, 300));
   } catch (e) {
     console.error('Initialization error:', e);
+    // 初始化异常对用户可见（否则整页空白无提示）；toast:false 避免依赖尚未就绪的 UI，改用页面顶部错误条
+    try {
+      if (window.editor && window.editor.reportError) {
+        window.editor.reportError('E_INIT', { error: e, toast: false });
+      }
+      const bar = document.createElement('div');
+      bar.className = 'fatal-error-bar';
+      bar.textContent = '编辑器初始化失败，请重启应用。如反复出现，请将此界面截图反馈给开发者。';
+      document.body.insertBefore(bar, document.body.firstChild);
+    } catch (_) {}
   } finally {
     clearTimeout(loadingSafetyTimer);
     window.editor?.hideLoading();

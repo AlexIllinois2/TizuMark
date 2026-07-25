@@ -30,6 +30,7 @@ reqwest = { version = "0.12", features = ["rustls-tls"] }
 base64 = "0.22"
 md-5 = "0.10"
 imagesize = "0.13"
+encoding_rs = "0.8"
 
 [patch.crates-io]
 brotli = { git = "https://github.com/dropbox/rust-brotli", rev = "9cbed81a1a098fcd4ffcf956429dce6154415970" }
