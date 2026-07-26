@@ -742,6 +742,10 @@ class MarkdownEditor {
     this.untitledCounter = 1;
     this.tabs = [];
     this.activeTabIndex = 0;
+    // 外部变更队列：在此先初始化为 []，作为异步 initFileWatcher 之前的兜底，
+    // 避免初始化未完成时调用 enqueueExternalChange 触发 _externalQueue.includes 崩溃。
+    this._externalQueue = [];
+    this._externalBannerVisible = false;
     this.cm = null;
     this.workspaceFolder = null;
     this.expandedFolders = new Set();
@@ -2691,11 +2695,29 @@ class MarkdownEditor {
       },
     };
 
-    // Register all shortcuts in extraKeys (overrides CM defaults when editor focused)
+    // Editor-local actions (bold/italic/insert-*, need the CM instance) are
+    // registered as real handlers in extraKeys — they only apply when the
+    // editor is focused, which is exactly what we want.
     const extraKeys = this.cm.getOption('extraKeys');
-    for (const [action, fn] of Object.entries({ ...editorMap, ...globalMap })) {
+    for (const [action, fn] of Object.entries(editorMap)) {
       const key = s[action]?.key;
       if (key) extraKeys[toCmKey(key)] = fn;
+    }
+    // Global actions (save/find/crossSearch/nextTab/... ) are dispatched
+    // centrally by the document-level keydown handler (works in ALL focus
+    // states). Here we neutralize them in CM with `false` so CM's own default
+    // keymap (e.g. search.js binds Shift-Ctrl-F→"replace", Ctrl-F→"find") can't
+    // fire and there is no double-dispatch. CodeMirror does not stop propagation
+    // for handled keys, so the event still reaches the document handler.
+    for (const [action, fn] of Object.entries(globalMap)) {
+      const key = s[action]?.key;
+      if (key) {
+        // 兜底：即便事件因某些 WebView/浏览器差异未被 document 捕获阶段拦截，
+        // 也在 CM 键位里直接派发同一全局处理函数，避免编辑器有焦点时全局快捷键失效。
+        // 返回 false 表示 CM 已处理、阻止默认行为；与 document 捕获阶段派发互斥
+        // （捕获阶段已 stopPropagation 时 CM 不会收到事件，不会重复派发）。
+        extraKeys[toCmKey(key)] = () => { try { fn(); } catch (_) {} return false; };
+      }
     }
     this.cm.setOption('extraKeys', extraKeys);
 
@@ -3485,7 +3507,7 @@ class MarkdownEditor {
       this.updateSideButtons();
     });
 
-    document.addEventListener('keydown', async (e) => {
+    document.addEventListener('keydown', (e) => {
       if (this.handleShortcutRecording(e)) return;
 
       if (/^F(1[0-2]|[1-9])$/.test(e.key)) {
@@ -3528,23 +3550,30 @@ class MarkdownEditor {
         e.preventDefault();
 
         // Handle TizuMark's global shortcuts (work even when editor is not focused)
+        // 主键用 e.code（物理键位）推导，规避某些浏览器/环境下 Ctrl+Shift+字母的
+        // e.key 取值异常（如被当成其它字符），保证 keyStr 与 globalShortcutLookup
+        // 中存储的 'Ctrl+Shift+F' 等稳定匹配。
+        let baseKey;
+        if (e.code && /^Key[A-Za-z]$/.test(e.code)) baseKey = e.code.slice(3).toUpperCase();
+        else if (e.code && /^Digit[0-9]$/.test(e.code)) baseKey = e.code.slice(5);
+        else baseKey = e.key.length === 1 ? e.key.toUpperCase() : e.key;
         const gParts = [];
         if (e.ctrlKey || e.metaKey) gParts.push('Ctrl');
         if (e.shiftKey) gParts.push('Shift');
         if (e.altKey) gParts.push('Alt');
-        gParts.push(e.key.length === 1 ? e.key.toUpperCase() : e.key);
+        gParts.push(baseKey);
         const keyStr = gParts.join('+');
         const gHandler = this.globalShortcutLookup?.[keyStr];
-        // 用 e.target 判断事件来源，而非 cm.hasFocus()：find/toggleFindPanel 这类
-        // 快捷键会在 CM extraKeys 触发后同步把焦点转到 find input，导致冒泡到 document
-        // 时 hasFocus() 已变 false → 重复触发 gHandler（Ctrl+F 双击 bug 根因）。
-        // e.target 是按键时的事件原始目标，不随 focus 转移变化，能稳定区分来源。
-        const fromCM = this.cm.getWrapperElement().contains(e.target);
-        if (gHandler && !fromCM) {
+        // 全局快捷键在【捕获阶段】统一派发：命中即 stopPropagation，阻断事件继续
+        // 冒泡到 CodeMirror（及其默认键位 search.js 的 Shift-Ctrl-F→replace）或
+        // Tauri WebView 的原生处理，确保编辑器有焦点时也能且仅由本处触发一次。
+        // （CM 的 extraKeys 仍对相关键置 false 作为兜底。）
+        if (gHandler) {
+          e.stopPropagation();
           gHandler();
         }
       }
-    });
+    }, true);
   }
 
   initResizer() {

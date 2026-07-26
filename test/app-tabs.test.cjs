@@ -25,7 +25,7 @@ function stubTabSideEffects(ed) {
 }
 
 test('tab: addTab 追加标签并成为活动标签', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await delay(300);
   const ed = w.editor;
   stubTabSideEffects(ed);
@@ -37,7 +37,7 @@ test('tab: addTab 追加标签并成为活动标签', async () => {
 });
 
 test('tab: closeTab 移除当前标签', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await delay(300);
   const ed = w.editor;
   stubTabSideEffects(ed);
@@ -52,7 +52,7 @@ test('tab: closeTab 移除当前标签', async () => {
 });
 
 test('tab: switchTab 切换活动标签', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await delay(300);
   const ed = w.editor;
   stubTabSideEffects(ed);
@@ -65,7 +65,7 @@ test('tab: switchTab 切换活动标签', async () => {
 });
 
 test('tab: reorderTab 调整顺序并跟踪 activeTab', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await delay(300);
   const ed = w.editor;
   stubTabSideEffects(ed);

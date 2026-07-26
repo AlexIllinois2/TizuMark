@@ -90,7 +90,7 @@ const results = [];
 }
 
 // ── 输出 ───────────────────────────────────────────────────────────
-test('IME compositionstart 不触发滚动（回归）', () => {
+test('IME compositionstart 不触发滚动（回归）', async () => {
   results.forEach(([name, pass]) => {
     assert.ok(pass, name);
   });

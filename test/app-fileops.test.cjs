@@ -11,7 +11,7 @@ const { buildEnv, cleanup, delay } = require('./helpers/app-env.cjs');
 
 test('fileops: saveFile 对已有路径的标签调用 write_file', async () => {
   const calls = [];
-  const { w } = buildEnv({
+  const { w } = await buildEnv({
     captureInitErr: true,
     invokeImpl: async (cmd, args) => { calls.push({ cmd, args }); return undefined; },
   });
@@ -40,7 +40,7 @@ test('fileops: saveFile 对已有路径的标签调用 write_file', async () => 
 
 test('fileops: saveFile 对未保存标签先走 dialogSave 取路径再 write_file', async () => {
   const calls = [];
-  const { w } = buildEnv({
+  const { w } = await buildEnv({
     captureInitErr: true,
     invokeImpl: async (cmd, args) => {
       calls.push({ cmd, args });

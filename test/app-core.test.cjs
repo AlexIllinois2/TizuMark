@@ -12,7 +12,7 @@ const { buildEnv, cleanup, delay } = require('./helpers/app-env.cjs');
 
 // ---------- A. i18n ----------
 test('i18n: t() 按 settings.language 返回中文 / 英文', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await delay(300);
   const ed = w.editor;
   ed.settings.language = 'zh';
@@ -27,7 +27,7 @@ test('i18n: t() 按 settings.language 返回中文 / 英文', async () => {
 });
 
 test('i18n: 未知 key 回退到 key 本身（en 缺失时取 zh，再缺失取 key）', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await delay(300);
   const ed = w.editor;
   ed.settings.language = 'en';
@@ -36,7 +36,7 @@ test('i18n: 未知 key 回退到 key 本身（en 缺失时取 zh，再缺失取 
 });
 
 test('i18n: t() 支持 {param} 插值', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await delay(300);
   const ed = w.editor;
   ed.settings.language = 'zh';
@@ -47,7 +47,7 @@ test('i18n: t() 支持 {param} 插值', async () => {
 
 // ---------- B. 视图模式 ----------
 test('viewmode: setViewMode(preview) 加 preview-mode 类并隐藏编辑查找面板', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await delay(300);
   const ed = w.editor;
   const container = w.document.querySelector('.editor-container');
@@ -65,7 +65,7 @@ test('viewmode: setViewMode(preview) 加 preview-mode 类并隐藏编辑查找�
 
 // ---------- C. 设置生效 ----------
 test('settings: applySettings 把 tabSize 驱动到 CM tabSize/indentUnit', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await delay(300);
   const ed = w.editor;
   // 隔离主题/字体副作用（避免 mermaid 重渲染、字体注册等）

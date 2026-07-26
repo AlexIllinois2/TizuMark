@@ -58,20 +58,20 @@ function makeSchemeStub() {
 // B. 预置方案数据完整性
 // ============================================================
 
-test('B1 预置表含 3 个方案（vscode/typora/sublime）', () => {
+test('B1 预置表含 3 个方案（vscode/typora/sublime）', async () => {
   const presets = getShortcutPresets();
   assert.strictEqual(Object.keys(presets).length, 3);
   assert.ok(['vscode', 'typora', 'sublime'].every(k => k in presets));
 });
 
-test('B2 每方案内部键位互不重复', () => {
+test('B2 每方案内部键位互不重复', async () => {
   for (const [name, map] of Object.entries(getShortcutPresets())) {
     const keys = Object.values(map).filter(Boolean);
     assert.strictEqual(new Set(keys).size, keys.length, name + ' 内部键位应互不重复');
   }
 });
 
-test('B3 预置方案仅引用合法 actionId', () => {
+test('B3 预置方案仅引用合法 actionId', async () => {
   const ids = new Set(Object.keys(getDefaultShortcuts()));
   for (const map of Object.values(getShortcutPresets())) {
     for (const aid of Object.keys(map)) {
@@ -84,7 +84,7 @@ test('B3 预置方案仅引用合法 actionId', () => {
 // C. applyShortcutScheme 整体覆盖
 // ============================================================
 
-test('C1 applyShortcutScheme("typora") 覆盖 44 项且不重复', () => {
+test('C1 applyShortcutScheme("typora") 覆盖 44 项且不重复', async () => {
   const s = makeSchemeStub();
   applyShortcutScheme.call(s, 'typora');
   assert.strictEqual(Object.keys(s.shortcuts).length, 44);
@@ -94,7 +94,7 @@ test('C1 applyShortcutScheme("typora") 覆盖 44 项且不重复', () => {
   assert.strictEqual(s.shortcutScheme, 'typora');
 });
 
-test('C2 applyShortcutScheme("vscode") 与默认不撞（saveAs=Ctrl+Shift+S，strikethrough 回落空）', () => {
+test('C2 applyShortcutScheme("vscode") 与默认不撞（saveAs=Ctrl+Shift+S，strikethrough 回落空）', async () => {
   const s = makeSchemeStub();
   applyShortcutScheme.call(s, 'vscode');
   assert.strictEqual(Object.keys(s.shortcuts).length, 44);
@@ -103,7 +103,7 @@ test('C2 applyShortcutScheme("vscode") 与默认不撞（saveAs=Ctrl+Shift+S，s
   assert.strictEqual(s.shortcutScheme, 'vscode');
 });
 
-test('C3 applyShortcutScheme("default") 整体恢复默认键位', () => {
+test('C3 applyShortcutScheme("default") 整体恢复默认键位', async () => {
   const s = makeSchemeStub();
   applyShortcutScheme.call(s, 'default');
   const def = getDefaultShortcuts();
@@ -113,7 +113,7 @@ test('C3 applyShortcutScheme("default") 整体恢复默认键位', () => {
   assert.strictEqual(s.shortcutScheme, 'default');
 });
 
-test('C4 方案持久化到 localStorage', () => {
+test('C4 方案持久化到 localStorage', async () => {
   const s = makeSchemeStub();
   applyShortcutScheme.call(s, 'vscode');
   assert.strictEqual(s.shortcutScheme, 'vscode');
@@ -124,7 +124,7 @@ test('C4 方案持久化到 localStorage', () => {
 // D. 手动录制/清除 → 标记 custom；reset → 默认
 // ============================================================
 
-test('D1 手动录制成功后标记 custom', () => {
+test('D1 手动录制成功后标记 custom', async () => {
   const s = {
     shortcuts: getDefaultShortcuts(),
     recordingAction: 'bold',
@@ -143,7 +143,7 @@ test('D1 手动录制成功后标记 custom', () => {
   assert.strictEqual(s.shortcutScheme, 'custom');
 });
 
-test('D2 resetShortcuts 联动方案回默认并持久化', () => {
+test('D2 resetShortcuts 联动方案回默认并持久化', async () => {
   localStorage.removeItem('tizumark-shortcut-scheme');
   const s = {
     shortcuts: null,
@@ -166,14 +166,14 @@ test('D2 resetShortcuts 联动方案回默认并持久化', () => {
 // E. 旧数据兼容（无 scheme 键）
 // ============================================================
 
-test('E1 旧数据无 scheme 键且有差异 → loadShortcutScheme 返回 custom', () => {
+test('E1 旧数据无 scheme 键且有差异 → loadShortcutScheme 返回 custom', async () => {
   localStorage.removeItem('tizumark-shortcut-scheme');
   localStorage.setItem('tizumark-shortcuts', JSON.stringify({ bold: { key: 'Ctrl+Z' } }));
   const s = { shortcuts: { bold: { key: 'Ctrl+Z' } }, getDefaultShortcuts };
   assert.strictEqual(loadShortcutScheme.call(s), 'custom');
 });
 
-test('E2 旧数据无 scheme 键且无差异 → 返回 default', () => {
+test('E2 旧数据无 scheme 键且无差异 → 返回 default', async () => {
   localStorage.removeItem('tizumark-shortcut-scheme');
   const def = getDefaultShortcuts();
   localStorage.setItem('tizumark-shortcuts', JSON.stringify(def));
@@ -181,7 +181,7 @@ test('E2 旧数据无 scheme 键且无差异 → 返回 default', () => {
   assert.strictEqual(loadShortcutScheme.call(s), 'default');
 });
 
-test('E3 脏 scheme 值被白名单过滤（回退差异探测）', () => {
+test('E3 脏 scheme 值被白名单过滤（回退差异探测）', async () => {
   localStorage.setItem('tizumark-shortcut-scheme', 'hacked');
   const def = getDefaultShortcuts();
   localStorage.setItem('tizumark-shortcuts', JSON.stringify(def));
@@ -193,7 +193,7 @@ test('E3 脏 scheme 值被白名单过滤（回退差异探测）', () => {
 // F. 源码语法
 // ============================================================
 
-test('F1 src/app.js 通过 node --check 语法检查', () => {
+test('F1 src/app.js 通过 node --check 语法检查', async () => {
   let ok = true, msg = '';
   try {
     execSync('node --check ' + path.join(ROOT, 'src', 'app.js'));

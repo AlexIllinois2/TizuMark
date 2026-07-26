@@ -29,7 +29,7 @@ function structureOf(preview) {
 const SAMPLE = 'function binarySearch(arr, target) {\n  let left = 0;\n  console.log(binarySearch([1, 3, 5], 7));\n}\n';
 const MD = B + B + B + 'javascript\n' + SAMPLE + B + B + B;
 
-test('代码块基础结构合法（行号关闭）', () => {
+test('代码块基础结构合法（行号关闭）', async () => {
   const { preview } = createPreviewDom();
   const hljs = loadHljs(preview.ownerDocument.defaultView);
   renderInto(preview, MD);
@@ -38,7 +38,7 @@ test('代码块基础结构合法（行号关闭）', () => {
   assert.deepStrictEqual(structureOf(preview), { ok: true });
 });
 
-test('行号开关来回切换不出现结构破损 / 无 previously highlighted 警告', () => {
+test('行号开关来回切换不出现结构破损 / 无 previously highlighted 警告', async () => {
   const warns = [];
   const origWarn = console.warn;
   console.warn = (...a) => warns.push(a.join(' '));
@@ -62,7 +62,7 @@ test('行号开关来回切换不出现结构破损 / 无 previously highlighted
   assert.strictEqual(prevHigh.length, 0, '存在 previously highlighted 警告: ' + prevHigh.join(' | '));
 });
 
-test('缓存键区分行号状态：开/关命中的是不同缓存', () => {
+test('缓存键区分行号状态：开/关命中的是不同缓存', async () => {
   const { preview } = createPreviewDom();
   const win = preview.ownerDocument.defaultView;
   const hljs = loadHljs(win);
@@ -81,7 +81,7 @@ test('缓存键区分行号状态：开/关命中的是不同缓存', () => {
   assert.ok(onKey, '开行号应生成独立缓存键 |1');
 });
 
-test('math/mermaid/katex 代码块被跳过，不被行号包裹', () => {
+test('math/mermaid/katex 代码块被跳过，不被行号包裹', async () => {
   const { preview } = createPreviewDom();
   const win = preview.ownerDocument.defaultView;
   const hljs = loadHljs(win);
@@ -93,7 +93,7 @@ test('math/mermaid/katex 代码块被跳过，不被行号包裹', () => {
   assert.strictEqual(code.querySelector('.code-scroll'), null, 'mermaid 块不应被包裹');
 });
 
-test('无 hljs 时仍能按行包裹（纯转义）', () => {
+test('无 hljs 时仍能按行包裹（纯转义）', async () => {
   const { preview } = createPreviewDom();
   const cache = new Map();
   renderInto(preview, MD);
@@ -130,7 +130,7 @@ function assertNoWrapArtifact(text, label) {
   assert.strictEqual(trimmed.startsWith('[') && trimmed.endsWith(']'), false, label + '：整块被 [ ] 包裹 -> ' + trimmed.slice(0, 20) + '...' + trimmed.slice(-20));
 }
 
-test('代码块不被多余 [ ] 包裹（含合法方括号的源码）', () => {
+test('代码块不被多余 [ ] 包裹（含合法方括号的源码）', async () => {
   const { preview } = createPreviewDom();
   const win = preview.ownerDocument.defaultView;
   const hljs = loadHljs(win);
@@ -145,7 +145,7 @@ test('代码块不被多余 [ ] 包裹（含合法方括号的源码）', () => 
   }
 });
 
-test('无 hljs 分支同样不被多余 [ ] 包裹', () => {
+test('无 hljs 分支同样不被多余 [ ] 包裹', async () => {
   const { preview } = createPreviewDom();
   const cache = new Map();
   renderInto(preview, MD_BRACKET);
@@ -157,7 +157,7 @@ test('无 hljs 分支同样不被多余 [ ] 包裹', () => {
 // hljs.highlightElement。若 <code> 漏掉 hljs class，hljs github.min.css / styles.css 的
 // `pre code.hljs { display:block }` 不应用 → <code> 默认 display:inline → 内嵌 <div class="code-scroll">
 // 不合法 → 浏览器把 inline <code> 打断成两段，预览出现两个浅色矩形装饰。
-test('重渲染 cache hit 后 <code> 必须带 hljs class（避免 inline 打断成两段）', () => {
+test('重渲染 cache hit 后 <code> 必须带 hljs class（避免 inline 打断成两段）', async () => {
   const { preview } = createPreviewDom();
   const win = preview.ownerDocument.defaultView;
   const hljs = loadHljs(win);
@@ -181,7 +181,7 @@ test('重渲染 cache hit 后 <code> 必须带 hljs class（避免 inline 打断
 });
 
 // 回归：纯文本代码块（无语言标识）cache hit 后也应正常显示，不应有结构破损
-test('无语言标识的代码块重渲染后结构合法', () => {
+test('无语言标识的代码块重渲染后结构合法', async () => {
   const { preview } = createPreviewDom();
   const win = preview.ownerDocument.defaultView;
   const hljs = loadHljs(win);

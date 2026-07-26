@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { isMarkdownLink, resolveDocPath } = require('../src/lib/md-links.js');
 
-test('isMarkdownLink 识别各类链接', () => {
+test('isMarkdownLink 识别各类链接', async () => {
   assert.equal(isMarkdownLink('other.md'), true);
   assert.equal(isMarkdownLink('./sub/doc.markdown'), true);
   assert.equal(isMarkdownLink('../docs/note.mdx'), true);
@@ -17,7 +17,7 @@ test('isMarkdownLink 识别各类链接', () => {
   assert.equal(isMarkdownLink(null), false);
 });
 
-test('resolveDocPath 同级相对链接', () => {
+test('resolveDocPath 同级相对链接', async () => {
   assert.equal(
     resolveDocPath('C:\\docs\\a.md', 'other.md'),
     'C:\\docs\\other.md'
@@ -28,7 +28,7 @@ test('resolveDocPath 同级相对链接', () => {
   );
 });
 
-test('resolveDocPath 处理 ./ 与子目录', () => {
+test('resolveDocPath 处理 ./ 与子目录', async () => {
   assert.equal(
     resolveDocPath('/home/user/a.md', './sub/doc.md'),
     '/home/user/sub/doc.md'
@@ -39,7 +39,7 @@ test('resolveDocPath 处理 ./ 与子目录', () => {
   );
 });
 
-test('resolveDocPath 处理 ../ 向上级目录回溯', () => {
+test('resolveDocPath 处理 ../ 向上级目录回溯', async () => {
   assert.equal(
     resolveDocPath('/home/user/notes/a.md', '../refs/b.md'),
     '/home/user/refs/b.md'
@@ -50,7 +50,7 @@ test('resolveDocPath 处理 ../ 向上级目录回溯', () => {
   );
 });
 
-test('resolveDocPath 多级回溯越过基准目录被忽略', () => {
+test('resolveDocPath 多级回溯越过基准目录被忽略', async () => {
   // 基准只有一级目录时，多余的 .. 不会越界
   assert.equal(
     resolveDocPath('/home/a.md', '../../escape.md'),
@@ -58,14 +58,14 @@ test('resolveDocPath 多级回溯越过基准目录被忽略', () => {
   );
 });
 
-test('resolveDocPath 绝对路径原样返回', () => {
+test('resolveDocPath 绝对路径原样返回', async () => {
   assert.equal(resolveDocPath('/home/a.md', 'C:\\x\\y.md'), 'C:\\x\\y.md');
   assert.equal(resolveDocPath('/home/a.md', '/abs/path.md'), '/abs/path.md');
   assert.equal(resolveDocPath('/home/a.md', 'https://x.com/a.md'), 'https://x.com/a.md');
   assert.equal(resolveDocPath('/home/a.md', '#anchor'), '#anchor');
 });
 
-test('resolveDocPath 无基准文件时回退为原 href', () => {
+test('resolveDocPath 无基准文件时回退为原 href', async () => {
   assert.equal(resolveDocPath(null, 'other.md'), 'other.md');
   assert.equal(resolveDocPath('', 'sub/other.md'), 'sub/other.md');
 });

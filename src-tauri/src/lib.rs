@@ -2355,3 +2355,143 @@ $$\n\
         assert!(res.is_err(), "写入系统目录应被拒绝");
         assert!(res.unwrap_err().contains("protected"), "错误应说明是受保护路径");
     }
+
+    // ---------- 剩余命令单测（file_meta / list_dir / write_binary_file / ensure_dir /
+    // save_image_to_assets / fetch_image_as_base64）----------
+
+    // 极简 block_on：仅用于无真实异步 IO 的 async fn（本地文件分支一次 poll 即 Ready）
+    #[cfg(test)]
+    fn test_block_on<F: std::future::Future>(mut fut: F) -> F::Output {
+        use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+        fn noop(_: *const ()) {}
+        fn clone_raw(_: *const ()) -> RawWaker {
+            RawWaker::new(std::ptr::null(), &VTABLE)
+        }
+        static VTABLE: RawWakerVTable = RawWakerVTable::new(clone_raw, noop, noop, noop);
+        let waker = unsafe { Waker::from_raw(RawWaker::new(std::ptr::null(), &VTABLE)) };
+        let mut cx = Context::from_waker(&waker);
+        let mut pinned = unsafe { std::pin::Pin::new_unchecked(&mut fut) };
+        loop {
+            match pinned.as_mut().poll(&mut cx) {
+                Poll::Ready(v) => return v,
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
+
+    // 最小合法 PNG 头（1x1），imagesize 仅解析头部即可取宽高
+    #[cfg(test)]
+    fn tiny_png_bytes() -> Vec<u8> {
+        vec![
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+            0x00, 0x00, 0x00, 0x0D, b'I', b'H', b'D', b'R', // IHDR chunk
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // width=1 height=1
+            0x08, 0x06, 0x00, 0x00, 0x00, // bit depth / color type / etc
+            0x1F, 0x15, 0xC4, 0x89, // CRC（imagesize 不校验）
+        ]
+    }
+
+    #[test]
+    fn test_file_meta_existing_file() {
+        let tmp = std::env::temp_dir().join("tizumark_meta_test.txt");
+        fs::write(&tmp, "hello meta").unwrap();
+        let res = file_meta(tmp.to_str().unwrap().to_string());
+        assert!(res.is_ok());
+        let meta = res.unwrap().expect("存在的文件应返回 Some");
+        assert_eq!(meta.size, "hello meta".len() as u64, "size 应为文件字节数");
+        assert!(meta.mtime > 0, "mtime 应为正的毫秒时间戳");
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_file_meta_missing_and_dir_return_none() {
+        let missing = std::env::temp_dir().join("tizumark_meta_missing_xyz.md");
+        assert_eq!(file_meta(missing.to_str().unwrap().to_string()).unwrap().is_none(), true, "不存在应为 None");
+        let dir = std::env::temp_dir();
+        assert!(file_meta(dir.to_str().unwrap().to_string()).unwrap().is_none(), "目录应为 None（仅文件有元数据）");
+    }
+
+    #[test]
+    fn test_list_dir_filters_and_sorts() {
+        let base = std::env::temp_dir().join("tizumark_listdir_test");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("zdir")).unwrap();
+        fs::write(base.join("b.txt"), "t").unwrap();
+        fs::write(base.join("a.md"), "m").unwrap();
+        fs::write(base.join("c.png"), "p").unwrap();       // 非文档扩展应被过滤
+        fs::write(base.join(".hidden.md"), "h").unwrap();  // 点文件应被过滤
+        let res = list_dir(base.to_str().unwrap().to_string()).expect("list_dir 应成功");
+        let names: Vec<&str> = res.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["zdir", "a.md", "b.txt"], "目录排最前，文件按名排序，png/点文件被过滤");
+        assert!(res[0].is_dir && !res[1].is_dir);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_write_binary_file_roundtrip() {
+        let tmp = std::env::temp_dir().join("tizumark_bin_test.bin");
+        let _ = fs::remove_file(&tmp);
+        let data = vec![0u8, 1, 2, 255, 254, 128];
+        write_binary_file(tmp.to_str().unwrap().to_string(), data.clone()).expect("写二进制应成功");
+        assert_eq!(fs::read(&tmp).unwrap(), data, "读回字节应一致");
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_ensure_dir_creates_nested() {
+        let base = std::env::temp_dir().join("tizumark_ensure_dir_test");
+        let _ = fs::remove_dir_all(&base);
+        let nested = base.join("a").join("b").join("c");
+        ensure_dir(nested.to_str().unwrap().to_string()).expect("应递归创建目录");
+        assert!(nested.is_dir());
+        // 幂等：已存在再调用也成功
+        ensure_dir(nested.to_str().unwrap().to_string()).expect("重复调用应成功");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_save_image_to_assets_md5_naming_and_size() {
+        let assets = std::env::temp_dir().join("tizumark_assets_test");
+        let _ = fs::remove_dir_all(&assets);
+        let bytes = tiny_png_bytes();
+        let info = save_image_to_assets(bytes.clone(), "png".into(), assets.to_str().unwrap().to_string())
+            .expect("保存图片应成功");
+        let expect_name = format!("{:x}.png", Md5::digest(&bytes));
+        assert_eq!(info.filename, expect_name, "文件名应为字节 md5 + 扩展名");
+        assert_eq!((info.width, info.height), (1, 1), "应解析出 1x1 尺寸");
+        assert!(assets.join(&info.filename).is_file(), "文件应写入附件目录");
+        // 相同字节再存：文件名一致（去重），不报错
+        let info2 = save_image_to_assets(bytes, "png".into(), assets.to_str().unwrap().to_string()).unwrap();
+        assert_eq!(info2.filename, expect_name);
+        let _ = fs::remove_dir_all(&assets);
+    }
+
+    #[test]
+    fn test_save_image_to_assets_unknown_format_zero_size() {
+        let assets = std::env::temp_dir().join("tizumark_assets_unknown_test");
+        let _ = fs::remove_dir_all(&assets);
+        let info = save_image_to_assets(vec![1, 2, 3, 4], "bin".into(), assets.to_str().unwrap().to_string())
+            .expect("未知格式也应能保存");
+        assert_eq!((info.width, info.height), (0, 0), "无法识别尺寸应为 0x0");
+        let _ = fs::remove_dir_all(&assets);
+    }
+
+    #[test]
+    fn test_fetch_image_as_base64_local_file() {
+        let tmp = std::env::temp_dir().join("tizumark_b64_test.png");
+        let bytes = tiny_png_bytes();
+        fs::write(&tmp, &bytes).unwrap();
+        let encoded = test_block_on(fetch_image_as_base64(tmp.to_str().unwrap().to_string()))
+            .expect("本地文件应编码成功");
+        use base64::Engine;
+        let decoded = base64::engine::general_purpose::STANDARD.decode(&encoded).unwrap();
+        assert_eq!(decoded, bytes, "base64 解码应还原原始字节");
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_fetch_image_as_base64_missing_file_err() {
+        let missing = std::env::temp_dir().join("tizumark_b64_missing_xyz.png");
+        let res = test_block_on(fetch_image_as_base64(missing.to_str().unwrap().to_string()));
+        assert!(res.is_err(), "不存在的本地文件应返回错误");
+    }

@@ -17,11 +17,11 @@ function escapeHtml(s) {
 }
 const opts = { headingToId, escapeHtml };
 
-test('无标题返回空数组', () => {
+test('无标题返回空数组', async () => {
   assert.deepStrictEqual(extractHeadings('正文没有标题\n第二段', opts), []);
 });
 
-test('提取 # ~ ###### 各级标题与行号', () => {
+test('提取 # ~ ###### 各级标题与行号', async () => {
   const md = '# 一级\n正文\n## 二级\n### 三级\n```\n# 这是代码块里的假标题\n```\n#### 四级';
   const hs = extractHeadings(md, opts);
   assert.strictEqual(hs.length, 4);
@@ -33,20 +33,20 @@ test('提取 # ~ ###### 各级标题与行号', () => {
   assert.strictEqual(hs[3].line, 7);
 });
 
-test('标题文本去除 markdown 标记', () => {
+test('标题文本去除 markdown 标记', async () => {
   const hs = extractHeadings('# **加粗** `代码` [链接](u)', opts);
   // 旧实现仅去除 # * ` ~ [ ] ，保留 ( ) ，故 [链接](u) -> 链接(u)
   assert.strictEqual(hs[0].text, '加粗 代码 链接(u)');
 });
 
-test('重复标题 id 去重', () => {
+test('重复标题 id 去重', async () => {
   const md = '# 标题\n## 小节\n# 标题';
   const hs = extractHeadings(md, opts);
   assert.strictEqual(hs[0].id, '标题');
   assert.strictEqual(hs[2].id, '标题-2');
 });
 
-test('buildOutlineTree 按层级组织', () => {
+test('buildOutlineTree 按层级组织', async () => {
   const hs = extractHeadings('# A\n## B\n## C\n### D\n# E', opts);
   const tree = buildOutlineTree(hs);
   assert.strictEqual(tree.length, 2); // A, E
@@ -55,7 +55,7 @@ test('buildOutlineTree 按层级组织', () => {
   assert.strictEqual(tree[0].children[1].children[0].text, 'D');
 });
 
-test('renderOutlineHtml 输出层级/锚点/id/data-line 且转义', () => {
+test('renderOutlineHtml 输出层级/锚点/id/data-line 且转义', async () => {
   const hs = extractHeadings('# 标题 <x>\n## 子', opts);
   const tree = buildOutlineTree(hs);
   const html = renderOutlineHtml(tree, opts);
@@ -68,7 +68,7 @@ test('renderOutlineHtml 输出层级/锚点/id/data-line 且转义', () => {
   assert.ok(html.includes('&lt;x&gt;'), '标题文本应被转义: ' + html);
 });
 
-test('与旧实现逐字符一致（回归）', () => {
+test('与旧实现逐字符一致（回归）', async () => {
   const samples = [
     '',
     '# 仅标题',

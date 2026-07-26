@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { protectUnpairedDollar } = require('../src/modules/preview-post.js');
 
-test('不成对 $$ 在正文被包 ignore span（用户复现，无反斜杠）', () => {
+test('不成对 $$ 在正文被包 ignore span（用户复现，无反斜杠）', async () => {
   const s = '正文里有金额 $$12/5h 和 $$0.00038/次 也会被吞。';
   const r = protectUnpairedDollar(s);
   assert.ok(r.includes('<span class="katex-ignore">$$</span>'), '不成对 $$ 应包 ignore span');
@@ -12,45 +12,45 @@ test('不成对 $$ 在正文被包 ignore span（用户复现，无反斜杠）'
   assert.ok(r.includes('和') && r.includes('也会被吞'), '中间与后续文字保留');
 });
 
-test('成对 $...$ 保留不包裹（交给 KaTeX 渲染）', () => {
+test('成对 $...$ 保留不包裹（交给 KaTeX 渲染）', async () => {
   const s = '行内 $a+b$ 公式';
   const r = protectUnpairedDollar(s);
   assert.strictEqual(r, s);
 });
 
-test('成对 $$...$$ 保留不包裹', () => {
+test('成对 $$...$$ 保留不包裹', async () => {
   const s = '$$c^2$$';
   const r = protectUnpairedDollar(s);
   assert.strictEqual(r, s);
 });
 
-test('带空格的 $$ 234322 $$ 保留为合法块级公式', () => {
+test('带空格的 $$ 234322 $$ 保留为合法块级公式', async () => {
   const s = '$$ 234322 $$';
   const r = protectUnpairedDollar(s);
   assert.strictEqual(r, s);
 });
 
-test('表格单元格内的孤立 $ 被包 ignore span', () => {
+test('表格单元格内的孤立 $ 被包 ignore span', async () => {
   const s = '配额 | $12/5h 窗口';
   const r = protectUnpairedDollar(s);
   assert.ok(r.includes('<span class="katex-ignore">$</span>12/5h 窗口'), '孤立 $ 应包 ignore span');
   assert.ok(r.includes('配额 | '), '表格分隔保留');
 });
 
-test('$ 后接空格不当公式，包 span', () => {
+test('$ 后接空格不当公式，包 span', async () => {
   const s = '金额 $ 100 起';
   const r = protectUnpairedDollar(s);
   assert.ok(r.includes('<span class="katex-ignore">$</span> 100'), '$ 空格后 应包 span');
 });
 
-test('孤立 $ 在句中被包 span，后续保留', () => {
+test('孤立 $ 在句中被包 span，后续保留', async () => {
   const s = '价格 $100 起，详见下文';
   const r = protectUnpairedDollar(s);
   assert.ok(r.includes('<span class="katex-ignore">$</span>100'), '孤立 $ 应包 span');
   assert.ok(r.includes('详见下文'), '后续内容应保留');
 });
 
-test('跨单元格的 $ 各自包 span，不配对', () => {
+test('跨单元格的 $ 各自包 span，不配对', async () => {
   const s = '| $x | y$ |';
   const r = protectUnpairedDollar(s);
   // 两个 $ 都应被单独包裹，不应出现配对的 $x | y$ 数学

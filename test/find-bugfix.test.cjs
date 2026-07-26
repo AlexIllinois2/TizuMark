@@ -9,8 +9,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { buildEnv, cleanup } = require('./helpers/app-env.cjs');
 
-test('find: 正则模式下 find-next 不抛 ReferenceError（RegExpCtor bug 修复）', () => {
-  const { w } = buildEnv({ captureInitErr: true });
+test('find: 正则模式下 find-next 不抛 ReferenceError（RegExpCtor bug 修复）', async () => {
+  const { w } = await buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const cm = w.editor.cm;
@@ -39,8 +39,8 @@ test('find: 正则模式下 find-next 不抛 ReferenceError（RegExpCtor bug 修
 // 不会在事件冒泡前变 false，修复前后行为相同。该 bug 的修复（app.js:3489 改用 e.target 判断
 // 来源）依赖真机验证：CM 有焦点时按一次 Ctrl+F 面板即打开，不被立即关闭。
 
-test('find: 全部高亮 — 输入 query 后标记所有匹配', () => {
-  const { w } = buildEnv({ captureInitErr: true });
+test('find: 全部高亮 — 输入 query 后标记所有匹配', async () => {
+  const { w } = await buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const cm = w.editor.cm;
@@ -57,8 +57,8 @@ test('find: 全部高亮 — 输入 query 后标记所有匹配', () => {
   });
 });
 
-test('find: 全部高亮 — 超 2000 上限仅标记前 2000 个', () => {
-  const { w } = buildEnv({ captureInitErr: true });
+test('find: 全部高亮 — 超 2000 上限仅标记前 2000 个', async () => {
+  const { w } = await buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const cm = w.editor.cm;
@@ -75,8 +75,8 @@ test('find: 全部高亮 — 超 2000 上限仅标记前 2000 个', () => {
   });
 });
 
-test('find: clearFindHighlights 清除所有高亮 mark', () => {
-  const { w } = buildEnv({ captureInitErr: true });
+test('find: clearFindHighlights 清除所有高亮 mark', async () => {
+  const { w } = await buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const cm = w.editor.cm;
@@ -96,7 +96,7 @@ test('find: clearFindHighlights 清除所有高亮 mark', () => {
 });
 
 test('crossSearch: searchOpenFiles 遍历 tabs 收集匹配', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await new Promise(r => setTimeout(r, 300));
   const ed = w.editor;
   ed.tabs = [
@@ -111,8 +111,8 @@ test('crossSearch: searchOpenFiles 遍历 tabs 收集匹配', async () => {
   cleanup(w);
 });
 
-test('crossSearch: Ctrl+Shift+F 注册为跨文件搜索', () => {
-  const { w } = buildEnv({ captureInitErr: true });
+test('crossSearch: Ctrl+Shift+F 注册为跨文件搜索', async () => {
+  const { w } = await buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       assert.strictEqual(typeof w.editor.globalShortcutLookup['Ctrl+Shift+F'], 'function', 'Ctrl+Shift+F 应注册为跨文件搜索');
@@ -122,8 +122,8 @@ test('crossSearch: Ctrl+Shift+F 注册为跨文件搜索', () => {
   });
 });
 
-test('crossSearch: scope radio 切换显示/隐藏目录行', () => {
-  const { w } = buildEnv({ captureInitErr: true });
+test('crossSearch: scope radio 切换显示/隐藏目录行', async () => {
+  const { w } = await buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -144,8 +144,8 @@ test('crossSearch: scope radio 切换显示/隐藏目录行', () => {
   });
 });
 
-test('crossSearch: 非模态 — overlay 透明且外部点击不关闭', () => {
-  const { w } = buildEnv({ captureInitErr: true });
+test('crossSearch: 非模态 — overlay 透明且外部点击不关闭', async () => {
+  const { w } = await buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -162,8 +162,8 @@ test('crossSearch: 非模态 — overlay 透明且外部点击不关闭', () => 
   });
 });
 
-test('crossSearch: 标题栏拖动改变面板位置', () => {
-  const { w } = buildEnv({ captureInitErr: true });
+test('crossSearch: 标题栏拖动改变面板位置', async () => {
+  const { w } = await buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;

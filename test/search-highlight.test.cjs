@@ -28,7 +28,7 @@ function setupTab(w, content) {
 
 // ---------- 需求2：跨文件搜索 — 编辑框黄色高亮 ----------
 test('crossSearch: 跳转到匹配时在编辑框用 .search-match 高亮（len>0）', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   setupTab(w, 'hello world\nxyz hello end');
@@ -44,7 +44,7 @@ test('crossSearch: 跳转到匹配时在编辑框用 .search-match 高亮（len>
 });
 
 test('crossSearch: 目录搜索 len=0 时按查询在行内定位并高亮（fallback）', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   setupTab(w, 'hello world\nxyz hello end');
@@ -61,7 +61,7 @@ test('crossSearch: 目录搜索 len=0 时按查询在行内定位并高亮（fal
 
 // ---------- 需求2：跨文件搜索 — 预览框 / 预览模式黄色高亮 ----------
 test('crossSearch: 编辑模式下跳转时预览面板（预览框）同样黄色高亮', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.viewMode = 'edit';
@@ -75,7 +75,7 @@ test('crossSearch: 编辑模式下跳转时预览面板（预览框）同样黄�
 });
 
 test('crossSearch: 预览模式下跳转时预览同样黄色高亮', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.viewMode = 'preview';
@@ -90,7 +90,7 @@ test('crossSearch: 预览模式下跳转时预览同样黄色高亮', async () =
 
 // ---------- 需求1：文件内搜索 — 编辑模式（编辑框 + 预览框并列）黄色高亮 ----------
 test('find: 编辑模式下文件中查找，编辑框与预览框都黄色高亮', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.viewMode = 'edit';
@@ -110,7 +110,7 @@ test('find: 编辑模式下文件中查找，编辑框与预览框都黄色高�
 });
 
 test('find: 预览模式下文件中查找，预览黄色高亮', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.viewMode = 'preview';
@@ -128,7 +128,7 @@ test('find: 预览模式下文件中查找，预览黄色高亮', async () => {
 
 // ---------- 清理：跨文件高亮随打开弹框清除 ----------
 test('clearCrossSearchHighlights: 打开跨文件搜索弹框应清除上一次跨文件高亮', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.crossSearchMarks = [{ clear() {} }, { clear() {} }];

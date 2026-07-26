@@ -22,7 +22,7 @@ const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'styles.css'), 'ut
 // invokeImpl: (cmd, args) => any；默认对未知命令返回 undefined（与真实 stub 行为一致）
 
 // ---------- A. CSS 灰色遮罩修复回归（第 6 项核心 bug）----------
-test('css: 跨文件搜索 overlay 必须用 .dialog-overlay.cross-search-overlay 高特异性覆盖灰色背景', () => {
+test('css: 跨文件搜索 overlay 必须用 .dialog-overlay.cross-search-overlay 高特异性覆盖灰色背景', async () => {
   // 基础 .dialog-overlay 仍保留灰色半透明遮罩（其它模态弹窗需要它）
   assert.ok(/\.dialog-overlay\s*\{[^}]*background-color:\s*rgba\(0,\s*0,\s*0,\s*0\.5\)/s.test(css),
     '基础 .dialog-overlay 应保留灰色背景（rgba(0,0,0,0.5)）');
@@ -41,8 +41,8 @@ test('css: 跨文件搜索 overlay 必须用 .dialog-overlay.cross-search-overla
 });
 
 // ---------- E. 非模态：aria-modal=false（第 6 项）----------
-test('crossSearch: 弹框为非模态（aria-modal=false），弹窗存在时不阻塞软件', () => {
-  const { w } = buildEnv();
+test('crossSearch: 弹框为非模态（aria-modal=false），弹窗存在时不阻塞软件', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       const overlay = w.document.getElementById('cross-search-dialog');
@@ -55,8 +55,8 @@ test('crossSearch: 弹框为非模态（aria-modal=false），弹窗存在时不
 });
 
 // ---------- F. 样式一致性：浏览按钮用共享 .dialog-btn-primary（主题色，参考添加字体按钮）----------
-test('crossSearch: 浏览按钮使用 .dialog-btn + .dialog-btn-primary（主题色，与设置添加字体按钮一致）', () => {
-  const { w } = buildEnv();
+test('crossSearch: 浏览按钮使用 .dialog-btn + .dialog-btn-primary（主题色，与设置添加字体按钮一致）', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       const browse = w.document.getElementById('cs-browse');
@@ -77,7 +77,7 @@ test('crossSearch: 浏览按钮使用 .dialog-btn + .dialog-btn-primary（主题
 // ---------- B. 「目录」范围真正发起 search_in_files 并渲染（第 2 项 dir 分支执行路径）----------
 test('crossSearch: 选择「目录」范围时发起 search_in_files 并渲染结果', async () => {
   const calls = [];
-  const { w } = buildEnv(async (cmd, args) => {
+  const { w } = await buildEnv(async (cmd, args) => {
     if (cmd === 'search_in_files') {
       calls.push({ cmd, args });
       return [{ path: '/proj/notes.md', matches: [{ line: 3, col: 1, line_text: 'hello there' }] }];
@@ -106,7 +106,7 @@ test('crossSearch: 选择「目录」范围时发起 search_in_files 并渲染�
 });
 
 test('crossSearch: 「目录」范围但目录为空时显示无结果且不崩', async () => {
-  const { w } = buildEnv(async (cmd) => {
+  const { w } = await buildEnv(async (cmd) => {
     if (cmd === 'search_in_files') return []; // 空目录
     return undefined;
   });
@@ -126,9 +126,9 @@ test('crossSearch: 「目录」范围但目录为空时显示无结果且不崩'
 });
 
 // ---------- C. 「浏览」按钮接线（第 4 项浏览按钮）----------
-test('crossSearch: 点击「浏览」触发 dialogOpen({directory:true})', () => {
+test('crossSearch: 点击「浏览」触发 dialogOpen({directory:true})', async () => {
   const calls = [];
-  const { w } = buildEnv(async (cmd, args) => {
+  const { w } = await buildEnv(async (cmd, args) => {
     calls.push({ cmd, args });
     if (cmd === 'plugin:dialog|open') return '/chosen/dir';
     return undefined;
@@ -155,8 +155,8 @@ test('crossSearch: 点击「浏览」触发 dialogOpen({directory:true})', () =>
 });
 
 // ---------- D. 标题栏拖动在视口边缘夹取（第 5 项）----------
-test('crossSearch: 拖动时面板位置被夹取在视口内', () => {
-  const { w } = buildEnv();
+test('crossSearch: 拖动时面板位置被夹取在视口内', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -188,7 +188,7 @@ test('crossSearch: 拖动时面板位置被夹取在视口内', () => {
 
 // ---------- G. Enter 键流程：无结果→搜索；有结果且 query 未变→跳下一条（第 1 项联动）----------
 test('crossSearch: Enter 键 — 无结果时重新搜索，有结果且 query 未变时跳到下一条', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await new Promise(r => setTimeout(r, 300));
   const ed = w.editor;
   // 准备两个打开的文件，供 searchOpenFiles 使用

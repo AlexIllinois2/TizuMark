@@ -19,7 +19,7 @@ function spySearch(ed) {
 
 // ---------- 1. 编辑内查找的 IME 合成守卫 ----------
 test('find: 拼音合成期间不触发搜索，合成结束立即搜一次', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.cm.setValue('hello hello hello');
@@ -44,7 +44,7 @@ test('find: 拼音合成期间不触发搜索，合成结束立即搜一次', as
 
 // ---------- 2. 预览内查找的 IME 合成守卫 ----------
 test('previewFind: 拼音合成期间不触发搜索，合成结束立即搜一次', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.viewMode = 'preview';
@@ -65,7 +65,7 @@ test('previewFind: 拼音合成期间不触发搜索，合成结束立即搜一�
 
 // ---------- 3. 编辑内查找输入防抖：连续 input 合并为一次 ----------
 test('find: 连续 input 在防抖窗口内只搜索一次', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.cm.setValue('hello hello hello');
@@ -85,7 +85,7 @@ test('find: 连续 input 在防抖窗口内只搜索一次', async () => {
 
 // ---------- 4. 预览内查找输入防抖：连续 input 合并为一次 ----------
 test('previewFind: 连续 input 在防抖窗口内只搜索一次', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.viewMode = 'preview';

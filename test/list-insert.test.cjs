@@ -61,7 +61,7 @@ const stub = { cm: null, settings: { tabSize: 4 } };
 // A. insertLinePrefix 在真实 CodeMirror 实例上的行为
 // ============================================================
 
-test('A1 有序多行选区：每行序号 1./2./3. 递增', () => {
+test('A1 有序多行选区：每行序号 1./2./3. 递增', async () => {
   const cm = mk('苹果\n香蕉\n橙子');
   stub.cm = cm;
   cm.setSelection({ line: 0, ch: 0 }, { line: 2, ch: 2 });
@@ -69,7 +69,7 @@ test('A1 有序多行选区：每行序号 1./2./3. 递增', () => {
   assert.strictEqual(cm.getValue(), '1. 苹果\n2. 香蕉\n3. 橙子');
 });
 
-test('A2 无序多行选区：每行固定 “- ” 前缀（不递增）', () => {
+test('A2 无序多行选区：每行固定 “- ” 前缀（不递增）', async () => {
   const cm = mk('苹果\n香蕉\n橙子');
   stub.cm = cm;
   cm.setSelection({ line: 0, ch: 0 }, { line: 2, ch: 2 });
@@ -77,7 +77,7 @@ test('A2 无序多行选区：每行固定 “- ” 前缀（不递增）', () =
   assert.strictEqual(cm.getValue(), '- 苹果\n- 香蕉\n- 橙子');
 });
 
-test('A3 有序 4 行选区：序号 1..4 递增', () => {
+test('A3 有序 4 行选区：序号 1..4 递增', async () => {
   const cm = mk('一\n二\n三\n四');
   stub.cm = cm;
   cm.setSelection({ line: 0, ch: 0 }, { line: 3, ch: 1 });
@@ -85,7 +85,7 @@ test('A3 有序 4 行选区：序号 1..4 递增', () => {
   assert.strictEqual(cm.getValue(), '1. 一\n2. 二\n3. 三\n4. 四');
 });
 
-test('A4 无序 4 行选区：4 行均加 “- ” 前缀', () => {
+test('A4 无序 4 行选区：4 行均加 “- ” 前缀', async () => {
   const cm = mk('一\n二\n三\n四');
   stub.cm = cm;
   cm.setSelection({ line: 0, ch: 0 }, { line: 3, ch: 1 });
@@ -93,7 +93,7 @@ test('A4 无序 4 行选区：4 行均加 “- ” 前缀', () => {
   assert.strictEqual(cm.getValue(), '- 一\n- 二\n- 三\n- 四');
 });
 
-test('A5 无选区首行：有序插入 “1. ” 前缀', () => {
+test('A5 无选区首行：有序插入 “1. ” 前缀', async () => {
   const cm = mk('苹果');
   stub.cm = cm;
   cm.setCursor({ line: 0, ch: 0 });
@@ -101,7 +101,7 @@ test('A5 无选区首行：有序插入 “1. ” 前缀', () => {
   assert.strictEqual(cm.getValue(), '1. 苹果');
 });
 
-test('A6 无选区首行：无序插入 “- ” 前缀', () => {
+test('A6 无选区首行：无序插入 “- ” 前缀', async () => {
   const cm = mk('苹果');
   stub.cm = cm;
   cm.setCursor({ line: 0, ch: 0 });
@@ -109,7 +109,7 @@ test('A6 无选区首行：无序插入 “- ” 前缀', () => {
   assert.strictEqual(cm.getValue(), '- 苹果');
 });
 
-test('A7 选区只占部分列（跨多行）：仍按整行加前缀并递增', () => {
+test('A7 选区只占部分列（跨多行）：仍按整行加前缀并递增', async () => {
   const cm = mk('苹果\n香蕉\n橙子');
   stub.cm = cm;
   // 仅选中第 0~2 行第 1 列，验证逻辑基于“行”而非“选区列”
@@ -122,19 +122,19 @@ test('A7 选区只占部分列（跨多行）：仍按整行加前缀并递增',
 // B. 无序列表三级预览样式（CSS：disc → circle → square → disc 循环）
 // ============================================================
 
-test('B1 无序一级 ul：list-style-type: disc', () => {
+test('B1 无序一级 ul：list-style-type: disc', async () => {
   assert.ok(/:where\(\.preview-content\)\s+ul\s*\{\s*list-style-type:\s*disc;/.test(CSS));
 });
 
-test('B2 无序二级 ul ul：list-style-type: circle', () => {
+test('B2 无序二级 ul ul：list-style-type: circle', async () => {
   assert.ok(/:where\(\.preview-content\)\s+ul\s+ul\s*\{\s*list-style-type:\s*circle;/.test(CSS));
 });
 
-test('B3 无序三级 ul ul ul：list-style-type: square', () => {
+test('B3 无序三级 ul ul ul：list-style-type: square', async () => {
   assert.ok(/:where\(\.preview-content\)\s+ul\s+ul\s+ul\s*\{\s*list-style-type:\s*square;/.test(CSS));
 });
 
-test('B4 无序四级 ul ul ul ul：回到 disc（循环）', () => {
+test('B4 无序四级 ul ul ul ul：回到 disc（循环）', async () => {
   assert.ok(/:where\(\.preview-content\)\s+ul\s+ul\s+ul\s+ul\s*\{\s*list-style-type:\s*disc;/.test(CSS));
 });
 
@@ -142,37 +142,37 @@ test('B4 无序四级 ul ul ul ul：回到 disc（循环）', () => {
 // C. 有序列表三级预览样式（CSS @counter-style：1. / 1) / ①）
 // ============================================================
 
-test('C1 有序列表定义 4 个层级选择器（ol → ol ol → ol ol ol → ol ol ol ol）', () => {
+test('C1 有序列表定义 4 个层级选择器（ol → ol ol → ol ol ol → ol ol ol ol）', async () => {
   const n = (CSS.match(/:where\(\.preview-content\)\s+ol/g) || []).length;
   assert.strictEqual(n, 4, '应恰好 4 个 ol 层级选择器，实际 ' + n);
 });
 
-test('C2 定义两个 @counter-style（paren-decimal / circled-decimal）', () => {
+test('C2 定义两个 @counter-style（paren-decimal / circled-decimal）', async () => {
   const n = (CSS.match(/@counter-style/g) || []).length;
   assert.strictEqual(n, 2, '应恰好 2 个 @counter-style，实际 ' + n);
 });
 
-test('C3 有序一级 ol：list-style-type: decimal', () => {
+test('C3 有序一级 ol：list-style-type: decimal', async () => {
   assert.ok(/:where\(\.preview-content\)\s+ol\s*\{\s*list-style-type:\s*decimal;/.test(CSS));
 });
 
-test('C4 有序二级 ol ol：list-style-type: paren-decimal（预览为 1)）', () => {
+test('C4 有序二级 ol ol：list-style-type: paren-decimal（预览为 1)）', async () => {
   assert.ok(/:where\(\.preview-content\)\s+ol\s+ol\s*\{\s*list-style-type:\s*paren-decimal;/.test(CSS));
 });
 
-test('C5 有序三级 ol ol ol：list-style-type: circled-decimal（预览为 ①）', () => {
+test('C5 有序三级 ol ol ol：list-style-type: circled-decimal（预览为 ①）', async () => {
   assert.ok(/:where\(\.preview-content\)\s+ol\s+ol\s+ol\s*\{\s*list-style-type:\s*circled-decimal;/.test(CSS));
 });
 
-test('C6 @counter-style paren-decimal 的 suffix 为 ") "（即 1) ）', () => {
+test('C6 @counter-style paren-decimal 的 suffix 为 ") "（即 1) ）', async () => {
   assert.ok(/@counter-style\s+paren-decimal\s*\{[^}]*suffix:\s*["']\)\s*["'];/.test(CSS));
 });
 
-test('C7 @counter-style circled-decimal 的 suffix 为 " "（即 ①）', () => {
+test('C7 @counter-style circled-decimal 的 suffix 为 " "（即 ①）', async () => {
   assert.ok(/@counter-style\s+circled-decimal\s*\{[^}]*suffix:\s*["']\s*["'];/.test(CSS));
 });
 
-test('C8 整份 CSS 大括号平衡', () => {
+test('C8 整份 CSS 大括号平衡', async () => {
   const ob = (CSS.match(/{/g) || []).length;
   const cb = (CSS.match(/}/g) || []).length;
   assert.strictEqual(ob, cb, `大括号不平衡：{ = ${ob}, } = ${cb}`);
@@ -182,46 +182,46 @@ test('C8 整份 CSS 大括号平衡', () => {
 // D. Tab 宽度真正驱动缩进（设置项默认 4；非仅控制显示）
 // ============================================================
 
-test('D1 默认设置 tabSize 为 4', () => {
+test('D1 默认设置 tabSize 为 4', async () => {
   const block = APP.slice(APP.indexOf('defaultSettings() {'), APP.indexOf('defaultSettings() {') + 700);
   assert.ok(/tabSize:\s*4\b/.test(block), 'defaultSettings 中 tabSize 应为 4');
 });
 
-test('D2 Tab 处理使用 “ ”.repeat(this.settings.tabSize) 而非硬编码', () => {
+test('D2 Tab 处理使用 “ ”.repeat(this.settings.tabSize) 而非硬编码', async () => {
   assert.ok(/replaceSelection\(\s*' '\.repeat\(this\.settings\.tabSize\)/.test(APP),
     '源码应出现 replaceSelection(\' \'.repeat(this.settings.tabSize)');
 });
 
-test('D3 已无硬编码的两空格 replaceSelection（回归：不再写死 2 空格）', () => {
+test('D3 已无硬编码的两空格 replaceSelection（回归：不再写死 2 空格）', async () => {
   assert.ok(!APP.includes("replaceSelection('  ', 'end')"),
     '不应再存在 replaceSelection(' + "'  ', 'end')");
 });
 
-test('D4 编辑器初始化时 indentUnit 取自 settings.tabSize', () => {
+test('D4 编辑器初始化时 indentUnit 取自 settings.tabSize', async () => {
   assert.ok(/indentUnit:\s*this\.settings\.tabSize/.test(APP),
     '源码应出现 indentUnit: this.settings.tabSize');
 });
 
-test('D5 设置变更 handler 读取 Tab 宽度并同步 indentUnit', () => {
+test('D5 设置变更 handler 读取 Tab 宽度并同步 indentUnit', async () => {
   assert.ok(APP.includes('this.settings.tabSize = Number(e.target.value)'),
     'handler 应读取 select 值写入 settings.tabSize');
   assert.ok(APP.includes("cm.setOption('indentUnit', this.settings.tabSize)"),
     'handler 应将 indentUnit 设为 settings.tabSize');
 });
 
-test('D6 applySettings 将 indentUnit 设为 tabSize', () => {
+test('D6 applySettings 将 indentUnit 设为 tabSize', async () => {
   assert.ok(APP.includes("this.cm.setOption('indentUnit', s.tabSize)"),
     'applySettings 应 setOption(' + "'indentUnit', s.tabSize)");
 });
 
-test('D7 真实实例：非列表行按 Tab 插入 4 个空格', () => {
+test('D7 真实实例：非列表行按 Tab 插入 4 个空格', async () => {
   const cm = mk('word');
   cm.setCursor({ line: 0, ch: 0 });
   cm.replaceSelection(' '.repeat(4), 'end');
   assert.strictEqual(cm.getValue(), '    word');
 });
 
-test('D8 真实实例：列表行 indentUnit=4 时按 Tab 缩进 4 空格', () => {
+test('D8 真实实例：列表行 indentUnit=4 时按 Tab 缩进 4 空格', async () => {
   const cm = mk('- item');
   cm.setOption('indentUnit', 4);
   cm.setCursor({ line: 0, ch: 3 });
@@ -233,50 +233,50 @@ test('D8 真实实例：列表行 indentUnit=4 时按 Tab 缩进 4 空格', () =
 // E. 设置面板 Tab 宽度行 + 说明框 + 翻译接线
 // ============================================================
 
-test('E1 Tab 宽度行使用普通 settings-row（下拉框靠右，与其他项一致）', () => {
+test('E1 Tab 宽度行使用普通 settings-row（下拉框靠右，与其他项一致）', async () => {
   assert.ok(/class="settings-row">\s*<label>Tab 宽度/.test(HTML));
 });
 
-test('E2 存在 Tab 宽度说明框（id="setting-tab-size-hint"）', () => {
+test('E2 存在 Tab 宽度说明框（id="setting-tab-size-hint"）', async () => {
   assert.ok(HTML.includes('id="setting-tab-size-hint"'));
 });
 
-test('E3 #set-tab-size 下拉框有 3 个选项（2/4/8 空格）', () => {
+test('E3 #set-tab-size 下拉框有 3 个选项（2/4/8 空格）', async () => {
   const hdom = new JSDOM('<!DOCTYPE html><body>' + HTML + '</body>');
   const sel = hdom.window.document.querySelector('#set-tab-size');
   assert.ok(sel, '应能找到 #set-tab-size');
   assert.strictEqual(sel.options.length, 3, '应有 3 个选项，实际 ' + sel.options.length);
 });
 
-test('E4 Tab 宽度默认选中值为 "4"', () => {
+test('E4 Tab 宽度默认选中值为 "4"', async () => {
   const hdom = new JSDOM('<!DOCTYPE html><body>' + HTML + '</body>');
   const sel = hdom.window.document.querySelector('#set-tab-size');
   assert.strictEqual(sel.value, '4', '默认应选中 4 空格');
 });
 
-test('E5 说明框含 hint-icon 与 hint-text 节点（供翻译写入）', () => {
+test('E5 说明框含 hint-icon 与 hint-text 节点（供翻译写入）', async () => {
   assert.ok(/id="setting-tab-size-hint"[^>]*>[\s\S]*class="hint-icon"/.test(HTML),
     '说明框应含 hint-icon');
   assert.ok(/id="setting-tab-size-hint"[^>]*>[\s\S]*class="hint-text"/.test(HTML),
     '说明框应含 hint-text');
 });
 
-test('E6 中文翻译含 tabSizeHint 键', () => {
+test('E6 中文翻译含 tabSizeHint 键', async () => {
   assert.ok(/tabSizeHint:\s*'每按一次 Tab/.test(APP), '中文翻译应含 tabSizeHint');
 });
 
-test('E7 英文翻译含 tabSizeHint 键', () => {
+test('E7 英文翻译含 tabSizeHint 键', async () => {
   assert.ok(/tabSizeHint:\s*'How many spaces/.test(APP), '英文翻译应含 tabSizeHint');
 });
 
-test('E8 updateUILanguage 将翻译写入说明框节点', () => {
+test('E8 updateUILanguage 将翻译写入说明框节点', async () => {
   assert.ok(APP.includes("document.querySelector('#setting-tab-size-hint .hint-text')"),
     '应 querySelector Tab 宽度说明框的 hint-text');
   assert.ok(APP.includes("tabSizeHint.textContent = t('tabSizeHint')"),
     '应把 t(' + "'tabSizeHint') 写入 hint-text");
 });
 
-test('E9 说明框间距统一为 10px（.settings-row > .form-hint margin-top: 10px）', () => {
+test('E9 说明框间距统一为 10px（.settings-row > .form-hint margin-top: 10px）', async () => {
   assert.ok(/\.settings-row\s*>\s*\.form-hint\s*\{[^}]*margin-top:\s*10px;/.test(CSS),
     '.settings-row > .form-hint 的 margin-top 应为 10px');
 });
@@ -309,7 +309,7 @@ test('F1~F5 列表嵌套由真实解析器断言（4/2 空格与 8 空格边界�
 // G. 源码语法
 // ============================================================
 
-test('G1 src/app.js 通过 node --check 语法检查', () => {
+test('G1 src/app.js 通过 node --check 语法检查', async () => {
   let ok = true, msg = '';
   try {
     execSync('node --check ' + path.join(ROOT, 'src', 'app.js'));

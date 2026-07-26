@@ -7,7 +7,7 @@ const assert = require('node:assert');
 const { buildEnv, cleanup, delay } = require('./helpers/app-env.cjs');
 
 test('session: saveSession 写入 localStorage 且 loadSession 可解析', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await delay(300);
   const ed = w.editor;
   // 加一个带路径的标签（saveSession 只保留有 filePath 的）
@@ -35,7 +35,7 @@ test('session: saveSession 写入 localStorage 且 loadSession 可解析', async
 });
 
 test('session: 无 filePath 的标签不会被保存', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await delay(300);
   const ed = w.editor;
   // 默认只有一个无路径的 untitled 标签
@@ -46,7 +46,7 @@ test('session: 无 filePath 的标签不会被保存', async () => {
 });
 
 test('session: 损坏的会话数据 loadSession 返回 null 不抛错', async () => {
-  const { w } = buildEnv({ captureInitErr: true });
+  const { w } = await buildEnv({ captureInitErr: true });
   await delay(300);
   const ed = w.editor;
   w.localStorage.setItem('tizumark-session', '{ 这不是合法JSON');

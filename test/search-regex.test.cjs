@@ -21,7 +21,7 @@ function setupRegexFind(w, query, caseSensitive) {
 
 // ---------- 1. 正则 \d+ 编辑器高亮所有数字 ----------
 test('regex: \\d+ 匹配并高亮编辑器内所有数字', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.cm.setValue('abc 123 def 45\nno digits\n7 end');
@@ -32,7 +32,7 @@ test('regex: \\d+ 匹配并高亮编辑器内所有数字', async () => {
 
 // ---------- 2. 正则多选 (foo|bar) 高亮 ----------
 test('regex: (foo|bar) 多选匹配高亮 foo 与 bar', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.cm.setValue('foo bar baz foo');
@@ -43,7 +43,7 @@ test('regex: (foo|bar) 多选匹配高亮 foo 与 bar', async () => {
 
 // ---------- 3. 正则 + 区分大小写 ----------
 test('regex: 区分大小写时 Hello 只匹配大写 H', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.cm.setValue('Hello hello HELLO hello');
@@ -58,7 +58,7 @@ test('regex: 区分大小写时 Hello 只匹配大写 H', async () => {
 
 // ---------- 4. 正则模式预览高亮 ----------
 test('regex: \\d+ 在预览面板也高亮', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.preview.innerHTML = '<p>abc 123 def</p><p>45 end</p>';
@@ -70,7 +70,7 @@ test('regex: \\d+ 在预览面板也高亮', async () => {
 
 // ---------- 5. 非法正则守卫：[ 不崩、不高亮 ----------
 test('regex: 非法正则 "[" 不抛错且无高亮（try/catch 兜底）', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.cm.setValue('hello [ world');
@@ -84,7 +84,7 @@ test('regex: 非法正则 "[" 不抛错且无高亮（try/catch 兜底）', asyn
 
 // ---------- 6. 正则模式 find-next 导航 ----------
 test('regex: find-next 在正则模式下正确定位匹配', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.cm.setValue('a1 b2 c3');
@@ -104,7 +104,7 @@ test('regex: find-next 在正则模式下正确定位匹配', async () => {
 
 // ---------- 7. 跨文件 searchOpenFiles 正则收集 ----------
 test('crossSearch: searchOpenFiles 用正则 \\d+ 收集匹配', async () => {
-  const { w } = buildEnv();
+  const { w } = await buildEnv();
   await delay(300);
   const ed = w.editor;
   ed.tabs = [

@@ -23,7 +23,7 @@ const headingToId = (text) => {
 };
 const opts = { t: noopT, isDark: false, escapeHtml, escapeAttr, headingToId };
 
-test('emoji 短码被替换（跳过 code/pre）', () => {
+test('emoji 短码被替换（跳过 code/pre）', async () => {
   const { preview } = createPreviewDom();
   preview.innerHTML = '<p>hello :fire: world</p><pre><code>:fire:</code></pre>';
   PP.processEmojiShortcodes(preview);
@@ -31,14 +31,14 @@ test('emoji 短码被替换（跳过 code/pre）', () => {
   assert.ok(preview.querySelector('pre code').textContent.includes(':fire:'), 'code 内不应替换');
 });
 
-test('数学未加载时安全跳过不抛错', () => {
+test('数学未加载时安全跳过不抛错', async () => {
   const { preview } = createPreviewDom();
   preview.innerHTML = '<p>公式 $a+b$</p>';
   // renderMathInElement 未定义（jsdom 全局无）
   assert.doesNotThrow(() => PP.processMath(preview));
 });
 
-test('protectUnpairedDollar：块级公式内含 | > ｜ 不应被误判为不成对', () => {
+test('protectUnpairedDollar：块级公式内含 | > ｜ 不应被误判为不成对', async () => {
   // 条件概率：含 |
   const bayes = '$$ P(A|B) = \\frac{P(B|A) \\cdot P(A)}{P(B)} $$';
   assert.strictEqual(PP.protectUnpairedDollar(bayes), bayes, '含 | 的块级公式应保持原样');
@@ -61,19 +61,19 @@ test('protectUnpairedDollar：块级公式内含 | > ｜ 不应被误判为不�
   assert.strictEqual(PP.protectUnpairedDollar(multi), multi, '块级跨行公式应保持原样');
 });
 
-test('protectUnpairedDollar：行内 $...$ 内含 | 仍应被忽略（防 markdown 表格列误吃）', () => {
+test('protectUnpairedDollar：行内 $...$ 内含 | 仍应被忽略（防 markdown 表格列误吃）', async () => {
   const inline = 'see $P(A|B)$ here';
   const out = PP.protectUnpairedDollar(inline);
   assert.ok(out.includes('katex-ignore'), '行内含 | 应被忽略 span 包住');
 });
 
-test('protectUnpairedDollar：真不成对的孤 $ 应被忽略', () => {
+test('protectUnpairedDollar：真不成对的孤 $ 应被忽略', async () => {
   const stray = 'price is $5 and $6 today';
   const out = PP.protectUnpairedDollar(stray);
   assert.ok(out.includes('katex-ignore'), '孤 $ 应被忽略 span 包住');
 });
 
-test('缩写 abbr 被替换且跳过 code/pre', () => {
+test('缩写 abbr 被替换且跳过 code/pre', async () => {
   const { preview } = createPreviewDom();
   preview.innerHTML = '<div id="abbr-data" data-abbrs=\'[[ "Tizu", "TizuMark 编辑器" ]]\'></div><p>用 Tizu 写文档，<code>Tizu</code> 不替换</p>';
   PP.processAbbreviations(preview, opts);
@@ -83,7 +83,7 @@ test('缩写 abbr 被替换且跳过 code/pre', () => {
   assert.strictEqual(preview.querySelector('#abbr-data'), null, 'abbr-data 应被移除');
 });
 
-test('标题锚点按 headingToId 生成且去重', () => {
+test('标题锚点按 headingToId 生成且去重', async () => {
   const { preview } = createPreviewDom();
   preview.innerHTML = '<h1>Hello World</h1><h1>Hello World</h1><h2>Hello World</h2>';
   PP.processHeadings(preview, opts);
@@ -91,7 +91,7 @@ test('标题锚点按 headingToId 生成且去重', () => {
   assert.deepStrictEqual(ids, ['hello-world', 'hello-world-2', 'hello-world-3']);
 });
 
-test('复制按钮注入且 mermaid 块不加复制按钮', () => {
+test('复制按钮注入且 mermaid 块不加复制按钮', async () => {
   const { preview } = createPreviewDom();
   preview.innerHTML = '<pre><code>const a=1;</code></pre><pre><code class="language-mermaid">graph TD;A-->B;</code></pre>';
   PP.addCopyButtons(preview, opts);
@@ -100,13 +100,13 @@ test('复制按钮注入且 mermaid 块不加复制按钮', () => {
   assert.strictEqual(pres[1].querySelector('.copy-btn'), null, 'mermaid 块不应有复制按钮');
 });
 
-test('mermaid 未加载时跳过不抛错', () => {
+test('mermaid 未加载时跳过不抛错', async () => {
   const { preview } = createPreviewDom();
   preview.innerHTML = '<pre><code class="language-mermaid">graph TD;A-->B;</code></pre>';
   assert.doesNotThrow(async () => { await PP.processMermaid(preview, opts); });
 });
 
-test('集成：完整 markdown 经 unified 渲染 + 后处理后结构正常', () => {
+test('集成：完整 markdown 经 unified 渲染 + 后处理后结构正常', async () => {
   const { preview } = createPreviewDom();
   const md = '# 标题 Hello\n\n正文 :star: 测试\n\n' + B + B + B + 'js\nconst a = 1;\n' + B + B + B;
   preview.innerHTML = renderMarkdown(md, { softBreaks: false });

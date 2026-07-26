@@ -15,14 +15,14 @@ const path = require('path');
 const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'styles.css'), 'utf8');
 
 // ---------- 需求2：醒目黄色高亮（编辑 + 预览共用 .search-match）----------
-test('css: .search-match 为醒目黄色（编辑与预览共用）', () => {
+test('css: .search-match 为醒目黄色（编辑与预览共用）', async () => {
   assert.ok(/\.search-match\s*\{[^}]*background-color:\s*#ffe24d/s.test(css),
     '.search-match 应使用醒目黄色 background-color: #ffe24d（而非半透明浅黄）');
 });
 
 // ---------- 需求1：文件中查找出现循环查找勾选框；跨文件搜索不再有 ----------
-test('html: 文件中查找（编辑/预览）含「循环查找」勾选框，跨文件搜索不含', () => {
-  const { w } = buildEnv();
+test('html: 文件中查找（编辑/预览）含「循环查找」勾选框，跨文件搜索不含', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       assert.ok(w.document.getElementById('find-loop'), '编辑内查找应有 find-loop 勾选框');
@@ -34,8 +34,8 @@ test('html: 文件中查找（编辑/预览）含「循环查找」勾选框，�
   });
 });
 
-test('i18n: loop 键在中文与英文词典均存在', () => {
-  const { w } = buildEnv();
+test('i18n: loop 键在中文与英文词典均存在', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -48,8 +48,8 @@ test('i18n: loop 键在中文与英文词典均存在', () => {
 });
 
 // ---------- 需求1：编辑器 find-next 尊重循环勾选框 ----------
-test('find: 循环查找未勾选时停在最后一条，不回绕', () => {
-  const { w } = buildEnv();
+test('find: 循环查找未勾选时停在最后一条，不回绕', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -71,8 +71,8 @@ test('find: 循环查找未勾选时停在最后一条，不回绕', () => {
   });
 });
 
-test('find: 循环查找勾选时回绕到第一条', () => {
-  const { w } = buildEnv();
+test('find: 循环查找勾选时回绕到第一条', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -94,8 +94,8 @@ test('find: 循环查找勾选时回绕到第一条', () => {
   });
 });
 
-test('find: 循环查找未勾选时 find-prev 停在第一个匹配，不回绕', () => {
-  const { w } = buildEnv();
+test('find: 循环查找未勾选时 find-prev 停在第一个匹配，不回绕', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -126,8 +126,8 @@ test('find: 循环查找未勾选时 find-prev 停在第一个匹配，不回绕
 });
 
 // ---------- 需求2：预览文字高亮（DOM <mark class="search-match">）----------
-test('preview: highlightPreviewMatches 包裹 <mark> 且 clearPreviewHighlights 还原文本', () => {
-  const { w } = buildEnv();
+test('preview: highlightPreviewMatches 包裹 <mark> 且 clearPreviewHighlights 还原文本', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -148,8 +148,8 @@ test('preview: highlightPreviewMatches 包裹 <mark> 且 clearPreviewHighlights 
   });
 });
 
-test('preview: 高亮上限 2000，超出不再包裹（防止超大文档卡顿）', () => {
-  const { w } = buildEnv();
+test('preview: 高亮上限 2000，超出不再包裹（防止超大文档卡顿）', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -168,13 +168,13 @@ test('preview: 高亮上限 2000，超出不再包裹（防止超大文档卡顿
 });
 
 // ---------- 需求4：跨文件搜索显隐修复（目录行 / 进度条 .hidden 规则）----------
-test('css: .cs-dir-row.hidden 与 .cs-progress.hidden 必须存在 display:none 规则', () => {
+test('css: .cs-dir-row.hidden 与 .cs-progress.hidden 必须存在 display:none 规则', async () => {
   assert.ok(/\.cs-dir-row\.hidden\s*\{\s*display:\s*none/s.test(css), '应存在 .cs-dir-row.hidden { display:none }');
   assert.ok(/\.cs-progress\.hidden\s*\{\s*display:\s*none/s.test(css), '应存在 .cs-progress.hidden { display:none }（修复「搜索中」一直显示）');
 });
 
-test('crossSearch: 选「已打开文件」隐藏目录行，选「目录」显示目录行', () => {
-  const { w } = buildEnv();
+test('crossSearch: 选「已打开文件」隐藏目录行，选「目录」显示目录行', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -197,7 +197,7 @@ test('crossSearch: 选「已打开文件」隐藏目录行，选「目录」显�
 });
 
 test('crossSearch: 搜索完成后进度条重新隐藏（修复「搜索中」一直显示）', async () => {
-  const { w } = buildEnv(async (cmd, args) => {
+  const { w } = await buildEnv(async (cmd, args) => {
     if (cmd === 'search_in_files') return [{ path: '/p/a.md', matches: [{ line: 1, col: 1, line_text: 'hello' }] }];
     return undefined;
   });
@@ -219,8 +219,8 @@ test('crossSearch: 搜索完成后进度条重新隐藏（修复「搜索中」�
 });
 
 // ---------- 需求3：页面查找与跨文件搜索互斥 ----------
-test('mutual: 打开跨文件搜索时关闭页面内查找面板并清高亮', () => {
-  const { w } = buildEnv();
+test('mutual: 打开跨文件搜索时关闭页面内查找面板并清高亮', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -238,8 +238,8 @@ test('mutual: 打开跨文件搜索时关闭页面内查找面板并清高亮', 
   });
 });
 
-test('mutual: 打开页面内查找时关闭跨文件搜索弹框', () => {
-  const { w } = buildEnv();
+test('mutual: 打开页面内查找时关闭跨文件搜索弹框', async () => {
+  const { w } = await buildEnv();
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;

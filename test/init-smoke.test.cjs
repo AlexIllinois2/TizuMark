@@ -12,8 +12,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { buildEnv, cleanup } = require('./helpers/app-env.cjs');
 
-test('smoke: 应用初始化成功，window.editor 被创建', () => {
-  const { w } = buildEnv({ captureInitErr: true });
+test('smoke: 应用初始化成功，window.editor 被创建', async () => {
+  const { w } = await buildEnv({ captureInitErr: true });
   // 初始化包含 await，给一个 microtask 周期让同步构造完成
   return new Promise((resolve) => {
     setTimeout(() => {
@@ -24,8 +24,8 @@ test('smoke: 应用初始化成功，window.editor 被创建', () => {
   });
 });
 
-test('smoke: 初始化过程未触发致命错误条', () => {
-  const { w, getInitErr } = buildEnv({ captureInitErr: true });
+test('smoke: 初始化过程未触发致命错误条', async () => {
+  const { w, getInitErr } = await buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       assert.strictEqual(getInitErr(), null, '不应出现 Initialization error');
@@ -37,8 +37,8 @@ test('smoke: 初始化过程未触发致命错误条', () => {
   });
 });
 
-test('ui: 快捷键对话框方案区与列表区以分组标题区分', () => {
-  const { w } = buildEnv({ captureInitErr: true });
+test('ui: 快捷键对话框方案区与列表区以分组标题区分', async () => {
+  const { w } = await buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const schemeTitle = w.document.getElementById('shortcuts-scheme-label');
@@ -53,8 +53,8 @@ test('ui: 快捷键对话框方案区与列表区以分组标题区分', () => {
   });
 });
 
-test('ui: 快捷键对话框分组标题支持中英文 i18n', () => {
-  const { w } = buildEnv({ captureInitErr: true });
+test('ui: 快捷键对话框分组标题支持中英文 i18n', async () => {
+  const { w } = await buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const listTitle = w.document.getElementById('shortcuts-list-title');

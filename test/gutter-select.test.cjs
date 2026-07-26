@@ -64,25 +64,25 @@ const ev = (button = 0, shiftKey = false) => ({ button, shiftKey, preventDefault
 // A. 行号点击选行 + 拖动连选（真实 CM 实例 + 状态机）
 // ============================================================
 
-test('A1 单击中间行选中整行（含换行）', () => {
+test('A1 单击中间行选中整行（含换行）', async () => {
   const { cm, s } = setup('a\nb\nc');
   onGutterClick.call(s, cm, 1, 'gutter', ev(0, false));
   assert.strictEqual(cm.getSelection(), 'b\n');
 });
 
-test('A2 单击末行选中到行尾（无换行）', () => {
+test('A2 单击末行选中到行尾（无换行）', async () => {
   const { cm, s } = setup('a\nb\nc');
   onGutterClick.call(s, cm, 2, 'gutter', ev(0, false));
   assert.strictEqual(cm.getSelection(), 'c');
 });
 
-test('A3 单击首行选中整行（含换行）', () => {
+test('A3 单击首行选中整行（含换行）', async () => {
   const { cm, s } = setup('a\nb\nc');
   onGutterClick.call(s, cm, 0, 'gutter', ev(0, false));
   assert.strictEqual(cm.getSelection(), 'a\n');
 });
 
-test('A4 Shift+单击扩展选区', () => {
+test('A4 Shift+单击扩展选区', async () => {
   const { cm, s } = setup('a\nb\nc');
   s._gutterAnchor = null;
   onGutterClick.call(s, cm, 0, 'gutter', ev(0, false)); // 设 anchor=0
@@ -90,7 +90,7 @@ test('A4 Shift+单击扩展选区', () => {
   assert.strictEqual(cm.getSelection(), 'a\nb\nc');
 });
 
-test('A5 按住拖动向下连选（anchor 固定）', () => {
+test('A5 按住拖动向下连选（anchor 固定）', async () => {
   const { cm, s } = setup('a\nb\nc');
   onGutterClick.call(s, cm, 0, 'gutter', ev(0, false)); // anchor=0
   s.cm.coordsChar = () => ({ line: 2 });
@@ -98,7 +98,7 @@ test('A5 按住拖动向下连选（anchor 固定）', () => {
   assert.strictEqual(cm.getSelection(), 'a\nb\nc');
 });
 
-test('A6 按住拖动向上连选（anchor 固定）', () => {
+test('A6 按住拖动向上连选（anchor 固定）', async () => {
   const { cm, s } = setup('a\nb\nc');
   onGutterClick.call(s, cm, 2, 'gutter', ev(0, false)); // anchor=2
   s.cm.coordsChar = () => ({ line: 0 });
@@ -106,7 +106,7 @@ test('A6 按住拖动向上连选（anchor 固定）', () => {
   assert.strictEqual(cm.getSelection(), 'a\nb\nc');
 });
 
-test('A7 拖动越界 clamp 到末行（不抛错）', () => {
+test('A7 拖动越界 clamp 到末行（不抛错）', async () => {
   const { cm, s } = setup('a\nb\nc');
   onGutterClick.call(s, cm, 0, 'gutter', ev(0, false));
   s.cm.coordsChar = () => ({ line: 99 });
@@ -114,7 +114,7 @@ test('A7 拖动越界 clamp 到末行（不抛错）', () => {
   assert.strictEqual(cm.getSelection(), 'a\nb\nc');
 });
 
-test('A8 右键不触发选行', () => {
+test('A8 右键不触发选行', async () => {
   const { cm, s } = setup('a\nb\nc');
   s._gutterDrag = null;
   onGutterClick.call(s, cm, 1, 'gutter', ev(2, false));
@@ -122,7 +122,7 @@ test('A8 右键不触发选行', () => {
   assert.strictEqual(cm.getSelection(), '');
 });
 
-test('A9 mouseup 清空 drag 并保留 anchor', () => {
+test('A9 mouseup 清空 drag 并保留 anchor', async () => {
   const { cm, s } = setup('a\nb\nc');
   onGutterClick.call(s, cm, 0, 'gutter', ev(0, false)); // anchor=0, _gutterDrag 设
   assert.notStrictEqual(s._gutterDrag, null);
@@ -131,7 +131,7 @@ test('A9 mouseup 清空 drag 并保留 anchor', () => {
   assert.strictEqual(s._gutterAnchor, 0);
 });
 
-test('A10 src/app.js 通过 node --check 语法检查', () => {
+test('A10 src/app.js 通过 node --check 语法检查', async () => {
   let ok = true, msg = '';
   try {
     execSync('node --check ' + path.join(ROOT, 'src', 'app.js'));
