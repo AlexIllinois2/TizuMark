@@ -1,5 +1,5 @@
 use std::fs;
-use encoding_rs::{Encoding, GB18030};
+use encoding_rs::GB18030;
 use std::sync::Mutex;
 use notify::{Watcher, RecursiveMode, RecommendedWatcher, Config as NotifyConfig, Event as NotifyEvent};
 use tauri::{Emitter, Manager};
@@ -230,6 +230,12 @@ fn open_devtools(app_handle: tauri::AppHandle) {
 #[tauri::command]
 fn get_cli_args() -> Vec<String> {
     std::env::args().skip(1).collect()
+}
+
+// 从单实例回调的完整 argv 中取出待打开文件：跳过 argv[0]（可执行文件路径本身）。
+// 与 get_cli_args（std::env::args().skip(1)）保持一致，避免把 exe 路径当文件打开。
+fn files_from_args(argv: Vec<String>) -> Vec<String> {
+    argv.into_iter().skip(1).collect()
 }
 
 // 前端同步窗口行为偏好：更新内存状态，并按需切换托盘图标可见性。
@@ -1416,7 +1422,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 show_window(&window);
-                let _ = app.emit("file-open", argv);
+                let _ = app.emit("file-open", files_from_args(argv));
             }
         }))
         .on_window_event(|window, event| {
@@ -1466,6 +1472,22 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_files_from_args_skips_exe() {
+        let argv = vec![
+            "C:\\Program Files\\TizuMark\\TizuMark.exe".to_string(),
+            "D:\\docs\\note.md".to_string(),
+        ];
+        let files = files_from_args(argv);
+        assert_eq!(files, vec!["D:\\docs\\note.md".to_string()]);
+    }
+
+    #[test]
+    fn test_files_from_args_empty_when_only_exe() {
+        let argv = vec!["TizuMark.exe".to_string()];
+        assert!(files_from_args(argv).is_empty());
+    }
 
     #[test]
     fn test_escape_html() {

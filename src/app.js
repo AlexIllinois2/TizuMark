@@ -243,7 +243,14 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: '本软件基于 GPL v3 开源协议发布。',
     noUnauthorized: '欢迎自由使用、修改和分发，衍生作品须延续 GPL v3 协议。',
-    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找（编辑器）', findReplace: '查找替换', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', previewFind: '预览查找', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意', insertCalloutImportant: 'Important 重要' },
+    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找（编辑器）', findReplace: '查找替换', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', previewFind: '预览查找', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要' },
+    shortcutScheme: '快捷键方案',
+    schemeDefault: '默认',
+    schemeVSCode: 'VSCode',
+    schemeTypora: 'Typora',
+    schemeSublime: 'Sublime Text',
+    schemeCustom: '自定义',
+    schemeOverrideConfirm: '这将覆盖当前所有快捷键，确定切换方案吗？',
     modify: '修改',
     clear: '清除',
     none: '无',
@@ -559,7 +566,14 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: 'This software is released under the GPL v3 open-source license.',
     noUnauthorized: 'Free to use, modify, and distribute. Derivative works must remain under GPL v3.',
-    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find (Editor)', findReplace: 'Find & Replace', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', previewFind: 'Find in Preview', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution', insertCalloutImportant: 'Callout Important' },
+    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find (Editor)', findReplace: 'Find & Replace', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', previewFind: 'Find in Preview', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important' },
+    shortcutScheme: 'Shortcut Scheme',
+    schemeDefault: 'Default',
+    schemeVSCode: 'VSCode',
+    schemeTypora: 'Typora',
+    schemeSublime: 'Sublime Text',
+    schemeCustom: 'Custom',
+    schemeOverrideConfirm: 'This will override all current shortcuts. Switch scheme?',
     modify: 'Modify',
     clear: 'Clear',
     none: 'None',
@@ -727,6 +741,7 @@ class MarkdownEditor {
 
     this.settings = this.loadSettings();
     this.shortcuts = this.loadShortcuts();
+    this.shortcutScheme = this.loadShortcutScheme();
     this._recentFiles = [];
     this._recentSubmenuVisible = false;
     this.loadRecentFiles();
@@ -983,6 +998,10 @@ class MarkdownEditor {
       fsSelect.options[0].text = t('fontSchemeSystemSans');
       fsSelect.options[1].text = t('fontSchemeClassicSerif');
     }
+    // Refresh shortcut scheme dropdown text
+    const schemeLabel = document.getElementById('shortcuts-scheme-label');
+    if (schemeLabel) schemeLabel.textContent = t('shortcutScheme');
+    this.populateSchemeSelect();
 
     // Update tab bar
     this.updateTabBar();
@@ -2160,6 +2179,64 @@ class MarkdownEditor {
     };
   }
 
+  getShortcutPresets() {
+    // 每个方案仅列出“有键”的 actionId；缺失项在 applyShortcutScheme 中回落为空串。
+    // 方案内部键位已保证互不重复；空值用省略表示。
+    return {
+      vscode: {
+        newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', saveAs:'Ctrl+Shift+S',
+        closeTab:'Ctrl+W', find:'Ctrl+F', findReplace:'Ctrl+H', previewFind:'Ctrl+Shift+F',
+        nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
+        bold:'Ctrl+B', italic:'Ctrl+I', inlineCode:'Ctrl+`', insertLink:'Ctrl+K',
+        insertMathBlock:'Ctrl+Shift+M', toggleTheme:'Ctrl+Shift+T', exportPDF:'Ctrl+P',
+      },
+      typora: {
+        newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', closeTab:'Ctrl+W',
+        find:'Ctrl+F', findReplace:'Ctrl+Shift+F',
+        nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
+        bold:'Ctrl+B', italic:'Ctrl+I', insertLink:'Ctrl+K', exportPDF:'Ctrl+P',
+        inlineCode:'Ctrl+Shift+`', strikethrough:'Ctrl+Shift+5', codeBlock:'Ctrl+Shift+K',
+        blockquote:'Ctrl+Shift+Q', toggleTheme:'Ctrl+Shift+T',
+        insertImage:'Ctrl+Shift+I', insertMathBlock:'Ctrl+Shift+M',
+        insertH1:'Ctrl+1', insertH2:'Ctrl+2', insertH3:'Ctrl+3', insertH4:'Ctrl+4',
+        insertH5:'Ctrl+5', insertH6:'Ctrl+6',
+      },
+      sublime: {
+        newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', saveAs:'Ctrl+Shift+S',
+        closeTab:'Ctrl+W', find:'Ctrl+F', findReplace:'Ctrl+H',
+        nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
+        exportPDF:'Ctrl+P', toggleTheme:'Ctrl+Shift+T',
+      },
+    };
+  }
+
+  applyShortcutScheme(name) {
+    if (name === 'custom') {
+      this.shortcutScheme = 'custom';
+      this.saveShortcutScheme('custom');
+      return;
+    }
+    const defaults = this.getDefaultShortcuts();
+    let next;
+    if (name === 'default') {
+      next = JSON.parse(JSON.stringify(defaults)); // 整体恢复默认键位
+    } else {
+      const preset = this.getShortcutPresets()[name];
+      if (!preset) return;
+      next = {};
+      for (const [aid, def] of Object.entries(defaults)) {
+        const k = preset[aid];
+        next[aid] = { key: (k != null ? k : ''), label: def.label };
+      }
+    }
+    this.shortcuts = next;
+    this.shortcutScheme = name;
+    this.saveShortcuts();
+    this.saveShortcutScheme(name);
+    this.renderShortcutsList();
+    this.applyShortcuts();
+  }
+
   loadShortcuts() {
     const defaults = this.getDefaultShortcuts();
     try {
@@ -2174,9 +2251,35 @@ class MarkdownEditor {
     try { localStorage.setItem('tizumark-shortcuts', JSON.stringify(this.shortcuts)); } catch {}
   }
 
+  loadShortcutScheme() {
+    const VALID = ['default', 'vscode', 'typora', 'sublime', 'custom'];
+    const stored = localStorage.getItem('tizumark-shortcut-scheme');
+    if (stored && VALID.includes(stored)) return stored; // 白名单校验，防脏数据
+    // 旧数据无 scheme：与默认逐项比对，有差异视为自定义（保留用户旧自定义数据）
+    const def = this.getDefaultShortcuts();
+    const cur = this.shortcuts || def;
+    for (const [aid, d] of Object.entries(def)) {
+      if ((cur[aid] && cur[aid].key || '') !== (d.key || '')) return 'custom';
+    }
+    return 'default';
+  }
+
+  saveShortcutScheme(name) {
+    try { localStorage.setItem('tizumark-shortcut-scheme', name); } catch {}
+  }
+
+  _markShortcutCustom() {
+    if (this.shortcutScheme !== 'custom') {
+      this.shortcutScheme = 'custom';
+      this.saveShortcutScheme('custom');
+    }
+  }
+
   resetShortcuts() {
     this.shortcuts = this.getDefaultShortcuts();
     localStorage.removeItem('tizumark-shortcuts');
+    this.shortcutScheme = 'default';
+    this.saveShortcutScheme('default');
     this.renderShortcutsList();
     this.applyShortcuts();
     this.setStatus(this.t('shortcutsReset'));
@@ -2310,6 +2413,9 @@ class MarkdownEditor {
       `;
     }).join('');
 
+    const schemeSel = document.getElementById('shortcuts-scheme');
+    if (schemeSel) schemeSel.value = this.shortcutScheme || 'default';
+
     container.querySelectorAll('.shortcut-record-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2323,6 +2429,7 @@ class MarkdownEditor {
         e.stopPropagation();
         const action = btn.dataset.action;
         this.shortcuts[action].key = '';
+        this._markShortcutCustom();
         this.saveShortcuts();
         this.renderShortcutsList();
         this.applyShortcuts();
@@ -2365,6 +2472,7 @@ class MarkdownEditor {
     }
     this.shortcuts[this.recordingAction].key = keyStr;
     this.recordingAction = null;
+    this._markShortcutCustom();
     this.saveShortcuts();
     this.renderShortcutsList();
     this.applyShortcuts();
@@ -2395,12 +2503,48 @@ class MarkdownEditor {
       this.applyShortcuts();
       this.hideShortcutsDialog();
     });
+
+    // 快捷键方案下拉
+    const schemeSel = document.getElementById('shortcuts-scheme');
+    if (schemeSel) {
+      schemeSel.addEventListener('change', (e) => {
+        const name = e.target.value;
+        if (name === 'custom') {
+          this.shortcutScheme = 'custom';
+          this.saveShortcutScheme('custom');
+          return;
+        }
+        // 预置方案（含默认）：均为整体覆盖，一律先确认
+        if (window.confirm(this.t('schemeOverrideConfirm'))) {
+          this.applyShortcutScheme(name);
+          e.target.value = this.shortcutScheme;
+        } else {
+          e.target.value = this.shortcutScheme; // 取消则回退
+        }
+      });
+    }
+    this.populateSchemeSelect();
   }
 
   showShortcutsDialog() {
     this.recordingAction = null;
     this.renderShortcutsList();
+    this.populateSchemeSelect();
     document.getElementById('shortcuts-dialog').classList.remove('hidden');
+  }
+
+  populateSchemeSelect() {
+    const sel = document.getElementById('shortcuts-scheme');
+    if (!sel) return;
+    const opts = [
+      ['default', this.t('schemeDefault')],
+      ['vscode', this.t('schemeVSCode')],
+      ['typora', this.t('schemeTypora')],
+      ['sublime', this.t('schemeSublime')],
+      ['custom', this.t('schemeCustom')],
+    ];
+    sel.innerHTML = opts.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+    sel.value = this.shortcutScheme || 'default';
   }
 
   hideShortcutsDialog() {
@@ -2522,6 +2666,7 @@ class MarkdownEditor {
       value: '',
       mode: 'gfm',
       theme: 'default',
+      inputStyle: 'contenteditable',
       lineNumbers: true,
       lineWrapping: true,
       styleActiveLine: true,
@@ -2616,6 +2761,57 @@ class MarkdownEditor {
       this._throttleScroll(() => this._syncPreviewToEditor(), 50);
       this._debounceScroll(() => this._resumeScroll(), 100);
     });
+
+    // ---- 行号点击选行 + 拖动连选 ----
+    this._gutterDrag = null;
+    this._gutterAnchor = null;
+    this.cm.on('gutterClick', (cm, line, gutter, ev) => this.onGutterClick(cm, line, gutter, ev));
+    this._gutterMouseMove = (e) => this.onGutterMouseMove(e);
+    this._gutterMouseUp = (e) => this.onGutterMouseUp(e);
+    document.addEventListener('mousemove', this._gutterMouseMove);
+    document.addEventListener('mouseup', this._gutterMouseUp);
+
+    // IME 适配说明：已切换到 inputStyle:'contenteditable'，IME 候选框由
+    // WebView2 原生锚定在光标行下方（与浏览器行为一致），不再需要
+    // compositionstart 滚动补偿。之前的滚动处理器在视口边缘行上会打断
+    // composition（输入不了）+ 触发滚动反馈循环（页面乱滚），已移除。
+  }
+
+  _selectLineRange(cm, fromLine, toLine) {
+    const a = Math.min(fromLine, toLine), b = Math.max(fromLine, toLine);
+    const last = cm.lastLine();
+    const end = b < last ? { line: b + 1, ch: 0 } : { line: b, ch: cm.getLine(b).length };
+    cm.setSelection({ line: a, ch: 0 }, end);
+  }
+
+  onGutterClick(cm, line, gutter, ev) {
+    if (ev.button !== 0) return;        // 仅左键
+    ev.preventDefault();                // 阻止 CM 原生行选区/拖拽干扰
+    if (ev.shiftKey) {
+      const anchor = this._gutterAnchor == null ? cm.getCursor().line : this._gutterAnchor;
+      this._gutterAnchor = anchor;
+      this._gutterDrag = { anchor, startLine: anchor };
+      this._selectLineRange(cm, anchor, line);
+    } else {
+      this._gutterAnchor = line;
+      this._gutterDrag = { anchor: line, startLine: line };
+      this._selectLineRange(cm, line, line);
+    }
+  }
+
+  onGutterMouseMove(e) {
+    const ds = this._gutterDrag;
+    if (!ds) return;
+    const pos = this.cm.coordsChar({ left: e.clientX, top: e.clientY }, 'window');
+    const line = Math.max(0, Math.min(this.cm.lastLine(), pos.line));
+    this._selectLineRange(this.cm, ds.anchor, line);
+  }
+
+  onGutterMouseUp() {
+    if (this._gutterDrag) {
+      this._gutterAnchor = this._gutterDrag.anchor;
+      this._gutterDrag = null;
+    }
   }
 
   async ensureTabLoaded(tab) {
