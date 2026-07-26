@@ -801,6 +801,39 @@ function sanitizeHTML(html) {
   return result;
 }
 
+// 安全过滤内联 style 值：保留合法声明，剥离可执行 / 可隐藏正文的危险 CSS。
+// 目的：在放开内联样式（让 <div style="display:flex"> 这类卡片能正常渲染）的同时，
+// 仍挡住 CSS 注入 —— expression()、url(javascript:)、@import、-moz-binding:、behavior:，
+// 以及 display:none / visibility:hidden 把正文藏掉等。
+function sanitizeStyleValue(css) {
+  if (!css || typeof css !== 'string') return '';
+  // 先去掉 /* ... */ 注释，避免借注释走私危险内容（如 ex/* */pression(...)）
+  const cleaned = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const out = [];
+  for (const decl of cleaned.split(';')) {
+    const colon = decl.indexOf(':');
+    if (colon === -1) continue; // 不完整声明直接丢弃
+    const prop = decl.slice(0, colon).trim().toLowerCase();
+    const val = decl.slice(colon + 1).trim();
+    if (!prop || !val) continue;
+    const valLower = val.toLowerCase();
+    // 脚本协议 / 表达式 / 导入
+    if (/javascript:/i.test(valLower)) continue;
+    if (/vbscript:/i.test(valLower)) continue;
+    if (/expression\s*\(/i.test(valLower)) continue;
+    if (/@import/i.test(valLower)) continue;
+    // 绑定行为（仅老 IE / 火狐，但保留防御）
+    if (/^(behavior|-moz-binding)$/.test(prop)) continue;
+    // url() 内嵌危险协议
+    if (/url\s*\(\s*['"]?\s*(javascript|vbscript|data:text\/html)/i.test(valLower)) continue;
+    // 隐藏正文：display:none / visibility:hidden
+    if (prop === 'display' && /^\s*none\s*$/i.test(val)) continue;
+    if (prop === 'visibility' && /^\s*hidden\s*$/i.test(val)) continue;
+    out.push(prop + ': ' + val);
+  }
+  return out.join('; ');
+}
+
 function sanitizeTagAttributes(tagName, inner) {
   // Remove dangerous event handlers and javascript: URLs
   let attrs = inner.substring(tagName.length);
@@ -818,17 +851,27 @@ function sanitizeTagAttributes(tagName, inner) {
 
     if (j < attrs.length && attrs[j] === '=') {
       j++; // skip =
-      let valueStart = j;
+      let quote = '';
       if (j < attrs.length && (attrs[j] === '"' || attrs[j] === "'")) {
-        let quote = attrs[j]; j++;
+        quote = attrs[j]; j++;
         while (j < attrs.length && attrs[j] !== quote) j++;
         j++; // skip closing quote
       } else {
         while (j < attrs.length && !/\s/.test(attrs[j])) j++;
       }
       let raw = attrs.substring(nameStart, j);
-      if (attrName.startsWith('on') || /javascript:/i.test(raw) || attrName === 'style') {
-        continue; // skip dangerous attribute (含 style：预览禁用内联样式，避免 CSS 破坏布局/隐藏内容)
+      // 危险事件处理器 / javascript: URL：直接丢弃
+      if (attrName.startsWith('on') || /javascript:/i.test(raw)) {
+        continue;
+      }
+      // 内联样式：保留但做安全过滤（剥离 expression()/url(javascript:)/display:none 等）
+      if (attrName === 'style') {
+        const val = quote
+          ? raw.slice(attrName.length + 2, raw.length - 1)   // 含引号：style="..."
+          : raw.slice(attrName.length + 1);                  // 不含引号：style=...
+        const safe = sanitizeStyleValue(val);
+        if (safe) cleaned += ' style="' + safe + '"';
+        continue;
       }
       cleaned += raw;
     } else {
@@ -1180,6 +1223,8 @@ function renderMarkdown(content, options) {
         ...base,
         attributes: {
           ...base.attributes,
+          // 放开内联 style：具体危险 CSS 由下游 sanitizeHTML -> sanitizeStyleValue 兜底过滤
+          '*': [...(base.attributes['*'] || []), 'style'],
           img: [...(base.attributes.img || ['src', 'alt', 'title']), 'width', 'height', 'srcset', 'loading'],
         },
         allowedSchemes: [...(base.allowedSchemes || ['http', 'https', 'mailto', 'tel']), 'file'],

@@ -190,3 +190,58 @@ test('容器内表格单元格内联 Markdown 被渲染', () => {
   assert.ok(html.includes('<del>删</del>'), '~~ 应渲染为 del');
   assert.ok(html.includes('<a href="/">链接</a>'), '[]() 应渲染为链接');
 });
+
+// ---- 内联 style 安全放开（2026-07-26）：保留合法样式，剥离危险 CSS ----
+test('内联 style 合法声明被保留（日期卡片可渲染）', () => {
+  const md = `<div style="display: flex; justify-content: space-between; background-color: #f8f9fa; padding: 15px 20px; border-radius: 12px; margin-bottom: 30px; font-weight: 600; color: #2c3e50; border: 1px solid #e9ecef;">
+    <span style="font-size: 1.2rem;">7月22日</span>
+    <span style="color: #6c757d;">星期五</span>
+</div>`;
+  const html = renderMarkdown(md, { softBreaks: false });
+  assert.ok(html.includes('<div'), 'div 应渲染');
+  assert.ok(html.includes('display: flex'), 'display:flex 应保留');
+  assert.ok(html.includes('justify-content: space-between'), 'justify-content 应保留');
+  assert.ok(html.includes('background-color: #f8f9fa'), 'background-color 应保留');
+  assert.ok(html.includes('font-size: 1.2rem'), 'font-size 应保留');
+  assert.ok(html.includes('color: #6c757d'), 'color 应保留');
+  assert.ok(html.includes('7月22日') && html.includes('星期五'), '文本应保留');
+});
+
+test('内联 style 危险 CSS 逐条剥离，安全声明保留', () => {
+  const md = `<div style="color:red; display:none; padding:8px; @import 'evil.css'; visibility:hidden; width:exp/* */ression(alert(1)); -moz-binding:url(x.xml);">x</div>`;
+  const html = renderMarkdown(md, { softBreaks: false });
+  assert.ok(!/display\s*:\s*none/.test(html), 'display:none 应被剥离');
+  assert.ok(!/visibility\s*:\s*hidden/.test(html), 'visibility:hidden 应被剥离');
+  assert.ok(!/expression\s*\(/i.test(html), 'expression() 应被剥离');
+  assert.ok(!/@import/i.test(html), '@import 应被剥离');
+  assert.ok(!/-moz-binding/i.test(html), '-moz-binding 应被剥离');
+  // 安全声明逐条保留（defense in depth：rehype-sanitize + sanitizeStyleValue 双重过滤）
+  assert.ok(html.includes('color: red'), 'color:red 安全声明应保留');
+  assert.ok(html.includes('padding: 8px'), 'padding 安全声明应保留');
+  assert.ok(html.includes('x'), '正文应保留');
+});
+
+test('内联 style 含 url(javascript:) 时整条属性被丢弃', () => {
+  // rehype-sanitize 对 url(javascript:) 采取整条 style 丢弃策略（同属性下的安全声明一并移除，属正常安全行为）
+  const md = `<div style="background:url(javascript:alert(1)); color:red;">x</div>`;
+  const html = renderMarkdown(md, { softBreaks: false });
+  assert.ok(!/javascript:/i.test(html), 'url(javascript:) 不应出现');
+  assert.ok(!/color:\s*red/i.test(html), '含危险 url 的整条 style 被丢弃');
+  assert.ok(html.includes('x'), '正文应保留');
+});
+
+test('非 div/span 标签的内联 style 也保留', () => {
+  const md = `<p style="text-align:center; line-height:1.8;">居中段落</p>`;
+  const html = renderMarkdown(md, { softBreaks: false });
+  assert.ok(html.includes('<p'), 'p 应渲染');
+  assert.ok(html.includes('text-align: center'), 'text-align 应保留');
+  assert.ok(html.includes('line-height: 1.8'), 'line-height 应保留');
+});
+
+test('事件处理器 on* 仍被剥离', () => {
+  const md = `<div style="color:red" onclick="alert(1)">x</div>`;
+  const html = renderMarkdown(md, { softBreaks: false });
+  assert.ok(!/onclick/i.test(html), 'onclick 应被剥离');
+  assert.ok(html.includes('color: red'), '合法 style 仍保留');
+});
+

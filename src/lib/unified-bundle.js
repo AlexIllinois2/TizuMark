@@ -24906,6 +24906,29 @@ var UnifiedRenderer = (() => {
         }
         return result;
       }
+      function sanitizeStyleValue(css) {
+        if (!css || typeof css !== "string") return "";
+        const cleaned = css.replace(/\/\*[\s\S]*?\*\//g, "");
+        const out = [];
+        for (const decl of cleaned.split(";")) {
+          const colon = decl.indexOf(":");
+          if (colon === -1) continue;
+          const prop = decl.slice(0, colon).trim().toLowerCase();
+          const val = decl.slice(colon + 1).trim();
+          if (!prop || !val) continue;
+          const valLower = val.toLowerCase();
+          if (/javascript:/i.test(valLower)) continue;
+          if (/vbscript:/i.test(valLower)) continue;
+          if (/expression\s*\(/i.test(valLower)) continue;
+          if (/@import/i.test(valLower)) continue;
+          if (/^(behavior|-moz-binding)$/.test(prop)) continue;
+          if (/url\s*\(\s*['"]?\s*(javascript|vbscript|data:text\/html)/i.test(valLower)) continue;
+          if (prop === "display" && /^\s*none\s*$/i.test(val)) continue;
+          if (prop === "visibility" && /^\s*hidden\s*$/i.test(val)) continue;
+          out.push(prop + ": " + val);
+        }
+        return out.join("; ");
+      }
       function sanitizeTagAttributes(tagName, inner) {
         let attrs = inner.substring(tagName.length);
         let cleaned = "";
@@ -24921,9 +24944,9 @@ var UnifiedRenderer = (() => {
           let attrName = attrs.substring(nameStart, j).toLowerCase();
           if (j < attrs.length && attrs[j] === "=") {
             j++;
-            let valueStart = j;
+            let quote = "";
             if (j < attrs.length && (attrs[j] === '"' || attrs[j] === "'")) {
-              let quote = attrs[j];
+              quote = attrs[j];
               j++;
               while (j < attrs.length && attrs[j] !== quote) j++;
               j++;
@@ -24931,7 +24954,13 @@ var UnifiedRenderer = (() => {
               while (j < attrs.length && !/\s/.test(attrs[j])) j++;
             }
             let raw3 = attrs.substring(nameStart, j);
-            if (attrName.startsWith("on") || /javascript:/i.test(raw3) || attrName === "style") {
+            if (attrName.startsWith("on") || /javascript:/i.test(raw3)) {
+              continue;
+            }
+            if (attrName === "style") {
+              const val = quote ? raw3.slice(attrName.length + 2, raw3.length - 1) : raw3.slice(attrName.length + 1);
+              const safe = sanitizeStyleValue(val);
+              if (safe) cleaned += ' style="' + safe + '"';
               continue;
             }
             cleaned += raw3;
@@ -25206,6 +25235,8 @@ var UnifiedRenderer = (() => {
               ...base,
               attributes: {
                 ...base.attributes,
+                // 放开内联 style：具体危险 CSS 由下游 sanitizeHTML -> sanitizeStyleValue 兜底过滤
+                "*": [...base.attributes["*"] || [], "style"],
                 img: [...base.attributes.img || ["src", "alt", "title"], "width", "height", "srcset", "loading"]
               },
               allowedSchemes: [...base.allowedSchemes || ["http", "https", "mailto", "tel"], "file"]
