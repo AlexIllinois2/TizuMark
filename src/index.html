@@ -265,6 +265,7 @@
         <input type="text" id="find-input" placeholder="查找..." class="find-input">
         <label class="find-option"><input type="checkbox" id="find-case"> 区分大小写</label>
         <label class="find-option"><input type="checkbox" id="find-regex"> 正则</label>
+        <label class="find-option"><input type="checkbox" id="find-loop"> 循环查找</label>
         <button id="find-prev" class="find-btn">上一个</button>
         <button id="find-next" class="find-btn">下一个</button>
         <span id="find-count" class="find-count"></span>
@@ -281,6 +282,7 @@
         <input type="text" id="preview-find-input" placeholder="在预览中查找..." class="find-input">
         <label class="find-option"><input type="checkbox" id="preview-find-case"> 区分大小写</label>
         <label class="find-option"><input type="checkbox" id="preview-find-regex"> 正则</label>
+        <label class="find-option"><input type="checkbox" id="preview-find-loop"> 循环查找</label>
         <button id="preview-find-prev" class="find-btn">上一个</button>
         <button id="preview-find-next" class="find-btn">下一个</button>
         <span id="preview-find-count" class="find-count"></span>
@@ -709,15 +711,50 @@
         <button class="dialog-close" id="shortcuts-close" aria-label="关闭">&times;</button>
       </div>
       <div class="dialog-content shortcuts-content">
-        <div class="settings-row scheme-row">
-          <label id="shortcuts-scheme-label">快捷键方案</label>
-          <select id="shortcuts-scheme"></select>
+        <div class="settings-group">
+          <div class="settings-group-title" id="shortcuts-scheme-label">快捷键方案</div>
+          <div class="settings-row scheme-row">
+            <select id="shortcuts-scheme"></select>
+          </div>
         </div>
-        <div id="shortcuts-list" class="shortcuts-list"></div>
+        <div class="settings-group">
+          <div class="settings-group-title" id="shortcuts-list-title">快捷键</div>
+          <div id="shortcuts-list" class="shortcuts-list"></div>
+        </div>
       </div>
       <div class="dialog-footer">
         <button id="shortcuts-reset" class="dialog-btn">恢复默认</button>
         <button id="shortcuts-save-btn" class="dialog-btn dialog-btn-primary">完成</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="cross-search-dialog" class="dialog-overlay cross-search-overlay hidden" role="dialog" aria-modal="false" aria-labelledby="cs-title">
+    <div class="dialog cross-search-dialog" id="cs-panel">
+      <div class="dialog-header cs-drag-handle" id="cs-drag-handle">
+        <h2 id="cs-title">跨文件搜索</h2>
+        <button class="dialog-close" id="cs-close" aria-label="关闭">&times;</button>
+      </div>
+      <div class="dialog-content cs-content">
+        <div class="cs-scope">
+          <label><input type="radio" name="cs-scope" value="open" checked> <span id="cs-label-open">已打开文件</span></label>
+          <label><input type="radio" name="cs-scope" value="dir"> <span id="cs-label-dir">目录</span></label>
+        </div>
+        <div id="cs-dir-row" class="cs-dir-row hidden">
+          <input id="cs-dir" class="cs-input" placeholder="目录路径">
+          <button id="cs-browse" class="dialog-btn dialog-btn-primary">浏览</button>
+        </div>
+        <input id="cs-query" class="cs-input" placeholder="输入搜索内容...">
+        <div class="cs-options">
+          <label class="cs-check"><input type="checkbox" id="cs-case"> <span id="cs-label-case">区分大小写</span></label>
+          <label class="cs-check"><input type="checkbox" id="cs-regex"> <span id="cs-label-regex">正则</span></label>
+        </div>
+        <div id="cs-progress" class="cs-progress hidden"></div>
+        <div id="cs-total" class="cs-total"></div>
+        <div id="cs-results" class="cs-results"></div>
+      </div>
+      <div class="dialog-footer">
+        <button id="cs-run" class="dialog-btn dialog-btn-primary">搜索</button>
       </div>
     </div>
   </div>

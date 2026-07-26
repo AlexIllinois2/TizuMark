@@ -1047,6 +1047,96 @@ body {
 
 .find-panel.hidden { display: none; }
 
+/* 全部高亮：find 面板输入时遍历所有匹配并用 markText 标记 .search-match。
+   醒目黄色背景，编辑与预览共用同一配色；当前跳转项仍由 CM/原生选区高亮区分。*/
+.search-match {
+  background-color: #ffe24d;
+  box-shadow: 0 0 0 1px rgba(255, 196, 0, 0.55);
+  border-radius: 2px;
+  color: inherit;
+}
+
+/* 跨文件搜索弹框：非模态浮动面板，不遮挡编辑器交互，可拖动到任意位置。
+   注意：选择器用 .dialog-overlay.cross-search-overlay（双类，特异性高于基础 .dialog-overlay），
+   确保 background:transparent 稳定覆盖基础样式的灰色半透明遮罩（不受样式声明顺序影响）。*/
+.dialog-overlay.cross-search-overlay {
+  background: transparent;
+  pointer-events: none;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 0;
+}
+.cross-search-overlay .dialog {
+  position: absolute;
+  pointer-events: auto;
+  width: 560px;
+  max-width: 92vw;
+  margin: 0;
+  box-shadow: var(--shadow-lg);
+}
+.cs-drag-handle { cursor: move; user-select: none; }
+.cs-drag-handle .dialog-close { cursor: pointer; }
+.cross-search-dialog { max-width: 92vw; }
+.cs-content { padding: 14px 20px; max-height: 70vh; display: flex; flex-direction: column; gap: 10px; }
+.cs-scope { display: flex; flex-direction: row; gap: 20px; font-size: 13px; padding: 2px 0; }
+.cs-scope label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-primary); }
+.cs-scope input[type="radio"] {
+  appearance: none; -webkit-appearance: none;
+  width: 16px; height: 16px; margin: 0;
+  border: 1.5px solid var(--text-secondary); border-radius: 50%;
+  background: var(--bg-primary); cursor: pointer; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease;
+}
+.cs-scope input[type="radio"]:checked { border-color: var(--accent-color); }
+.cs-scope input[type="radio"]:checked::after {
+  content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-color);
+}
+.cs-scope input[type="radio"]:hover { border-color: var(--accent-color); }
+.cs-dir-row { display: flex; gap: 6px; }
+/* 跨文件搜索：目录行/进度条用 .hidden 显隐，必须显式定义（应用无全局 .hidden 规则） */
+.cs-dir-row.hidden { display: none; }
+.cs-input {
+  flex: 1; padding: 6px 10px; font-size: 13px;
+  border: 1px solid var(--border-color); border-radius: 4px;
+  background: var(--bg-primary); color: var(--text-primary);
+}
+.cs-input:focus { outline: none; border-color: var(--accent-color); }
+.cs-options { display: flex; gap: 18px; font-size: 13px; color: var(--text-secondary); flex-wrap: wrap; }
+.cs-check { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-primary); }
+.cs-check input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  width: 14px; height: 14px; margin: 0;
+  border: 1.5px solid var(--text-secondary); border-radius: 3px;
+  background: var(--bg-primary); cursor: pointer; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease;
+}
+.cs-check input[type="checkbox"]:checked { border-color: var(--accent-color); background: var(--accent-color); }
+.cs-check input[type="checkbox"]:checked::after {
+  content: ''; width: 3px; height: 6px;
+  border-right: 1.5px solid var(--accent-text);
+  border-bottom: 1.5px solid var(--accent-text);
+  transform: rotate(45deg); margin-bottom: 1px;
+}
+.cs-check input[type="checkbox"]:hover { border-color: var(--accent-color); }
+.cs-progress { font-size: 12px; color: var(--text-secondary); }
+.cs-progress.hidden { display: none; }
+.cs-total { font-size: 13px; color: var(--accent-color); font-weight: 600; }
+.cs-results { flex: 1; overflow-y: auto; min-height: 120px; }
+.cs-file-group { margin-bottom: 8px; }
+.cs-file-header {
+  font-size: 12px; font-weight: 600; color: var(--text-primary);
+  padding: 4px 6px; background: var(--bg-secondary); border-radius: 3px;
+  position: sticky; top: 0;
+}
+.cs-match {
+  font-size: 12px; padding: 4px 8px; cursor: pointer; color: var(--text-secondary);
+  border-left: 2px solid transparent; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cs-match:hover { background: var(--accent-subtle); color: var(--text-primary); border-left-color: var(--accent-color); }
+.cs-match.current { background: var(--accent-subtle); color: var(--text-primary); border-left-color: var(--accent-color); font-weight: 600; }
+
 .find-row {
   display: flex;
   align-items: center;
@@ -3323,6 +3413,25 @@ body.is-resizing .side-btn {
 
 .shortcuts-list {
   padding: 8px 0;
+}
+
+.settings-group {
+  margin-bottom: 16px;
+}
+.settings-group:last-child {
+  margin-bottom: 0;
+}
+.settings-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-color);
+  padding: 12px 20px 8px;
+  margin: 0 0 4px;
+  border-bottom: 1px solid var(--border-color);
+  letter-spacing: .02em;
+}
+.scheme-row {
+  padding: 4px 20px 8px;
 }
 
 .shortcut-row {

@@ -108,3 +108,37 @@ test('smoke: 初始化过程未触发致命错误条', () => {
     }, 300);
   });
 });
+
+test('ui: 快捷键对话框方案区与列表区以分组标题区分', () => {
+  const { w } = buildEnv();
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const schemeTitle = w.document.getElementById('shortcuts-scheme-label');
+      assert.ok(schemeTitle, '#shortcuts-scheme-label 应存在');
+      assert.ok(schemeTitle.classList.contains('settings-group-title'), '方案区标题应带 settings-group-title 类（与下方具体项作视觉区分）');
+      const listTitle = w.document.getElementById('shortcuts-list-title');
+      assert.ok(listTitle, '#shortcuts-list-title 应存在（列表分组标题）');
+      assert.ok(listTitle.classList.contains('settings-group-title'), '列表区标题应带 settings-group-title 类');
+      cleanup(w);
+      resolve();
+    }, 300);
+  });
+});
+
+test('ui: 快捷键对话框分组标题支持中英文 i18n', () => {
+  const { w } = buildEnv();
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const listTitle = w.document.getElementById('shortcuts-list-title');
+      assert.ok(listTitle, '#shortcuts-list-title 应存在');
+      // 切英文：t() 读 this.settings.language，applyLanguage() 无参重渲染
+      try { w.editor.settings.language = 'en'; w.editor.applyLanguage(); } catch (_) {}
+      assert.strictEqual(listTitle.textContent, 'Shortcuts', '切英文后列表标题应为 "Shortcuts"');
+      // 切回中文
+      try { w.editor.settings.language = 'zh'; w.editor.applyLanguage(); } catch (_) {}
+      assert.strictEqual(listTitle.textContent, '快捷键', '切中文后列表标题应为 "快捷键"');
+      cleanup(w);
+      resolve();
+    }, 300);
+  });
+});

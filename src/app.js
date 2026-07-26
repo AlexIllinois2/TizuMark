@@ -245,6 +245,20 @@ const I18N = {
     noUnauthorized: '欢迎自由使用、修改和分发，衍生作品须延续 GPL v3 协议。',
     shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找（编辑器）', findReplace: '查找替换', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', previewFind: '预览查找', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要' },
     shortcutScheme: '快捷键方案',
+    shortcutList: '快捷键',
+    crossSearch: '跨文件搜索',
+    crossSearchTitle: '跨文件搜索',
+    scopeOpenFiles: '已打开文件',
+    scopeDir: '目录',
+    loopSearch: '循环查找',
+    loop: '循环查找',
+    searchRunning: '搜索中...',
+    totalMatches: '共 {n} 处匹配',
+    noResults: '无匹配结果',
+    truncated: '结果过多，已截断',
+    csBrowse: '浏览',
+    csRun: '搜索',
+    csQueryPlaceholder: '输入搜索内容...',
     schemeDefault: '默认',
     schemeVSCode: 'VSCode',
     schemeTypora: 'Typora',
@@ -568,6 +582,20 @@ const I18N = {
     noUnauthorized: 'Free to use, modify, and distribute. Derivative works must remain under GPL v3.',
     shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find (Editor)', findReplace: 'Find & Replace', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', previewFind: 'Find in Preview', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important' },
     shortcutScheme: 'Shortcut Scheme',
+    shortcutList: 'Shortcuts',
+    crossSearch: 'Cross-file Search',
+    crossSearchTitle: 'Cross-file Search',
+    scopeOpenFiles: 'Opened Files',
+    scopeDir: 'Directory',
+    loopSearch: 'Wrap Around',
+    loop: 'Wrap Around',
+    searchRunning: 'Searching...',
+    totalMatches: '{n} matches',
+    noResults: 'No results',
+    truncated: 'Too many results, truncated',
+    csBrowse: 'Browse',
+    csRun: 'Search',
+    csQueryPlaceholder: 'Enter search query...',
     schemeDefault: 'Default',
     schemeVSCode: 'VSCode',
     schemeTypora: 'Typora',
@@ -767,6 +795,7 @@ class MarkdownEditor {
     this.initSettings();
     this.applyWindowBehavior();
     this.initShortcutsDialog();
+    this.initCrossSearch();
     this.initOutline();
     this.initOutlineResizer();
     this.updateOutlineCheck();
@@ -1001,7 +1030,22 @@ class MarkdownEditor {
     // Refresh shortcut scheme dropdown text
     const schemeLabel = document.getElementById('shortcuts-scheme-label');
     if (schemeLabel) schemeLabel.textContent = t('shortcutScheme');
+    const listTitle = document.getElementById('shortcuts-list-title');
+    if (listTitle) listTitle.textContent = t('shortcutList');
     this.populateSchemeSelect();
+
+    // 跨文件搜索弹框文案
+    const csText = (id, key) => { const el = document.getElementById(id); if (el) el.textContent = t(key); };
+    csText('cs-title', 'crossSearchTitle');
+    csText('cs-label-open', 'scopeOpenFiles');
+    csText('cs-label-dir', 'scopeDir');
+    csText('cs-label-case', 'caseSensitive');
+    csText('cs-label-regex', 'regex');
+    csText('cs-label-loop', 'loopSearch');
+    csText('cs-browse', 'csBrowse');
+    csText('cs-run', 'csRun');
+    const csQuery = document.getElementById('cs-query');
+    if (csQuery) csQuery.placeholder = t('csQueryPlaceholder');
 
     // Update tab bar
     this.updateTabBar();
@@ -1065,6 +1109,7 @@ class MarkdownEditor {
     setPlaceholder('replace-input', t('replace') + '...');
     document.querySelector('#find-panel .find-option:nth-child(2)') && (document.querySelector('#find-panel .find-option:nth-child(2)').childNodes[1] && (document.querySelector('#find-panel .find-option:nth-child(2)').childNodes[1].textContent = ' ' + t('caseSensitive')));
     document.querySelector('#find-panel .find-option:nth-child(3)') && (document.querySelector('#find-panel .find-option:nth-child(3)').childNodes[1] && (document.querySelector('#find-panel .find-option:nth-child(3)').childNodes[1].textContent = ' ' + t('regex')));
+    document.querySelector('#find-panel .find-option:nth-child(4)') && (document.querySelector('#find-panel .find-option:nth-child(4)').childNodes[1] && (document.querySelector('#find-panel .find-option:nth-child(4)').childNodes[1].textContent = ' ' + t('loop')));
     document.getElementById('find-next').textContent = t('findNext');
     document.getElementById('find-prev').textContent = t('findPrev');
     document.getElementById('replace-one').textContent = t('replace');
@@ -1072,6 +1117,7 @@ class MarkdownEditor {
     setPlaceholder('preview-find-input', t('findInPreview') + '...');
     document.querySelector('#preview-find-panel .find-option:nth-child(2)') && (document.querySelector('#preview-find-panel .find-option:nth-child(2)').childNodes[1] && (document.querySelector('#preview-find-panel .find-option:nth-child(2)').childNodes[1].textContent = ' ' + t('caseSensitive')));
     document.querySelector('#preview-find-panel .find-option:nth-child(3)') && (document.querySelector('#preview-find-panel .find-option:nth-child(3)').childNodes[1] && (document.querySelector('#preview-find-panel .find-option:nth-child(3)').childNodes[1].textContent = ' ' + t('regex')));
+    document.querySelector('#preview-find-panel .find-option:nth-child(4)') && (document.querySelector('#preview-find-panel .find-option:nth-child(4)').childNodes[1] && (document.querySelector('#preview-find-panel .find-option:nth-child(4)').childNodes[1].textContent = ' ' + t('loop')));
     document.getElementById('preview-find-next').textContent = t('findNext');
     document.getElementById('preview-find-prev').textContent = t('findPrev');
 
@@ -2153,6 +2199,7 @@ class MarkdownEditor {
       toggleTheme: { key: 'Ctrl+Shift+T', label: '切换主题' },
       saveAs: { key: '', label: '另存为' },
       previewFind: { key: '', label: '预览查找' },
+      crossSearch: { key: 'Ctrl+Shift+F', label: '跨文件搜索' },
       insertTable: { key: '', label: '插入表格' },
       insertImage: { key: '', label: '插入图片' },
       insertUl: { key: '', label: '无序列表' },
@@ -2185,14 +2232,14 @@ class MarkdownEditor {
     return {
       vscode: {
         newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', saveAs:'Ctrl+Shift+S',
-        closeTab:'Ctrl+W', find:'Ctrl+F', findReplace:'Ctrl+H', previewFind:'Ctrl+Shift+F',
+        closeTab:'Ctrl+W', find:'Ctrl+F', findReplace:'Ctrl+H', crossSearch:'Ctrl+Shift+F',
         nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
         bold:'Ctrl+B', italic:'Ctrl+I', inlineCode:'Ctrl+`', insertLink:'Ctrl+K',
         insertMathBlock:'Ctrl+Shift+M', toggleTheme:'Ctrl+Shift+T', exportPDF:'Ctrl+P',
       },
       typora: {
         newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', closeTab:'Ctrl+W',
-        find:'Ctrl+F', findReplace:'Ctrl+Shift+F',
+        find:'Ctrl+F', findReplace:'Ctrl+H', crossSearch:'Ctrl+Shift+F',
         nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
         bold:'Ctrl+B', italic:'Ctrl+I', insertLink:'Ctrl+K', exportPDF:'Ctrl+P',
         inlineCode:'Ctrl+Shift+`', strikethrough:'Ctrl+Shift+5', codeBlock:'Ctrl+Shift+K',
@@ -2203,7 +2250,7 @@ class MarkdownEditor {
       },
       sublime: {
         newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', saveAs:'Ctrl+Shift+S',
-        closeTab:'Ctrl+W', find:'Ctrl+F', findReplace:'Ctrl+H',
+        closeTab:'Ctrl+W', find:'Ctrl+F', findReplace:'Ctrl+H', crossSearch:'Ctrl+Shift+F',
         nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
         exportPDF:'Ctrl+P', toggleTheme:'Ctrl+Shift+T',
       },
@@ -2241,7 +2288,12 @@ class MarkdownEditor {
     const defaults = this.getDefaultShortcuts();
     try {
       const saved = this._validConfigObject(JSON.parse(localStorage.getItem('tizumark-shortcuts')));
-      return { ...defaults, ...saved };
+      const merged = { ...defaults, ...saved };
+      // 迁移：Ctrl+Shift+F 现归 crossSearch，清理旧 vscode 预设残留的 previewFind 键位
+      if (merged.previewFind && merged.previewFind.key === 'Ctrl+Shift+F') {
+        merged.previewFind = { ...merged.previewFind, key: '' };
+      }
+      return merged;
     } catch {
       return defaults;
     }
@@ -2628,6 +2680,7 @@ class MarkdownEditor {
       find: () => this.toggleFindPanel(),
       findReplace: () => this.toggleFindPanel(true),
       previewFind: () => this.toggleFindPanel(),
+      crossSearch: () => this.openCrossSearchDialog(),
       nextTab: () => {
         const next = (this.activeTabIndex + 1) % this.tabs.length;
         this.switchTab(next);
@@ -3482,7 +3535,12 @@ class MarkdownEditor {
         gParts.push(e.key.length === 1 ? e.key.toUpperCase() : e.key);
         const keyStr = gParts.join('+');
         const gHandler = this.globalShortcutLookup?.[keyStr];
-        if (gHandler && !this.cm.hasFocus()) {
+        // 用 e.target 判断事件来源，而非 cm.hasFocus()：find/toggleFindPanel 这类
+        // 快捷键会在 CM extraKeys 触发后同步把焦点转到 find input，导致冒泡到 document
+        // 时 hasFocus() 已变 false → 重复触发 gHandler（Ctrl+F 双击 bug 根因）。
+        // e.target 是按键时的事件原始目标，不随 focus 转移变化，能稳定区分来源。
+        const fromCM = this.cm.getWrapperElement().contains(e.target);
+        if (gHandler && !fromCM) {
           gHandler();
         }
       }
@@ -3544,6 +3602,7 @@ class MarkdownEditor {
     const replaceInput = document.getElementById('replace-input');
     const findCount = document.getElementById('find-count');
     let lastQuery = '';
+    this.findMarks = this.findMarks || []; // 全部高亮的 markText 句柄
 
     const isSafeRegex = FindReplace.isSafeRegex;
 
@@ -3576,14 +3635,20 @@ class MarkdownEditor {
         try { new RegExp(query); } catch { return null; }
       }
       const cursor = this.cm.getSearchCursor(
-        useRegex ? new RegExpCtor(query, caseSensitive ? 'g' : 'gi') : query,
+        useRegex ? new RegExp(query, caseSensitive ? 'g' : 'gi') : query,
         this.cm.getCursor(),
         { caseFold: !caseSensitive }
       );
       return cursor;
     };
 
+    let findComposing = false; // 输入法合成中（拼音/手写）：期间不触发搜索，避免主线程被反复全量高亮占满而卡死
+    const debounce = (fn, delay) => {
+      let t = null;
+      return (...args) => { if (t) clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+    };
     const updateCount = () => {
+      if (findComposing) return; // 拼音合成中跳过；合成结束会立刻搜一次
       const query = findInput.value;
       if (!query) { findCount.textContent = ''; return; }
       const caseSensitive = document.getElementById('find-case').checked;
@@ -3602,18 +3667,29 @@ class MarkdownEditor {
       }
       if (count === '∞') { findCount.textContent = this.t('tooManyMatches') || '∞'; }
       else findCount.textContent = count > 0 ? count + this.t('matches') : this.t('noMatches');
+      this.highlightAllMatches();
+      // 预览框（编辑模式下与编辑框并排）同样黄色高亮
+      this.highlightPreviewMatches(query, caseSensitive, useRegex);
     };
 
-    findInput.addEventListener('input', updateCount);
+    // 输入防抖：避免每敲一个字符就同步全量搜索+高亮（尤其中文拼音边输边搜会卡死）
+    const debouncedFindUpdate = debounce(() => updateCount(), 160);
+    findInput.addEventListener('input', debouncedFindUpdate);
+    findInput.addEventListener('compositionstart', () => { findComposing = true; });
+    findInput.addEventListener('compositionend', () => {
+      findComposing = false;
+      updateCount(); // 合成结束立即搜索一次，即时反馈
+    });
     document.getElementById('find-case').addEventListener('change', updateCount);
     document.getElementById('find-regex').addEventListener('change', updateCount);
 
     document.getElementById('find-next').addEventListener('click', () => {
+      const loop = document.getElementById('find-loop').checked;
       const cursor = getSearchCursor();
       if (cursor && cursor.findNext()) {
         this.cm.setSelection(cursor.from(), cursor.to());
         this.cm.scrollIntoView({ from: cursor.from(), to: cursor.to() }, 100);
-      } else if (cursor) {
+      } else if (cursor && loop) {
         const q = findInput.value;
         const useRegex = document.getElementById('find-regex').checked;
         if (useRegex && !isSafeRegex(q)) return;
@@ -3664,17 +3740,24 @@ class MarkdownEditor {
         : new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
       
       let lastMatch = null;
+      let lastOverall = null;
       let m;
       while ((m = regex.exec(text)) !== null) {
+        const cand = { from: offsetToPos(m.index), to: offsetToPos(m.index + m[0].length) };
+        lastOverall = cand;
         if (m.index + m[0].length < currentOffset) {
-          lastMatch = { from: offsetToPos(m.index), to: offsetToPos(m.index + m[0].length) };
+          lastMatch = cand;
         }
         if (regex.lastIndex === m.index) { regex.lastIndex++; }
       }
-      
+
+      const loop = document.getElementById('find-loop').checked;
       if (lastMatch) {
         this.cm.setSelection(lastMatch.from, lastMatch.to);
         this.cm.scrollIntoView({ from: lastMatch.from, to: lastMatch.to }, 100);
+      } else if (loop && lastOverall) {
+        this.cm.setSelection(lastOverall.from, lastOverall.to);
+        this.cm.scrollIntoView({ from: lastOverall.from, to: lastOverall.to }, 100);
       }
     });
 
@@ -3736,7 +3819,10 @@ class MarkdownEditor {
     this.previewSelections = [];
     this.previewSelectionIndex = -1;
 
+    let previewComposing = false; // 输入法合成中：期间不触发预览搜索，避免卡顿
+    const debouncePreview = (fn, delay) => { let t = null; return (...args) => { if (t) clearTimeout(t); t = setTimeout(() => fn(...args), delay); }; };
     const updatePreviewCount = () => {
+      if (previewComposing) return;
       const query = previewFindInput.value;
       if (!query) { previewFindCount.textContent = ''; this.clearPreviewHighlight(); return; }
       const caseSensitive = document.getElementById('preview-find-case').checked;
@@ -3755,6 +3841,11 @@ class MarkdownEditor {
       }
       if (count === '∞') { previewFindCount.textContent = this.t('tooManyMatches') || '∞'; }
       else previewFindCount.textContent = count > 0 ? count + this.t('matches') : this.t('noMatches');
+      if (query && count !== '∞' && count > 0) {
+        this.highlightPreviewMatches(query, caseSensitive, useRegex);
+      } else {
+        this.clearPreviewHighlights();
+      }
     };
 
     const doPreviewFind = (reverse = false) => {
@@ -3799,22 +3890,23 @@ class MarkdownEditor {
         currentPos = preRange.toString().length;
       }
 
-      let targetMatch;
+      const loop = document.getElementById('preview-find-loop').checked;
+      let targetMatch = null;
       if (reverse) {
         let found = false;
         for (let i = matches.length - 1; i >= 0; i--) {
           if (matches[i].end < currentPos) { targetMatch = matches[i]; found = true; break; }
         }
-        if (!found) targetMatch = matches[matches.length - 1];
+        if (!found && loop) targetMatch = matches[matches.length - 1];
       } else {
         let found = false;
         for (let i = 0; i < matches.length; i++) {
           if (matches[i].start >= currentPos) { targetMatch = matches[i]; found = true; break; }
         }
-        if (!found) targetMatch = matches[0];
+        if (!found && loop) targetMatch = matches[0];
       }
 
-      this.highlightPreviewMatch(targetMatch);
+      if (targetMatch) this.highlightPreviewMatch(targetMatch);
     };
 
     this.highlightPreviewMatch = (target) => {
@@ -3840,10 +3932,17 @@ class MarkdownEditor {
     };
 
     this.clearPreviewHighlight = () => {
-      window.getSelection().removeAllRanges();
+      this.clearPreviewHighlights();
     };
 
-    previewFindInput.addEventListener('input', updatePreviewCount);
+    // 输入防抖 + 输入法合成守卫：避免预览框边输边搜卡死
+    const debouncedPreviewUpdate = debouncePreview(() => updatePreviewCount(), 160);
+    previewFindInput.addEventListener('input', debouncedPreviewUpdate);
+    previewFindInput.addEventListener('compositionstart', () => { previewComposing = true; });
+    previewFindInput.addEventListener('compositionend', () => {
+      previewComposing = false;
+      updatePreviewCount(); // 合成结束立即搜索一次
+    });
     document.getElementById('preview-find-case').addEventListener('change', updatePreviewCount);
     document.getElementById('preview-find-regex').addEventListener('change', updatePreviewCount);
 
@@ -3867,6 +3966,9 @@ class MarkdownEditor {
   }
 
   toggleFindPanel(replaceMode = false) {
+    // 互斥：打开页面内查找时关闭跨文件搜索弹框
+    const csDlg = document.getElementById('cross-search-dialog');
+    if (csDlg) csDlg.classList.add('hidden');
     if (this.viewMode === 'preview') {
       const panel = document.getElementById('preview-find-panel');
       const isHidden = panel.classList.contains('hidden');
@@ -3880,6 +3982,9 @@ class MarkdownEditor {
         }
         input.focus();
         input.select();
+        if (input.value) this.highlightPreviewMatches(input.value, document.getElementById('preview-find-case').checked, document.getElementById('preview-find-regex').checked);
+      } else {
+        this.clearPreviewHighlights();
       }
     } else {
       const panel = document.getElementById('find-panel');
@@ -3893,6 +3998,11 @@ class MarkdownEditor {
         }
         input.focus();
         input.select();
+        this.highlightAllMatches();
+        // 预览框（编辑模式下与编辑框并排）同样黄色高亮
+        this.highlightPreviewMatches(input.value, document.getElementById('find-case').checked, document.getElementById('find-regex').checked);
+      } else {
+        this.clearFindHighlights();
       }
     }
   }
@@ -3901,8 +4011,416 @@ class MarkdownEditor {
     document.getElementById('find-panel').classList.add('hidden');
     document.getElementById('preview-find-panel').classList.add('hidden');
     this.clearPreviewHighlight();
+    this.clearFindHighlights();
     if (this.viewMode === 'edit') {
       this.cm.focus();
+    }
+  }
+
+  highlightAllMatches() {
+    // 全部高亮：用 getSearchCursor 遍历所有匹配，markText 加 .search-match 类。
+    // 上限 2000 防止超大文档卡顿；超限仅高亮前 2000 个（计数仍由 updateCount 准确显示）。
+    this.clearFindHighlights();
+    const findInput = document.getElementById('find-input');
+    if (!findInput) return;
+    const query = findInput.value;
+    if (!query) return;
+    const caseSensitive = document.getElementById('find-case').checked;
+    const useRegex = document.getElementById('find-regex').checked;
+    let re;
+    try {
+      if (useRegex) {
+        if (!FindReplace.isSafeRegex(query)) return;
+        re = new RegExp(query, caseSensitive ? 'g' : 'gi');
+      } else {
+        re = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), caseSensitive ? 'g' : 'gi');
+      }
+    } catch { return; }
+    const LIMIT = 2000;
+    this.cm.operation(() => {
+      const cursor = this.cm.getSearchCursor(re, { line: 0, ch: 0 }, { caseFold: !caseSensitive });
+      let count = 0;
+      while (cursor.findNext()) {
+        if (count >= LIMIT) break;
+        try {
+          const mark = this.cm.markText(cursor.from(), cursor.to(), { className: 'search-match' });
+          this.findMarks.push(mark);
+        } catch (_) {}
+        count++;
+      }
+    });
+  }
+
+  clearFindHighlights() {
+    if (this.findMarks && this.findMarks.length) {
+      this.findMarks.forEach(m => { try { m.clear(); } catch (_) {} });
+    }
+    this.findMarks = [];
+  }
+
+  // 跨文件搜索高亮：独立于文件内查找（findMarks），便于两种查找互斥时各自清理互不干扰
+  clearCrossSearchHighlights() {
+    if (!this.crossSearchMarks) { this.crossSearchMarks = []; return; }
+    this.crossSearchMarks.forEach(m => { try { m.clear(); } catch (_) {} });
+    this.crossSearchMarks = [];
+  }
+
+  // 预览高亮：在 #preview 的文本节点中把匹配片段包裹为 <mark class="search-match">，
+  // 与编辑器高亮共用同一配色（醒目黄色）。从后往前包裹，避免节点切分影响更早偏移。
+  clearPreviewHighlights() {
+    const pv = this.preview;
+    if (!pv) { window.getSelection().removeAllRanges(); return; }
+    const marks = pv.querySelectorAll('mark.preview-search-hl');
+    marks.forEach(mk => {
+      const parent = mk.parentNode;
+      while (mk.firstChild) parent.insertBefore(mk.firstChild, mk);
+      parent.removeChild(mk);
+    });
+    pv.normalize();
+    window.getSelection().removeAllRanges();
+  }
+
+  highlightPreviewMatches(query, caseSensitive, useRegex) {
+    const pv = this.preview;
+    if (!pv) return;
+    this.clearPreviewHighlights();
+    if (!query) return;
+    const text = pv.textContent;
+    if (!text) return;
+    const matches = [];
+    const LIMIT = 2000;
+    if (useRegex) {
+      if (!FindReplace.isSafeRegex(query)) return;
+      let re;
+      try { re = new RegExp(query, caseSensitive ? 'g' : 'gi'); } catch { return; }
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        matches.push([m.index, m.index + m[0].length]);
+        if (matches.length >= LIMIT) break;
+        if (re.lastIndex === m.index) re.lastIndex++;
+      }
+    } else {
+      const hay = caseSensitive ? text : text.toLowerCase();
+      const q = caseSensitive ? query : query.toLowerCase();
+      let pos = 0;
+      while ((pos = hay.indexOf(q, pos)) !== -1) {
+        matches.push([pos, pos + q.length]);
+        pos += q.length;
+        if (matches.length >= LIMIT) break;
+      }
+    }
+    if (!matches.length) return;
+    const walker = document.createTreeWalker(pv, NodeFilter.SHOW_TEXT, null, false);
+    const nodes = [];
+    let node;
+    while ((node = walker.nextNode())) { if (node.nodeValue) nodes.push(node); }
+    let mi = 0;
+    let charCount = 0;
+    for (const n of nodes) {
+      const len = n.nodeValue.length;
+      const nodeMatches = [];
+      while (mi < matches.length && matches[mi][0] >= charCount && matches[mi][1] <= charCount + len) {
+        nodeMatches.push([matches[mi][0] - charCount, matches[mi][1] - charCount]);
+        mi++;
+      }
+      while (mi < matches.length && matches[mi][0] >= charCount && matches[mi][0] < charCount + len && matches[mi][1] > charCount + len) mi++;
+      for (let k = nodeMatches.length - 1; k >= 0; k--) {
+        const s = nodeMatches[k][0], e = nodeMatches[k][1];
+        const range = document.createRange();
+        range.setStart(n, s);
+        range.setEnd(n, e);
+        const mark = document.createElement('mark');
+        mark.className = 'search-match preview-search-hl';
+        try { range.surroundContents(mark); } catch (_) {}
+      }
+      charCount += len;
+    }
+  }
+
+  openCrossSearchDialog() {
+    const dlg = document.getElementById('cross-search-dialog');
+    if (!dlg) return;
+    dlg.classList.remove('hidden');
+    // 互斥：打开跨文件搜索时关闭页面内查找并清除高亮，避免两种查找同时干扰编辑器/预览
+    document.getElementById('find-panel').classList.add('hidden');
+    document.getElementById('preview-find-panel').classList.add('hidden');
+    this.clearFindHighlights();
+    this.clearPreviewHighlights();
+    this.clearCrossSearchHighlights();
+    // 浮动面板定位：首次显示在右上角避免遮挡正文；已拖动过则保持上次位置并夹取在视口内
+    const panel = document.getElementById('cs-panel');
+    if (panel) {
+      const w = panel.offsetWidth || 560;
+      const vw = window.innerWidth || 1200;
+      const vh = window.innerHeight || 800;
+      let left = panel.style.left ? parseInt(panel.style.left, 10) : Math.max(12, vw - w - 24);
+      let top = panel.style.top ? parseInt(panel.style.top, 10) : Math.max(12, Math.round(vh * 0.08));
+      left = Math.max(0, Math.min(left, vw - 80));
+      top = Math.max(0, Math.min(top, vh - 40));
+      panel.style.left = left + 'px';
+      panel.style.top = top + 'px';
+    }
+    // 默认目录：当前文件所在目录
+    const dirInput = document.getElementById('cs-dir');
+    if (this.activeTab && this.activeTab.filePath) {
+      const fp = this.activeTab.filePath;
+      const m = fp.match(/[/\\][^/\\]*$/);
+      dirInput.value = m ? fp.substring(0, m.index) : fp;
+    }
+    const q = document.getElementById('cs-query');
+    if (this.cm && this.cm.somethingSelected()) q.value = this.cm.getSelection();
+    q.focus();
+    q.select();
+  }
+
+  initCrossSearch() {
+    const dlg = document.getElementById('cross-search-dialog');
+    if (!dlg) return;
+    const panel = document.getElementById('cs-panel');
+    const handle = document.getElementById('cs-drag-handle');
+
+    // 拖动：从标题栏拖动浮动面板到其他位置（避开正文）。关闭按钮不触发拖动。
+    if (handle && panel) {
+      handle.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.dialog-close')) return;
+        e.preventDefault();
+        const startX = e.clientX, startY = e.clientY;
+        const startLeft = panel.offsetLeft, startTop = panel.offsetTop;
+        const onMove = (ev) => {
+          let nl = startLeft + (ev.clientX - startX);
+          let nt = startTop + (ev.clientY - startY);
+          nl = Math.max(0, Math.min(nl, (window.innerWidth || 1200) - 80));
+          nt = Math.max(0, Math.min(nt, (window.innerHeight || 800) - 40));
+          panel.style.left = nl + 'px';
+          panel.style.top = nt + 'px';
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          document.body.style.userSelect = '';
+        };
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    }
+
+    document.getElementById('cs-close').addEventListener('click', () => {
+      dlg.classList.add('hidden');
+      this.clearCrossSearchHighlights();
+      this.clearPreviewHighlights();
+    });
+    const updateDirRow = () => {
+      const isDir = document.querySelector('input[name="cs-scope"]:checked')?.value === 'dir';
+      document.getElementById('cs-dir-row').classList.toggle('hidden', !isDir);
+    };
+    document.querySelectorAll('input[name="cs-scope"]').forEach(r => r.addEventListener('change', updateDirRow));
+    document.getElementById('cs-browse').addEventListener('click', async () => {
+      const sel = await dialogOpen({ directory: true });
+      if (sel) document.getElementById('cs-dir').value = Array.isArray(sel) ? sel[0] : sel;
+    });
+    document.getElementById('cs-run').addEventListener('click', () => this.runCrossSearch());
+    document.getElementById('cs-query').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // 已有结果且 query 未变 → 跳到下一个匹配（循环查找可选）；否则重新搜索
+        if (this.crossSearchFlat && this.crossSearchFlat.length && this.csLastQuery === e.target.value) {
+          this.csNextMatch();
+        } else {
+          this.runCrossSearch();
+        }
+      }
+      if (e.key === 'Escape') dlg.classList.add('hidden');
+    });
+  }
+
+  // 跨文件搜索 - 打开文件范围：遍历 this.tabs，ensureTabLoaded 后对 content 按行搜索。
+  async searchOpenFiles(query, caseSensitive, useRegex) {
+    const results = [];
+    let re = null;
+    if (useRegex) {
+      if (!FindReplace.isSafeRegex(query)) return results;
+      try { re = new RegExp(query, caseSensitive ? 'g' : 'gi'); } catch { return results; }
+    }
+    const qLower = query.toLowerCase();
+    for (let i = 0; i < this.tabs.length; i++) {
+      const tab = this.tabs[i];
+      await this.ensureTabLoaded(tab);
+      const content = tab.content || '';
+      const lines = content.split('\n');
+      const matches = [];
+      const LIMIT = 500;
+      for (let j = 0; j < lines.length && matches.length < LIMIT; j++) {
+        const line = lines[j];
+        let col = -1, len = 0;
+        if (re) {
+          re.lastIndex = 0;
+          const m = re.exec(line);
+          if (m) { col = m.index; len = m[0].length; }
+        } else {
+          const hay = caseSensitive ? line : line.toLowerCase();
+          const idx = hay.indexOf(caseSensitive ? query : qLower);
+          if (idx >= 0) { col = idx; len = query.length; }
+        }
+        if (col >= 0) {
+          matches.push({ line: j + 1, col: col + 1, len, line_text: line.substring(0, 300) });
+        }
+      }
+      if (matches.length) {
+        results.push({ tabIndex: i, filePath: tab.filePath || '', name: tab.name || '', path: tab.filePath || tab.name || '', matches });
+      }
+    }
+    return results;
+  }
+
+  async runCrossSearch() {
+    const query = document.getElementById('cs-query').value;
+    if (!query) return;
+    const caseSensitive = document.getElementById('cs-case').checked;
+    const useRegex = document.getElementById('cs-regex').checked;
+    const scope = document.querySelector('input[name="cs-scope"]:checked')?.value || 'open';
+    const progress = document.getElementById('cs-progress');
+    const totalEl = document.getElementById('cs-total');
+    const resultsEl = document.getElementById('cs-results');
+    progress.classList.remove('hidden');
+    progress.textContent = this.t('searchRunning');
+    totalEl.textContent = '';
+    resultsEl.innerHTML = '';
+    this.csLastQuery = query;
+    this.clearCrossSearchHighlights();
+    this.crossSearchFlat = [];
+    this.crossSearchPos = -1;
+    try {
+      let results;
+      if (scope === 'open') {
+        results = await this.searchOpenFiles(query, caseSensitive, useRegex);
+      } else {
+        const dir = document.getElementById('cs-dir').value;
+        if (!dir) { totalEl.textContent = this.t('noResults'); progress.classList.add('hidden'); return; }
+        const raw = await invoke('search_in_files', { dir, pattern: query, caseSensitive, useRegex, extensions: [] });
+        results = raw.map(r => ({ path: r.path, matches: r.matches.map(m => ({ line: m.line, col: m.col, len: 0, line_text: m.line_text })) }));
+      }
+      // 扁平化匹配列表，供“下一个 / 循环查找”导航
+      for (const f of results) {
+        for (const m of f.matches) {
+          this.crossSearchFlat.push({ filePath: f.path, line: m.line, col: m.col, len: m.len || 0 });
+        }
+      }
+      this.renderCrossSearchResults(results, query);
+    } catch (e) {
+      this.reportError('E_IO', { context: { query }, error: e });
+    } finally {
+      progress.classList.add('hidden');
+    }
+  }
+
+  // 跳到下一个匹配：勾选“循环查找”时在末尾回到第一个，否则停在最后一条
+  csNextMatch() {
+    const flat = this.crossSearchFlat;
+    if (!flat || !flat.length) return;
+    const loop = document.getElementById('cs-loop') ? document.getElementById('cs-loop').checked : false;
+    let next = this.crossSearchPos + 1;
+    if (next >= flat.length) {
+      if (!loop) return; // 不循环则停在最后
+      next = 0;
+    }
+    this.crossSearchPos = next;
+    const m = flat[next];
+    this.csHighlightCurrent();
+    this.jumpToMatch(m.filePath, m.line, m.col, m.len);
+  }
+
+  csHighlightCurrent() {
+    const items = document.querySelectorAll('#cs-results .cs-match');
+    items.forEach((el, i) => el.classList.toggle('current', i === this.crossSearchPos));
+    const cur = items[this.crossSearchPos];
+    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
+  }
+
+  renderCrossSearchResults(results, query) {
+    const totalEl = document.getElementById('cs-total');
+    const resultsEl = document.getElementById('cs-results');
+    const total = results.reduce((s, r) => s + r.matches.length, 0);
+    if (total === 0) {
+      totalEl.textContent = this.t('noResults');
+      resultsEl.innerHTML = '';
+      return;
+    }
+    totalEl.textContent = this.t('totalMatches', { n: total });
+    resultsEl.innerHTML = '';
+    for (const file of results) {
+      const group = document.createElement('div');
+      group.className = 'cs-file-group';
+      const header = document.createElement('div');
+      header.className = 'cs-file-header';
+      header.textContent = `${file.path || file.name} (${file.matches.length})`;
+      group.appendChild(header);
+      for (const m of file.matches) {
+        const item = document.createElement('div');
+        item.className = 'cs-match';
+        const snippet = (m.line_text || '').trim().substring(0, 120);
+        item.textContent = `${m.line}:${m.col}  ${snippet}`;
+        item.addEventListener('click', () => this.jumpToMatch(file.path, m.line, m.col, m.len || 0));
+        group.appendChild(item);
+      }
+      resultsEl.appendChild(group);
+    }
+  }
+
+  async jumpToMatch(filePath, line, col, len) {
+    const prevViewMode = this.viewMode;
+    if (filePath) {
+      await this.openFilePath(filePath);
+      // openFilePath 打开新文件时会切到 preview，这里恢复原视图模式，避免每次跳转改变用户视图
+      if (this.viewMode !== prevViewMode) {
+        this.viewMode = prevViewMode;
+        this.applyViewMode();
+      }
+    }
+    await this.ensureTabLoaded(this.activeTab);
+    // 确保预览已用新文件内容渲染完（异步），便于后续预览高亮准确定位
+    await this.updatePreview();
+    this.cm.focus();
+    const pos = { line: line - 1, ch: col - 1 };
+    // 计算高亮区间：优先用后端返回的 len；目录搜索 len=0 时按查询在行内定位
+    let from = pos, to = pos;
+    const query = this.csLastQuery || '';
+    const cs = document.getElementById('cs-case').checked;
+    const ur = document.getElementById('cs-regex').checked;
+    if (len > 0) {
+      to = { line: line - 1, ch: col - 1 + len };
+    } else if (query) {
+      const lineText = this.cm.getLine(line - 1) || '';
+      let matchLen = 0;
+      if (ur) {
+        try {
+          const re = new RegExp(query, cs ? '' : 'i');
+          const m = lineText.slice(col - 1).match(re);
+          if (m) matchLen = m[0].length;
+        } catch (_) { /* 非法正则忽略 */ }
+      } else {
+        const hay = cs ? lineText : lineText.toLowerCase();
+        const q = cs ? query : query.toLowerCase();
+        const idx = hay.indexOf(q, col - 1);
+        if (idx !== -1) matchLen = q.length;
+      }
+      if (matchLen > 0) to = { line: line - 1, ch: col - 1 + matchLen };
+    }
+    // 编辑框黄色高亮：清除上一次跨文件高亮，标记当前匹配
+    this.clearCrossSearchHighlights();
+    if (to.ch !== pos.ch || to.line !== pos.line) {
+      this.cm.setSelection(from, to);
+      try {
+        const mark = this.cm.markText(from, to, { className: 'search-match' });
+        this.crossSearchMarks.push(mark);
+      } catch (_) {}
+    } else {
+      this.cm.setCursor(pos);
+    }
+    this.cm.scrollIntoView(pos, 100);
+    // 预览框 / 预览模式黄色高亮（编辑与预览两种模式下预览均可见）
+    if (query && (this.viewMode === 'preview' || this.viewMode === 'edit')) {
+      this.highlightPreviewMatches(query, cs, ur);
     }
   }
 

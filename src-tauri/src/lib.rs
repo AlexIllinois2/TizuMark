@@ -342,22 +342,22 @@ fn read_file(path: String) -> Result<String, String> {
         )
     })?;
 
-    // 剥离 UTF-8 BOM（EF BB BF）
+    Ok(decode_bytes(&raw))
+}
+
+// 解码字节为字符串：剥离 UTF-8 BOM → 优先 UTF-8 → 回退 GB18030（覆盖 GBK/GB2312/简繁）。
+// read_file 与 search_in_files 共用，确保非 UTF-8 文件也能被搜索。
+fn decode_bytes(raw: &[u8]) -> String {
     let stripped: &[u8] = if raw.len() >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF {
         &raw[3..]
     } else {
-        &raw
+        raw
     };
-
-    // 优先尝试 UTF-8
     if let Ok(s) = String::from_utf8(stripped.to_vec()) {
-        return Ok(s);
+        return s;
     }
-
-    // 非 UTF-8：用 GB18030 解码（覆盖 GBK / GB2312 / 简繁中文）。
-    // 绝大多数中文 Windows 文件由此可被正常打开，不再因编码失败导致空白。
     let (cow, _enc, _had_errors) = GB18030.decode(stripped);
-    Ok(cow.into_owned())
+    cow.into_owned()
 }
 
 // 托盘可见性状态，由前端设置同步。
@@ -499,6 +499,142 @@ fn list_dir(path: String) -> Result<Vec<DirEntryInfo>, String> {
         a.name.to_lowercase().cmp(&b.name.to_lowercase())
     });
     Ok(entries)
+}
+
+#[derive(serde::Serialize)]
+struct FileMatch {
+    path: String,
+    matches: Vec<LineMatch>,
+}
+
+#[derive(serde::Serialize)]
+struct LineMatch {
+    line: usize,   // 1-based 行号
+    col: usize,    // 1-based 字符列号
+    line_text: String,
+}
+
+// search_in_files 的同步核心，便于 cargo test 直接调用（命令 async 包装）。
+// 递归遍历目录，按扩展名过滤（默认 md/markdown/txt），每文件解码后按行搜索。
+// 上限：文件 2000 / 每文件 500 / 总匹配 5000，超限停止遍历。
+fn search_in_files_impl(
+    dir: &str,
+    pattern: &str,
+    case_sensitive: bool,
+    use_regex: bool,
+    extensions: &[String],
+) -> Result<Vec<FileMatch>, String> {
+    if pattern.is_empty() {
+        return Ok(Vec::new());
+    }
+    let re: Option<regex::Regex> = if use_regex {
+        match regex::Regex::new(pattern) {
+            Ok(r) => Some(r),
+            Err(_) => return Err("{\"kind\":\"InvalidEncoding\",\"path\":\"\",\"message\":\"invalid regex\"}".into()),
+        }
+    } else {
+        None
+    };
+    let pattern_lower = pattern.to_lowercase();
+    let exts: Vec<String> = if extensions.is_empty() {
+        vec!["md".into(), "markdown".into(), "txt".into()]
+    } else {
+        extensions.iter().map(|e| e.to_lowercase()).collect()
+    };
+
+    const MAX_FILES: usize = 2000;
+    const MAX_PER_FILE: usize = 500;
+    const MAX_TOTAL: usize = 5000;
+    const MAX_LINE_TEXT: usize = 300;
+
+    let mut results: Vec<FileMatch> = Vec::new();
+    let mut total = 0usize;
+    let mut file_count = 0usize;
+
+    let base = std::path::Path::new(dir);
+    let mut stack: Vec<std::path::PathBuf> = vec![base.to_path_buf()];
+    'outer: while let Some(cur) = stack.pop() {
+        let rd = match fs::read_dir(&cur) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        for entry in rd {
+            if file_count >= MAX_FILES || total >= MAX_TOTAL {
+                break 'outer;
+            }
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            let path = entry.path();
+            let meta = match entry.metadata() {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            if meta.is_dir() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.') || name == "node_modules" || name == "target" || name == ".git" {
+                    continue;
+                }
+                stack.push(path);
+                continue;
+            }
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+            if !exts.contains(&ext) {
+                continue;
+            }
+            let content = match fs::read(&path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            let text = decode_bytes(&content);
+            let mut file_matches: Vec<LineMatch> = Vec::new();
+            for (i, line) in text.lines().enumerate() {
+                if file_matches.len() >= MAX_PER_FILE {
+                    break;
+                }
+                let byte_col: Option<usize> = if let Some(re) = &re {
+                    re.find(line).map(|m| m.start())
+                } else if case_sensitive {
+                    line.find(pattern)
+                } else {
+                    line.to_lowercase().find(&pattern_lower)
+                };
+                if let Some(bc) = byte_col {
+                    let char_col = line[..bc].chars().count();
+                    let line_text: String = line.chars().take(MAX_LINE_TEXT).collect();
+                    file_matches.push(LineMatch {
+                        line: i + 1,
+                        col: char_col + 1,
+                        line_text,
+                    });
+                    total += 1;
+                    if total >= MAX_TOTAL {
+                        break;
+                    }
+                }
+            }
+            if !file_matches.is_empty() {
+                results.push(FileMatch {
+                    path: path.to_string_lossy().to_string(),
+                    matches: file_matches,
+                });
+                file_count += 1;
+            }
+        }
+    }
+    Ok(results)
+}
+
+#[tauri::command]
+async fn search_in_files(
+    dir: String,
+    pattern: String,
+    case_sensitive: bool,
+    use_regex: bool,
+    extensions: Vec<String>,
+) -> Result<Vec<FileMatch>, String> {
+    search_in_files_impl(&dir, &pattern, case_sensitive, use_regex, &extensions)
 }
 
 #[tauri::command]
@@ -1463,7 +1599,8 @@ pub fn run() {
             app_data_dir,
             save_image_to_assets,
             fetch_image_as_base64,
-            generate_toc
+            generate_toc,
+            search_in_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1487,6 +1624,66 @@ mod tests {
     fn test_files_from_args_empty_when_only_exe() {
         let argv = vec!["TizuMark.exe".to_string()];
         assert!(files_from_args(argv).is_empty());
+    }
+
+    #[test]
+    fn test_search_in_files_recursive_and_filter() {
+        let tmp = std::env::temp_dir().join("tizumark_search_test_1");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        fs::write(tmp.join("a.md"), "hello world\nhello rust\n").unwrap();
+        fs::write(tmp.join("b.txt"), "hello again\n").unwrap();
+        fs::write(tmp.join("c.log"), "hello ignored\n").unwrap();
+        let sub = tmp.join("sub");
+        fs::create_dir_all(&sub).unwrap();
+        fs::write(sub.join("d.md"), "hello nested\n").unwrap();
+        let res = search_in_files_impl(tmp.to_str().unwrap(), "hello", false, false, &[]).unwrap();
+        let paths: Vec<&str> = res.iter().map(|f| f.path.as_str()).collect();
+        assert!(!paths.iter().any(|p| p.ends_with("c.log")), "c.log 应被扩展名过滤");
+        assert!(paths.iter().any(|p| p.ends_with("d.md")), "应递归到 sub/d.md");
+        let total: usize = res.iter().map(|f| f.matches.len()).sum();
+        assert_eq!(total, 4, "a.md(2)+b.txt(1)+d.md(1) 共 4 处匹配");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_search_in_files_regex() {
+        let tmp = std::env::temp_dir().join("tizumark_search_test_2");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        fs::write(tmp.join("a.md"), "foo123bar\nfoo456\nno digits\n").unwrap();
+        let res = search_in_files_impl(tmp.to_str().unwrap(), r"\d+", false, true, &[]).unwrap();
+        let total: usize = res.iter().map(|f| f.matches.len()).sum();
+        assert_eq!(total, 2, "正则 \\d+ 应匹配 2 行");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_search_in_files_case_sensitivity() {
+        let tmp = std::env::temp_dir().join("tizumark_search_test_3");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        fs::write(tmp.join("a.md"), "Hello\nHELLO\nhello\n").unwrap();
+        let res_ci = search_in_files_impl(tmp.to_str().unwrap(), "hello", false, false, &[]).unwrap();
+        let total_ci: usize = res_ci.iter().map(|f| f.matches.len()).sum();
+        assert_eq!(total_ci, 3, "大小写不敏感应匹配 3 处");
+        let res_cs = search_in_files_impl(tmp.to_str().unwrap(), "hello", true, false, &[]).unwrap();
+        let total_cs: usize = res_cs.iter().map(|f| f.matches.len()).sum();
+        assert_eq!(total_cs, 1, "大小写敏感应只匹配 1 处");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_search_in_files_per_file_limit() {
+        let tmp = std::env::temp_dir().join("tizumark_search_test_4");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        let content: String = (0..600).map(|_| "x\n").collect();
+        fs::write(tmp.join("big.md"), content).unwrap();
+        let res = search_in_files_impl(tmp.to_str().unwrap(), "x", false, false, &[]).unwrap();
+        assert_eq!(res.len(), 1, "应只有 1 个文件");
+        assert!(res[0].matches.len() <= 500, "单文件匹配应被截断到 <= 500，实际 {}", res[0].matches.len());
+        let _ = fs::remove_dir_all(&tmp);
     }
 
     #[test]
