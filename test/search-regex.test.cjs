@@ -5,53 +5,9 @@
 // 复用 jsdom + 真实 CodeMirror 实例的 harness；highlightAllMatches / highlightPreviewMatches
 // 为实例方法，直接调用可绕过 input 防抖，便于稳定断言高亮结果。
 
-const { JSDOM } = require('jsdom');
-const fs = require('fs');
-const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert');
-
-const ROOT = path.resolve(__dirname, '..');
-const html = fs.readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8');
-const appjs = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
-
-function cleanup(w) {
-  try { if (w.editor && w.editor.cm && w.editor.cm.close) w.editor.cm.close(); } catch (_) {}
-  try { if (w.close) w.close(); } catch (_) {}
-}
-
-function buildEnv() {
-  const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true, runScripts: 'outside-only' });
-  const w = dom.window;
-  w.localStorage.setItem('tizumark-eula-accepted', 'true');
-  const rect = () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 });
-  w.Range.prototype.getBoundingClientRect = rect;
-  w.Range.prototype.getClientRects = () => [];
-  w.Element.prototype.getBoundingClientRect = rect;
-  w.Element.prototype.getClientRects = () => [];
-  w.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  w.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } };
-  w.matchMedia = () => ({ matches: false, media: '', onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent() { return false; } });
-  w.__TAURI__ = {
-    core: { invoke: async () => undefined },
-    event: { listen: async () => () => {} },
-    window: { getCurrentWindow: () => ({ show: async () => {}, setFocus: async () => {} }) },
-    path: { resourceDir: async () => '' },
-    shell: { open: async () => {} },
-  };
-  global.window = w; global.document = w.document; global.navigator = w.navigator;
-  w.CodeMirror = require('codemirror');
-  require('codemirror/addon/search/searchcursor');
-  const modulesDir = path.join(ROOT, 'src', 'modules');
-  for (const f of fs.readdirSync(modulesDir).filter(x => x.endsWith('.js'))) {
-    try { w.eval(fs.readFileSync(path.join(modulesDir, f), 'utf8')); } catch (_) {}
-  }
-  w.eval(appjs);
-  w.document.dispatchEvent(new w.Event('DOMContentLoaded', { bubbles: true }));
-  return { w };
-}
-
-const delay = (ms) => new Promise(r => setTimeout(r, ms));
+const { buildEnv, cleanup, delay } = require('./helpers/app-env.cjs');
 
 // 勾选正则并设置查询（绕过防抖，直接调高亮方法）
 function setupRegexFind(w, query, caseSensitive) {

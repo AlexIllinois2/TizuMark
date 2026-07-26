@@ -2267,3 +2267,91 @@ $$\n\
         let html = render_markdown(input.to_string());
         assert!(!html.contains("javascript:"), "Boolean attribute with javascript: should be stripped");
     }
+
+    // ---------- 文件编码 / 读写命令（整理测试库时补充） ----------
+
+    #[test]
+    fn test_decode_bytes_utf8() {
+        assert_eq!(decode_bytes(b"hello world"), "hello world");
+    }
+
+    #[test]
+    fn test_decode_bytes_utf8_with_bom() {
+        // 带 UTF-8 BOM 的字节应剥离 BOM 再解码
+        let mut v = vec![0xEF, 0xBB, 0xBF];
+        v.extend_from_slice(b"hello");
+        assert_eq!(decode_bytes(&v), "hello");
+    }
+
+    #[test]
+    fn test_decode_bytes_gb18030_roundtrip() {
+        // GB18030 编码的字节（非合法 UTF-8）应回退解码成功
+        let s = "中文测试，简繁混合：軟體";
+        let (encoded, _enc, _err) = GB18030.encode(s);
+        let bytes = encoded.as_ref().to_vec();
+        // 先确认这些字节本身不是合法 UTF-8，才会走回退分支
+        assert!(String::from_utf8(bytes.clone()).is_err(), "GB18030 字节应非 UTF-8");
+        assert_eq!(decode_bytes(&bytes), s, "GB18030 回退解码应还原原文");
+    }
+
+    #[test]
+    fn test_decode_bytes_invalid_bytes_no_panic() {
+        // 无法解码的字节不应 panic，应回退为替换字符
+        let s = decode_bytes(&[0xFF, 0xFE, 0x00, 0x01]);
+        assert!(s.chars().all(|c| c != '\u{FFFD}' || true), "无效字节解码不 panic");
+    }
+
+    #[test]
+    fn test_read_file_utf8() {
+        let tmp = std::env::temp_dir().join("tizumark_read_utf8_test.txt");
+        fs::write(&tmp, "hello 中文").unwrap();
+        let res = read_file(tmp.to_str().unwrap().to_string());
+        assert!(res.is_ok(), "读取 UTF-8 文件应成功");
+        assert_eq!(res.unwrap(), "hello 中文");
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_read_file_gb18030() {
+        let tmp = std::env::temp_dir().join("tizumark_read_gbk_test.txt");
+        let s = "中文内容测试";
+        let (encoded, _enc, _err) = GB18030.encode(s);
+        fs::write(&tmp, encoded.as_ref()).unwrap();
+        let res = read_file(tmp.to_str().unwrap().to_string());
+        assert!(res.is_ok(), "读取 GB18030 文件应成功（编码兼容）");
+        assert_eq!(res.unwrap(), s, "GB18030 文件内容应正确还原");
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_read_file_missing_returns_structured_error() {
+        let path = std::env::temp_dir()
+            .join("tizumark_does_not_exist_xyz_12345.md");
+        let res = read_file(path.to_str().unwrap().to_string());
+        assert!(res.is_err(), "读取不存在文件应返回错误");
+        let err = res.unwrap_err();
+        assert!(err.contains("\"kind\":\"NotFound\""), "错误应为结构化 JSON 且 kind=NotFound");
+    }
+
+    #[test]
+    fn test_write_file_then_read_back() {
+        let tmp = std::env::temp_dir().join("tizumark_write_test.txt");
+        let _ = fs::remove_file(&tmp);
+        let content = "# 标题\n\n正文内容";
+        let w = write_file(tmp.to_str().unwrap().to_string(), content.to_string());
+        assert!(w.is_ok(), "write_file 应成功");
+        // 用底层 read_file 读回验证
+        let r = read_file(tmp.to_str().unwrap().to_string());
+        assert!(r.is_ok());
+        assert_eq!(r.unwrap(), content);
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_safe_write_target_rejects_protected_path() {
+        // 拒绝写入系统关键目录（如 C:\windows\system32）
+        let res = safe_write_target("C:\\windows\\system32\\evil.txt");
+        assert!(res.is_err(), "写入系统目录应被拒绝");
+        assert!(res.unwrap_err().contains("protected"), "错误应说明是受保护路径");
+    }

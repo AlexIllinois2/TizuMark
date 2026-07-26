@@ -5,73 +5,12 @@
 // 复用 init-smoke 的 jsdom 加载方式（index.html + app.js + 模块脚本 + Tauri/浏览器 API stub），
 // 额外加载 codemirror searchcursor addon（find-next 依赖 getSearchCursor）。
 
-const { JSDOM } = require('jsdom');
-const fs = require('fs');
-const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert');
-
-const ROOT = path.resolve(__dirname, '..');
-const html = fs.readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8');
-const appjs = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
-
-function cleanup(w) {
-  try { if (w.editor && w.editor.cm && w.editor.cm.close) w.editor.cm.close(); } catch (_) {}
-  try { if (w.close) w.close(); } catch (_) {}
-}
-
-function buildEnv() {
-  const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true, runScripts: 'outside-only' });
-  const w = dom.window;
-  w.localStorage.setItem('tizumark-eula-accepted', 'true');
-  const rect = () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 });
-  w.Range.prototype.getBoundingClientRect = rect;
-  w.Range.prototype.getClientRects = () => [];
-  w.Element.prototype.getBoundingClientRect = rect;
-  w.Element.prototype.getClientRects = () => [];
-  const RO = class { observe() {} unobserve() {} disconnect() {} };
-  w.ResizeObserver = RO;
-  w.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } };
-  w.matchMedia = () => ({ matches: false, media: '', onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent() { return false; } });
-  const tauri = {
-    core: { invoke: async (cmd) => {
-      if (cmd === 'get_cli_args') return [];
-      if (cmd === 'app_data_dir') return 'C:/tmp/tizumark-data';
-      return undefined;
-    } },
-    event: { listen: async () => () => {} },
-    window: { getCurrentWindow: () => ({ unminimize: async () => {}, show: async () => {}, setFocus: async () => {}, isMaximized: async () => false }) },
-    path: { resourceDir: async () => '' },
-    shell: { open: async () => {} },
-  };
-  w.__TAURI__ = tauri;
-  global.window = w;
-  global.document = w.document;
-  global.navigator = w.navigator;
-  w.CodeMirror = require('codemirror');
-  // find-next 依赖 searchcursor addon
-  require('codemirror/addon/search/searchcursor');
-
-  const modulesDir = path.join(ROOT, 'src', 'modules');
-  for (const f of fs.readdirSync(modulesDir).filter(x => x.endsWith('.js'))) {
-    try { w.eval(fs.readFileSync(path.join(modulesDir, f), 'utf8')); }
-    catch (_) { /* 忽略非关键模块加载失败 */ }
-  }
-
-  let initErr = null;
-  const origErr = console.error;
-  console.error = (...a) => {
-    const s = String(a[0] || '');
-    if (s.includes('Initialization error')) initErr = a[1];
-  };
-  w.eval(appjs);
-  console.error = origErr;
-  w.document.dispatchEvent(new w.Event('DOMContentLoaded', { bubbles: true }));
-  return { w, getInitErr: () => initErr };
-}
+const { buildEnv, cleanup } = require('./helpers/app-env.cjs');
 
 test('find: 正则模式下 find-next 不抛 ReferenceError（RegExpCtor bug 修复）', () => {
-  const { w } = buildEnv();
+  const { w } = buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const cm = w.editor.cm;
@@ -101,7 +40,7 @@ test('find: 正则模式下 find-next 不抛 ReferenceError（RegExpCtor bug 修
 // 来源）依赖真机验证：CM 有焦点时按一次 Ctrl+F 面板即打开，不被立即关闭。
 
 test('find: 全部高亮 — 输入 query 后标记所有匹配', () => {
-  const { w } = buildEnv();
+  const { w } = buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const cm = w.editor.cm;
@@ -119,7 +58,7 @@ test('find: 全部高亮 — 输入 query 后标记所有匹配', () => {
 });
 
 test('find: 全部高亮 — 超 2000 上限仅标记前 2000 个', () => {
-  const { w } = buildEnv();
+  const { w } = buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const cm = w.editor.cm;
@@ -137,7 +76,7 @@ test('find: 全部高亮 — 超 2000 上限仅标记前 2000 个', () => {
 });
 
 test('find: clearFindHighlights 清除所有高亮 mark', () => {
-  const { w } = buildEnv();
+  const { w } = buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const cm = w.editor.cm;
@@ -157,7 +96,7 @@ test('find: clearFindHighlights 清除所有高亮 mark', () => {
 });
 
 test('crossSearch: searchOpenFiles 遍历 tabs 收集匹配', async () => {
-  const { w } = buildEnv();
+  const { w } = buildEnv({ captureInitErr: true });
   await new Promise(r => setTimeout(r, 300));
   const ed = w.editor;
   ed.tabs = [
@@ -173,7 +112,7 @@ test('crossSearch: searchOpenFiles 遍历 tabs 收集匹配', async () => {
 });
 
 test('crossSearch: Ctrl+Shift+F 注册为跨文件搜索', () => {
-  const { w } = buildEnv();
+  const { w } = buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       assert.strictEqual(typeof w.editor.globalShortcutLookup['Ctrl+Shift+F'], 'function', 'Ctrl+Shift+F 应注册为跨文件搜索');
@@ -184,7 +123,7 @@ test('crossSearch: Ctrl+Shift+F 注册为跨文件搜索', () => {
 });
 
 test('crossSearch: scope radio 切换显示/隐藏目录行', () => {
-  const { w } = buildEnv();
+  const { w } = buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -206,7 +145,7 @@ test('crossSearch: scope radio 切换显示/隐藏目录行', () => {
 });
 
 test('crossSearch: 非模态 — overlay 透明且外部点击不关闭', () => {
-  const { w } = buildEnv();
+  const { w } = buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;
@@ -224,7 +163,7 @@ test('crossSearch: 非模态 — overlay 透明且外部点击不关闭', () => 
 });
 
 test('crossSearch: 标题栏拖动改变面板位置', () => {
-  const { w } = buildEnv();
+  const { w } = buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
       const ed = w.editor;

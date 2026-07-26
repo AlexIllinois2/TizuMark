@@ -11,56 +11,15 @@
 // 复用 init-smoke / find-bugfix 的 jsdom 加载方式，但 buildEnv 支持注入自定义 invoke 实现，
 // 因为 dialogOpen 与 search_in_files 都经 window.__TAURI__.core.invoke 走（app.js:1 解构捕获）。
 
-const { JSDOM } = require('jsdom');
-const fs = require('fs');
-const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert');
+const { buildEnv, cleanup, delay } = require('./helpers/app-env.cjs');
 
-const ROOT = path.resolve(__dirname, '..');
-const html = fs.readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8');
-const appjs = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
-const css = fs.readFileSync(path.join(ROOT, 'src', 'styles.css'), 'utf8');
-
-function cleanup(w) {
-  try { if (w.editor && w.editor.cm && w.editor.cm.close) w.editor.cm.close(); } catch (_) {}
-  try { if (w.close) w.close(); } catch (_) {}
-}
+const fs = require('fs');
+const path = require('path');
+const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'styles.css'), 'utf8');
 
 // invokeImpl: (cmd, args) => any；默认对未知命令返回 undefined（与真实 stub 行为一致）
-function buildEnv(invokeImpl) {
-  const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true, runScripts: 'outside-only' });
-  const w = dom.window;
-  w.localStorage.setItem('tizumark-eula-accepted', 'true');
-  const rect = () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 });
-  w.Range.prototype.getBoundingClientRect = rect;
-  w.Range.prototype.getClientRects = () => [];
-  w.Element.prototype.getBoundingClientRect = rect;
-  w.Element.prototype.getClientRects = () => [];
-  w.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  w.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } };
-  w.matchMedia = () => ({ matches: false, media: '', onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent() { return false; } });
-  const tauri = {
-    core: { invoke: async (cmd, args) => (invokeImpl ? invokeImpl(cmd, args) : undefined) },
-    event: { listen: async () => () => {} },
-    window: { getCurrentWindow: () => ({ unminimize: async () => {}, show: async () => {}, setFocus: async () => {}, isMaximized: async () => false }) },
-    path: { resourceDir: async () => '' },
-    shell: { open: async () => {} },
-  };
-  w.__TAURI__ = tauri;
-  global.window = w;
-  global.document = w.document;
-  global.navigator = w.navigator;
-  w.CodeMirror = require('codemirror');
-  require('codemirror/addon/search/searchcursor');
-  const modulesDir = path.join(ROOT, 'src', 'modules');
-  for (const f of fs.readdirSync(modulesDir).filter(x => x.endsWith('.js'))) {
-    try { w.eval(fs.readFileSync(path.join(modulesDir, f), 'utf8')); } catch (_) {}
-  }
-  w.eval(appjs);
-  w.document.dispatchEvent(new w.Event('DOMContentLoaded', { bubbles: true }));
-  return { w };
-}
 
 // ---------- A. CSS 灰色遮罩修复回归（第 6 项核心 bug）----------
 test('css: 跨文件搜索 overlay 必须用 .dialog-overlay.cross-search-overlay 高特异性覆盖灰色背景', () => {

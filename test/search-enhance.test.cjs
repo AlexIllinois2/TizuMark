@@ -6,57 +6,13 @@
 //
 // 复用 jsdom + 真实 CodeMirror 实例的 harness；invoke 可注入以便测试 search_in_files 路径。
 
-const { JSDOM } = require('jsdom');
-const fs = require('fs');
-const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert');
+const { buildEnv, cleanup, delay } = require('./helpers/app-env.cjs');
 
-const ROOT = path.resolve(__dirname, '..');
-const html = fs.readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8');
-const appjs = fs.readFileSync(path.join(ROOT, 'src', 'app.js'), 'utf8');
-const css = fs.readFileSync(path.join(ROOT, 'src', 'styles.css'), 'utf8');
-
-function cleanup(w) {
-  try { if (w.editor && w.editor.cm && w.editor.cm.close) w.editor.cm.close(); } catch (_) {}
-  try { if (w.close) w.close(); } catch (_) {}
-}
-
-function buildEnv(invokeImpl) {
-  const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true, runScripts: 'outside-only' });
-  const w = dom.window;
-  w.localStorage.setItem('tizumark-eula-accepted', 'true');
-  const rect = () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 });
-  w.Range.prototype.getBoundingClientRect = rect;
-  w.Range.prototype.getClientRects = () => [];
-  w.Element.prototype.getBoundingClientRect = rect;
-  w.Element.prototype.getClientRects = () => [];
-  w.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
-  w.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } };
-  w.matchMedia = () => ({ matches: false, media: '', onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent() { return false; } });
-  const tauri = {
-    core: { invoke: async (cmd, args) => (invokeImpl ? invokeImpl(cmd, args) : undefined) },
-    event: { listen: async () => () => {} },
-    window: { getCurrentWindow: () => ({ unminimize: async () => {}, show: async () => {}, setFocus: async () => {}, isMaximized: async () => false }) },
-    path: { resourceDir: async () => '' },
-    shell: { open: async () => {} },
-  };
-  w.__TAURI__ = tauri;
-  global.window = w;
-  global.document = w.document;
-  global.navigator = w.navigator;
-  w.CodeMirror = require('codemirror');
-  require('codemirror/addon/search/searchcursor');
-  const modulesDir = path.join(ROOT, 'src', 'modules');
-  for (const f of fs.readdirSync(modulesDir).filter(x => x.endsWith('.js'))) {
-    try { w.eval(fs.readFileSync(path.join(modulesDir, f), 'utf8')); } catch (_) {}
-  }
-  w.eval(appjs);
-  w.document.dispatchEvent(new w.Event('DOMContentLoaded', { bubbles: true }));
-  return { w };
-}
-
-const delay = (ms) => new Promise(r => setTimeout(r, ms));
+const fs = require('fs');
+const path = require('path');
+const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'styles.css'), 'utf8');
 
 // ---------- 需求2：醒目黄色高亮（编辑 + 预览共用 .search-match）----------
 test('css: .search-match 为醒目黄色（编辑与预览共用）', () => {
