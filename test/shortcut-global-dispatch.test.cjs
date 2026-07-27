@@ -1,6 +1,7 @@
-// 全局快捷键统一由 document 级 keydown 派发（修复：编辑器内有焦点时 Ctrl+Shift+F
-// 等全局快捷键偶发失效）。验证：
-//  1. 编辑器有焦点时按 Ctrl+Shift+F 打开跨文件搜索（不再依赖 CM extraKeys）
+// 全局快捷键由 document 级捕获阶段 keydown 统一派发（编辑器有无焦点均生效）。
+// 注意：跨文件搜索原为 Ctrl+Shift+F，因被中文输入法（搜狗/微软拼音）的「简繁切换」
+// 热键在 OS 层拦截（keydown 不到达 DOM），已改为 Ctrl+H。验证：
+//  1. 编辑器有焦点时按 Ctrl+H 打开跨文件搜索
 //  2. 编辑器有焦点时按 Ctrl+F 打开页面内查找（且不双击关闭）
 //  3. 编辑器无焦点（焦点在 body）时同样能打开
 //  4. CM extraKeys 中全局键被置为 false，CM 默认键位（search.js 的 replace）不会抢触发
@@ -27,19 +28,18 @@ function withEditorReady(w, ms, body) {
   }));
 }
 
-test('全局快捷键：编辑器有焦点时 Ctrl+Shift+F 打开跨文件搜索', async () => {
+test('全局快捷键：编辑器有焦点时 Ctrl+H 打开跨文件搜索', async () => {
   const { w } = await buildEnv({ captureInitErr: true });
-  require('codemirror/addon/search/search.js'); // 加载真实 search.js（提供默认 Shift-Ctrl-F→replace）
   return withEditorReady(w, 400, () => {
     const cm = w.editor.cm;
     const dlg = w.document.getElementById('cross-search-dialog');
     const inner = cm.getWrapperElement().querySelector('.CodeMirror-code') || cm.getWrapperElement();
     cm.focus();
     assert.ok(dlg.classList.contains('hidden'), '前置：跨文件搜索应关闭');
-    dispatchKey(w, inner, 'F', 'KeyF', 70, { ctrl: true, shift: true });
-    assert.ok(!dlg.classList.contains('hidden'), '编辑器有焦点时 Ctrl+Shift+F 应打开跨文件搜索');
-    assert.strictEqual(typeof cm.getOption('extraKeys')['Shift-Ctrl-F'], 'function',
-      'CM extraKeys 中 Shift-Ctrl-F 应被中性化为禁用默认 replace 的处理器（function 返回 false）');
+    dispatchKey(w, inner, 'H', 'KeyH', 72, { ctrl: true, shift: false });
+    assert.ok(!dlg.classList.contains('hidden'), '编辑器有焦点时 Ctrl+H 应打开跨文件搜索');
+    assert.strictEqual(cm.getOption('extraKeys')['Ctrl-H'], false,
+      'CM extraKeys 中 Ctrl-H 应被置为 false（禁用默认 replace，由 document 捕获阶段统一派发）');
     cleanup(w);
   });
 });
@@ -64,34 +64,32 @@ test('全局快捷键：编辑器有焦点时 Ctrl+F 打开页面内查找（单
   });
 });
 
-test('全局快捷键：焦点不在编辑器时 Ctrl+Shift+F 仍打开跨文件搜索', async () => {
+test('全局快捷键：焦点不在编辑器时 Ctrl+H 仍打开跨文件搜索', async () => {
   const { w } = await buildEnv({ captureInitErr: true });
   return withEditorReady(w, 400, () => {
     const dlg = w.document.getElementById('cross-search-dialog');
     assert.ok(dlg.classList.contains('hidden'), '前置：跨文件搜索应关闭');
-    dispatchKey(w, w.document.body, 'F', 'KeyF', 70, { ctrl: true, shift: true });
-    assert.ok(!dlg.classList.contains('hidden'), '焦点在 body 时 Ctrl+Shift+F 应打开跨文件搜索');
+    dispatchKey(w, w.document.body, 'H', 'KeyH', 72, { ctrl: true, shift: false });
+    assert.ok(!dlg.classList.contains('hidden'), '焦点在 body 时 Ctrl+H 应打开跨文件搜索');
     cleanup(w);
   });
 });
 
-test('全局快捷键：CM 默认键位 Shift-Ctrl-F(replace) 不会在编辑器内抢触发', async () => {
+test('全局快捷键：Ctrl+H 不会在编辑器内被 CM 默认行为截胡（extraKeys 已禁）', async () => {
   const { w } = await buildEnv({ captureInitErr: true });
-  require('codemirror/addon/search/search.js');
   return withEditorReady(w, 400, () => {
     const cm = w.editor.cm;
+    const dlg = w.document.getElementById('cross-search-dialog');
     const inner = cm.getWrapperElement().querySelector('.CodeMirror-code') || cm.getWrapperElement();
     cm.focus();
-    dispatchKey(w, inner, 'F', 'KeyF', 70, { ctrl: true, shift: true });
-    const cmDialog = w.document.querySelector('.CodeMirror-dialog');
-    assert.strictEqual(cmDialog, null, '不应出现 CM search.js 的 replace 对话框（被 false 禁用）');
+    dispatchKey(w, inner, 'H', 'KeyH', 72, { ctrl: true, shift: false });
+    assert.ok(!dlg.classList.contains('hidden'), 'Ctrl+H 应被捕获阶段拦截，打开跨文件搜索，而非触发 CM 的 Ctrl-H 默认行为');
     cleanup(w);
   });
 });
 
 test('全局快捷键：真实输入区派发（contenteditable）+ 捕获阶段拦截', async () => {
   const { w } = await buildEnv({ captureInitErr: true });
-  require('codemirror/addon/search/search.js');
   return withEditorReady(w, 400, () => {
     const ed = w.editor;
     const cm = ed.cm;
@@ -103,14 +101,14 @@ test('全局快捷键：真实输入区派发（contenteditable）+ 捕获阶段
     cm.focus();
     assert.ok(dlg.classList.contains('hidden'), '前置：跨文件搜索应关闭');
     // 在 CM 真正的输入区派发（真实浏览器 keydown 的 target 就是它）
-    dispatchKey(w, field, 'F', 'KeyF', 70, { ctrl: true, shift: true });
-    assert.ok(!dlg.classList.contains('hidden'), '真实输入区内 Ctrl+Shift+F 应打开跨文件搜索');
+    dispatchKey(w, field, 'H', 'KeyH', 72, { ctrl: true, shift: false });
+    assert.ok(!dlg.classList.contains('hidden'), '真实输入区内 Ctrl+H 应打开跨文件搜索');
     assert.strictEqual(called, 1, '仅由捕获阶段处理器派发一次（不重复）');
     cleanup(w);
   });
 });
 
-test('全局快捷键：e.key 异常(小写/控制字符)但 e.code=KeyF 时仍能匹配', async () => {
+test('全局快捷键：e.key 异常(小写/控制字符)但 e.code=KeyH 时仍能匹配', async () => {
   const { w } = await buildEnv({ captureInitErr: true });
   return withEditorReady(w, 400, () => {
     const ed = w.editor;
@@ -120,10 +118,10 @@ test('全局快捷键：e.key 异常(小写/控制字符)但 e.code=KeyF 时仍�
     const orig = ed.openCrossSearchDialog.bind(ed);
     ed.openCrossSearchDialog = (...a) => { called++; return orig(...a); };
     cm.focus();
-    // 模拟个别浏览器下 Ctrl+Shift+F 的 e.key 并非大写 'F'（如某些布局给小写 'f'
-    // 或控制字符），但物理键 code 仍是 'KeyF' —— 应靠 e.code 正确匹配。
-    dispatchKey(w, w.document.body, 'f', 'KeyF', 70, { ctrl: true, shift: true });
-    assert.strictEqual(called, 1, 'e.code=KeyF 时应仍能匹配 Ctrl+Shift+F 并打开跨文件搜索');
+    // 模拟个别浏览器下 Ctrl+H 的 e.key 并非大写 'H'（如某些布局给小写 'h'
+    // 或控制字符），但物理键 code 仍是 'KeyH' —— 应靠 e.code 正确匹配。
+    dispatchKey(w, w.document.body, 'h', 'KeyH', 72, { ctrl: true, shift: false });
+    assert.strictEqual(called, 1, 'e.code=KeyH 时应仍能匹配 Ctrl+H 并打开跨文件搜索');
     assert.ok(!dlg.classList.contains('hidden'), '跨文件搜索应已打开');
     cleanup(w);
   });

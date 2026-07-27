@@ -111,11 +111,11 @@ test('crossSearch: searchOpenFiles 遍历 tabs 收集匹配', async () => {
   cleanup(w);
 });
 
-test('crossSearch: Ctrl+Shift+F 注册为跨文件搜索', async () => {
+test('crossSearch: Ctrl+H 注册为跨文件搜索', async () => {
   const { w } = await buildEnv({ captureInitErr: true });
   return new Promise((resolve) => {
     setTimeout(() => {
-      assert.strictEqual(typeof w.editor.globalShortcutLookup['Ctrl+Shift+F'], 'function', 'Ctrl+Shift+F 应注册为跨文件搜索');
+      assert.strictEqual(typeof w.editor.globalShortcutLookup['Ctrl+H'], 'function', 'Ctrl+H 应注册为跨文件搜索');
       cleanup(w);
       resolve();
     }, 300);

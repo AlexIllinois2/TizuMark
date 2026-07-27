@@ -243,7 +243,8 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: '本软件基于 GPL v3 开源协议发布。',
     noUnauthorized: '欢迎自由使用、修改和分发，衍生作品须延续 GPL v3 协议。',
-    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找（编辑器）', findReplace: '查找替换', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', previewFind: '预览查找', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要' },
+    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要' },
+    shortcutGroup: { file: '文件', search: '查找与搜索', tabView: '标签页与视图', format: '文本格式', insert: '插入', heading: '标题', callout: '提示块' },
     shortcutScheme: '快捷键方案',
     shortcutList: '快捷键',
     crossSearch: '跨文件搜索',
@@ -580,7 +581,8 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: 'This software is released under the GPL v3 open-source license.',
     noUnauthorized: 'Free to use, modify, and distribute. Derivative works must remain under GPL v3.',
-    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find (Editor)', findReplace: 'Find & Replace', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', previewFind: 'Find in Preview', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important' },
+    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important' },
+    shortcutGroup: { file: 'File', search: 'Find & Search', tabView: 'Tabs & View', format: 'Text Format', insert: 'Insert', heading: 'Headings', callout: 'Callouts' },
     shortcutScheme: 'Shortcut Scheme',
     shortcutList: 'Shortcuts',
     crossSearch: 'Cross-file Search',
@@ -2187,8 +2189,7 @@ class MarkdownEditor {
       openFile: { key: 'Ctrl+O', label: '打开' },
       saveFile: { key: 'Ctrl+S', label: '保存' },
       closeTab: { key: 'Ctrl+W', label: '关闭标签页' },
-      find: { key: 'Ctrl+F', label: '查找' },
-      findReplace: { key: 'Ctrl+H', label: '查找和替换' },
+      find: { key: 'Ctrl+F', label: '查找替换' },
       nextTab: { key: 'Ctrl+Tab', label: '下一个标签页' },
       prevTab: { key: 'Ctrl+Shift+Tab', label: '上一个标签页' },
       bold: { key: 'Ctrl+B', label: '加粗' },
@@ -2202,8 +2203,7 @@ class MarkdownEditor {
       toggleView: { key: '', label: '切换视图' },
       toggleTheme: { key: 'Ctrl+Shift+T', label: '切换主题' },
       saveAs: { key: '', label: '另存为' },
-      previewFind: { key: '', label: '预览查找' },
-      crossSearch: { key: 'Ctrl+Shift+F', label: '跨文件搜索' },
+      crossSearch: { key: 'Ctrl+H', label: '跨文件搜索' },
       insertTable: { key: '', label: '插入表格' },
       insertImage: { key: '', label: '插入图片' },
       insertUl: { key: '', label: '无序列表' },
@@ -2236,14 +2236,14 @@ class MarkdownEditor {
     return {
       vscode: {
         newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', saveAs:'Ctrl+Shift+S',
-        closeTab:'Ctrl+W', find:'Ctrl+F', findReplace:'Ctrl+H', crossSearch:'Ctrl+Shift+F',
+        closeTab:'Ctrl+W', find:'Ctrl+F', crossSearch:'Ctrl+H',
         nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
         bold:'Ctrl+B', italic:'Ctrl+I', inlineCode:'Ctrl+`', insertLink:'Ctrl+K',
         insertMathBlock:'Ctrl+Shift+M', toggleTheme:'Ctrl+Shift+T', exportPDF:'Ctrl+P',
       },
       typora: {
         newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', closeTab:'Ctrl+W',
-        find:'Ctrl+F', findReplace:'Ctrl+H', crossSearch:'Ctrl+Shift+F',
+        find:'Ctrl+F', crossSearch:'Ctrl+H',
         nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
         bold:'Ctrl+B', italic:'Ctrl+I', insertLink:'Ctrl+K', exportPDF:'Ctrl+P',
         inlineCode:'Ctrl+Shift+`', strikethrough:'Ctrl+Shift+5', codeBlock:'Ctrl+Shift+K',
@@ -2254,7 +2254,7 @@ class MarkdownEditor {
       },
       sublime: {
         newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', saveAs:'Ctrl+Shift+S',
-        closeTab:'Ctrl+W', find:'Ctrl+F', findReplace:'Ctrl+H', crossSearch:'Ctrl+Shift+F',
+        closeTab:'Ctrl+W', find:'Ctrl+F', crossSearch:'Ctrl+H',
         nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
         exportPDF:'Ctrl+P', toggleTheme:'Ctrl+Shift+T',
       },
@@ -2293,10 +2293,15 @@ class MarkdownEditor {
     try {
       const saved = this._validConfigObject(JSON.parse(localStorage.getItem('tizumark-shortcuts')));
       const merged = { ...defaults, ...saved };
-      // 迁移：Ctrl+Shift+F 现归 crossSearch，清理旧 vscode 预设残留的 previewFind 键位
-      if (merged.previewFind && merged.previewFind.key === 'Ctrl+Shift+F') {
-        merged.previewFind = { ...merged.previewFind, key: '' };
+      // 迁移：Ctrl+Shift+F 被中文输入法拦截，迁移到 Ctrl+H（不受输入法拦截）。
+      // 此前中间版本用过 Ctrl+Shift+L，也一并迁移到 Ctrl+H。
+      if (merged.crossSearch && (merged.crossSearch.key === 'Ctrl+Shift+F' || merged.crossSearch.key === 'Ctrl+Shift+L')) {
+        merged.crossSearch = { ...merged.crossSearch, key: 'Ctrl+H' };
       }
+      // 迁移：findReplace / previewFind 不再作为独立快捷键项（与 find 是同一功能），
+      // 若用户有保存的键位则清理。
+      if (merged.findReplace) delete merged.findReplace;
+      if (merged.previewFind) delete merged.previewFind;
       return merged;
     } catch {
       return defaults;
@@ -2363,8 +2368,10 @@ class MarkdownEditor {
       'insert-task': 'insertTask',
       'insert-link': 'insertLink',
       'insert-image': 'insertImage',
-      'find-replace': 'findReplace',
-      'preview-find': 'previewFind',
+      // find-replace / preview-find 菜单项与 find 是同一功能（toggleFindPanel），
+      // 提示统一显示 find 的键位
+      'find-replace': 'find',
+      'preview-find': 'find',
       'insert-superscript': 'insertSuperscript',
       'insert-subscript': 'insertSubscript',
       'insert-h1': 'insertH1',
@@ -2408,65 +2415,41 @@ class MarkdownEditor {
   renderShortcutsList() {
     const container = document.getElementById('shortcuts-list');
     const labels = this.t('shortcutLabel');
-    const actions = [
-      { id: 'newFile', label: labels.newFile || 'New File' },
-      { id: 'openFile', label: labels.openFile || 'Open File' },
-      { id: 'saveFile', label: labels.saveFile || 'Save File' },
-      { id: 'saveAs', label: labels.saveAs || 'Save As' },
-      { id: 'closeTab', label: labels.closeTab || 'Close Tab' },
-      { id: 'exportPDF', label: labels.exportPDF || 'Export PDF' },
-      { id: 'find', label: labels.find || 'Find' },
-      { id: 'findReplace', label: labels.findReplace || 'Find & Replace' },
-      { id: 'previewFind', label: labels.previewFind || 'Find in Preview' },
-      { id: 'nextTab', label: labels.nextTab || 'Next Tab' },
-      { id: 'prevTab', label: labels.prevTab || 'Previous Tab' },
-      { id: 'bold', label: labels.bold || 'Bold' },
-      { id: 'italic', label: labels.italic || 'Italic' },
-      { id: 'strikethrough', label: labels.strikethrough || 'Strikethrough' },
-      { id: 'inlineCode', label: labels.inlineCode || 'Inline Code' },
-      { id: 'highlight', label: labels.highlight || 'Highlight' },
-      { id: 'codeBlock', label: labels.codeBlock || 'Code Block' },
-      { id: 'blockquote', label: labels.blockquote || 'Blockquote' },
-      { id: 'insertTable', label: labels.insertTable || 'Insert Table' },
-      { id: 'insertUl', label: labels.insertUl || 'Unordered List' },
-      { id: 'insertOl', label: labels.insertOl || 'Ordered List' },
-      { id: 'insertTask', label: labels.insertTask || 'Task List' },
-      { id: 'insertHr', label: labels.insertHr || 'Horizontal Rule' },
-      { id: 'insertLink', label: labels.insertLink || 'Insert Link' },
-      { id: 'insertImage', label: labels.insertImage || 'Insert Image' },
-      { id: 'toggleView', label: labels.toggleView || 'Toggle View' },
-      { id: 'toggleTheme', label: labels.toggleTheme || 'Toggle Theme' },
-      { id: 'insertSuperscript', label: labels.insertSuperscript || 'Superscript' },
-      { id: 'insertSubscript', label: labels.insertSubscript || 'Subscript' },
-      { id: 'insertH1', label: labels.insertH1 || 'Heading 1' },
-      { id: 'insertH2', label: labels.insertH2 || 'Heading 2' },
-      { id: 'insertH3', label: labels.insertH3 || 'Heading 3' },
-      { id: 'insertH4', label: labels.insertH4 || 'Heading 4' },
-      { id: 'insertH5', label: labels.insertH5 || 'Heading 5' },
-      { id: 'insertH6', label: labels.insertH6 || 'Heading 6' },
-      { id: 'insertMathBlock', label: labels.insertMathBlock || 'Math Block' },
-      { id: 'insertMermaid', label: labels.insertMermaid || 'Mermaid Diagram' },
-      { id: 'insertToc', label: labels.insertToc || 'Table of Contents' },
-      { id: 'insertCalloutNote', label: labels.insertCalloutNote || 'Callout Note' },
-      { id: 'insertCalloutTip', label: labels.insertCalloutTip || 'Callout Tip' },
-      { id: 'insertCalloutWarning', label: labels.insertCalloutWarning || 'Callout Warning' },
-      { id: 'insertCalloutCaution', label: labels.insertCalloutCaution || 'Callout Caution' },
-      { id: 'insertCalloutImportant', label: labels.insertCalloutImportant || 'Callout Important' },
+    const groupLabels = this.t('shortcutGroup') || {};
+    // 按功能分组展示，便于在长列表中查找
+    const groups = [
+      { key: 'file', ids: ['newFile', 'openFile', 'saveFile', 'saveAs', 'closeTab', 'exportPDF'] },
+      { key: 'search', ids: ['find', 'crossSearch'] },
+      { key: 'tabView', ids: ['nextTab', 'prevTab', 'toggleView', 'toggleTheme'] },
+      { key: 'format', ids: ['bold', 'italic', 'strikethrough', 'inlineCode', 'highlight', 'insertSuperscript', 'insertSubscript'] },
+      { key: 'insert', ids: ['insertLink', 'insertImage', 'insertTable', 'insertUl', 'insertOl', 'insertTask', 'insertHr', 'codeBlock', 'blockquote', 'insertMathBlock', 'insertMermaid', 'insertToc'] },
+      { key: 'heading', ids: ['insertH1', 'insertH2', 'insertH3', 'insertH4', 'insertH5', 'insertH6'] },
+      { key: 'callout', ids: ['insertCalloutNote', 'insertCalloutTip', 'insertCalloutWarning', 'insertCalloutCaution', 'insertCalloutImportant'] },
     ];
 
-    container.innerHTML = actions.map(action => {
-      const shortcut = this.shortcuts[action.id];
-      const isRecording = this.recordingAction === action.id;
-      return `
-        <div class="shortcut-row" data-action="${action.id}">
-          <span class="shortcut-label">${action.label}</span>
+    container.innerHTML = groups.map(group => {
+      const rows = group.ids
+        .filter(id => this.shortcuts[id])
+        .map(id => {
+          const shortcut = this.shortcuts[id];
+          const isRecording = this.recordingAction === id;
+          const label = labels[id] || shortcut.label || id;
+          return `
+        <div class="shortcut-row" data-action="${id}">
+          <span class="shortcut-label">${label}</span>
           <div class="shortcut-actions">
             <div class="shortcut-key">${this.formatShortcutDisplay(shortcut.key)}</div>
-            <button class="shortcut-record-btn${isRecording ? ' recording' : ''}" data-action="${action.id}">${isRecording ? this.t('pressKeys') : this.t('modify')}</button>
-            <button class="shortcut-clear-btn" data-action="${action.id}">${this.t('clear')}</button>
+            <button class="shortcut-record-btn${isRecording ? ' recording' : ''}" data-action="${id}">${isRecording ? this.t('pressKeys') : this.t('modify')}</button>
+            <button class="shortcut-clear-btn" data-action="${id}">${this.t('clear')}</button>
           </div>
-        </div>
-      `;
+        </div>`;
+        }).join('');
+      if (!rows) return '';
+      return `
+        <div class="shortcut-group">
+          <div class="shortcut-group-title">${groupLabels[group.key] || group.key}</div>
+          ${rows}
+        </div>`;
     }).join('');
 
     const schemeSel = document.getElementById('shortcuts-scheme');
@@ -2682,8 +2665,6 @@ class MarkdownEditor {
       toggleView: () => this.toggleViewMode(),
       toggleTheme: () => this.toggleTheme(),
       find: () => this.toggleFindPanel(),
-      findReplace: () => this.toggleFindPanel(true),
-      previewFind: () => this.toggleFindPanel(),
       crossSearch: () => this.openCrossSearchDialog(),
       nextTab: () => {
         const next = (this.activeTabIndex + 1) % this.tabs.length;
@@ -2711,13 +2692,7 @@ class MarkdownEditor {
     // for handled keys, so the event still reaches the document handler.
     for (const [action, fn] of Object.entries(globalMap)) {
       const key = s[action]?.key;
-      if (key) {
-        // 兜底：即便事件因某些 WebView/浏览器差异未被 document 捕获阶段拦截，
-        // 也在 CM 键位里直接派发同一全局处理函数，避免编辑器有焦点时全局快捷键失效。
-        // 返回 false 表示 CM 已处理、阻止默认行为；与 document 捕获阶段派发互斥
-        // （捕获阶段已 stopPropagation 时 CM 不会收到事件，不会重复派发）。
-        extraKeys[toCmKey(key)] = () => { try { fn(); } catch (_) {} return false; };
-      }
+      if (key) extraKeys[toCmKey(key)] = false;
     }
     this.cm.setOption('extraKeys', extraKeys);
 
@@ -4406,34 +4381,37 @@ class MarkdownEditor {
         this.applyViewMode();
       }
     }
+    const pos = { line: Math.max(0, line - 1), ch: Math.max(0, col - 1) };
+    // 编辑区跳转目标行；大文档滑动窗口需先以该行为焦点重渲染，否则匹配行不在窗口片段内无法定位
+    this._previewFocusLine = pos.line;
+    this._previewScrollDriven = false;
     await this.ensureTabLoaded(this.activeTab);
     // 确保预览已用新文件内容渲染完（异步），便于后续预览高亮准确定位
     await this.updatePreview();
     this.cm.focus();
-    const pos = { line: line - 1, ch: col - 1 };
     // 计算高亮区间：优先用后端返回的 len；目录搜索 len=0 时按查询在行内定位
     let from = pos, to = pos;
     const query = this.csLastQuery || '';
     const cs = document.getElementById('cs-case').checked;
     const ur = document.getElementById('cs-regex').checked;
     if (len > 0) {
-      to = { line: line - 1, ch: col - 1 + len };
+      to = { line: pos.line, ch: pos.ch + len };
     } else if (query) {
-      const lineText = this.cm.getLine(line - 1) || '';
+      const lineText = this.cm.getLine(pos.line) || '';
       let matchLen = 0;
       if (ur) {
         try {
           const re = new RegExp(query, cs ? '' : 'i');
-          const m = lineText.slice(col - 1).match(re);
+          const m = lineText.slice(pos.ch).match(re);
           if (m) matchLen = m[0].length;
         } catch (_) { /* 非法正则忽略 */ }
       } else {
         const hay = cs ? lineText : lineText.toLowerCase();
         const q = cs ? query : query.toLowerCase();
-        const idx = hay.indexOf(q, col - 1);
+        const idx = hay.indexOf(q, pos.ch);
         if (idx !== -1) matchLen = q.length;
       }
-      if (matchLen > 0) to = { line: line - 1, ch: col - 1 + matchLen };
+      if (matchLen > 0) to = { line: pos.line, ch: pos.ch + matchLen };
     }
     // 编辑框黄色高亮：清除上一次跨文件高亮，标记当前匹配
     this.clearCrossSearchHighlights();
@@ -4447,7 +4425,12 @@ class MarkdownEditor {
       this.cm.setCursor(pos);
     }
     this.cm.scrollIntoView(pos, 100);
-    // 预览框 / 预览模式黄色高亮（编辑与预览两种模式下预览均可见）
+    // 预览同步滚动到匹配行：预览 / 分屏模式下用户才能直观看到“跳转”
+    try {
+      this._buildWindowLineTops();
+      this._focusPreviewToLine(pos.line);
+    } catch (_) {}
+    // 预览框黄色高亮（编辑与预览两种模式下预览均可见）
     if (query && (this.viewMode === 'preview' || this.viewMode === 'edit')) {
       this.highlightPreviewMatches(query, cs, ur);
     }

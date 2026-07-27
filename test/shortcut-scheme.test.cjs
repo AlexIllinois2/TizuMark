@@ -84,10 +84,14 @@ test('B3 预置方案仅引用合法 actionId', async () => {
 // C. applyShortcutScheme 整体覆盖
 // ============================================================
 
-test('C1 applyShortcutScheme("typora") 覆盖 44 项且不重复', async () => {
+// 默认设置项总数以 getDefaultShortcuts 为准（历史上曾为 44：含 findReplace/previewFind，
+// 二者与 find 同一功能已合并移除，现为 42）
+const DEFAULT_COUNT = Object.keys(getDefaultShortcuts()).length;
+
+test('C1 applyShortcutScheme("typora") 覆盖全部默认项且不重复', async () => {
   const s = makeSchemeStub();
   applyShortcutScheme.call(s, 'typora');
-  assert.strictEqual(Object.keys(s.shortcuts).length, 44);
+  assert.strictEqual(Object.keys(s.shortcuts).length, DEFAULT_COUNT);
   assert.strictEqual(s.shortcuts.insertH1.key, 'Ctrl+1');
   assert.strictEqual(s.shortcuts.strikethrough.key, 'Ctrl+Shift+5');
   assert.strictEqual(s.shortcuts.saveAs.key, '');
@@ -97,7 +101,7 @@ test('C1 applyShortcutScheme("typora") 覆盖 44 项且不重复', async () => {
 test('C2 applyShortcutScheme("vscode") 与默认不撞（saveAs=Ctrl+Shift+S，strikethrough 回落空）', async () => {
   const s = makeSchemeStub();
   applyShortcutScheme.call(s, 'vscode');
-  assert.strictEqual(Object.keys(s.shortcuts).length, 44);
+  assert.strictEqual(Object.keys(s.shortcuts).length, DEFAULT_COUNT);
   assert.strictEqual(s.shortcuts.saveAs.key, 'Ctrl+Shift+S');
   assert.strictEqual(s.shortcuts.strikethrough.key, '');
   assert.strictEqual(s.shortcutScheme, 'vscode');
@@ -107,7 +111,7 @@ test('C3 applyShortcutScheme("default") 整体恢复默认键位', async () => {
   const s = makeSchemeStub();
   applyShortcutScheme.call(s, 'default');
   const def = getDefaultShortcuts();
-  assert.strictEqual(Object.keys(s.shortcuts).length, 44);
+  assert.strictEqual(Object.keys(s.shortcuts).length, DEFAULT_COUNT);
   assert.strictEqual(s.shortcuts.bold.key, def.bold.key);
   assert.strictEqual(s.shortcuts.saveAs.key, def.saveAs.key);
   assert.strictEqual(s.shortcutScheme, 'default');
@@ -157,7 +161,7 @@ test('D2 resetShortcuts 联动方案回默认并持久化', async () => {
     t: (k) => k,
   };
   resetShortcuts.call(s);
-  assert.strictEqual(Object.keys(s.shortcuts).length, 44);
+  assert.strictEqual(Object.keys(s.shortcuts).length, DEFAULT_COUNT);
   assert.strictEqual(s.shortcutScheme, 'default');
   assert.strictEqual(localStorage.getItem('tizumark-shortcut-scheme'), 'default');
 });

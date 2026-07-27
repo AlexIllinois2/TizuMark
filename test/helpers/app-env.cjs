@@ -135,6 +135,7 @@ async function buildEnv(options = {}) {
   global.navigator = w.navigator;
   w.CodeMirror = require('codemirror');
   require('codemirror/addon/search/searchcursor');
+  require('codemirror/addon/search/search.js'); // 统一加载，避免个别测试按需加载导致 require 缓存中 CodeMirror.commands 状态不一致
 
   const modulesDir = path.join(ROOT, 'src', 'modules');
   for (const f of fs.readdirSync(modulesDir).filter(x => x.endsWith('.js'))) {

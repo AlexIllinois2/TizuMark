@@ -3434,6 +3434,26 @@ body.is-resizing .side-btn {
   padding: 4px 20px 8px;
 }
 
+.shortcut-group {
+  margin-bottom: 6px;
+}
+.shortcut-group:last-child {
+  margin-bottom: 0;
+}
+.shortcut-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-color);
+  padding: 10px 20px 6px;
+  letter-spacing: .04em;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 2px;
+  position: sticky;
+  top: 0;
+  background-color: var(--bg-primary);
+  z-index: 1;
+}
+
 .shortcut-row {
   display: flex;
   align-items: center;
