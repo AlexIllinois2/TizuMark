@@ -2882,6 +2882,18 @@ class MarkdownEditor {
     tab._loaded = true;
   }
 
+  // 切换/打开/重载文档后，恢复该 tab 记忆的滚动位置（编辑器 + 预览）。
+  // 统一临时关闭滚动同步，避免恢复过程中的程序化滚动事件互相重定位，导致
+  // 「切换标签页后预览/页面跳到别处」。下一帧再恢复滚动同步，交还给用户。
+  _restoreSwitchScroll(restoreScroll, restorePreviewTop) {
+    this._canScroll.editor = false;
+    this._canScroll.preview = false;
+    this.cm.scrollTo(restoreScroll.left || 0, restoreScroll.top || 0);
+    const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
+    this.preview.scrollTop = Math.min(restorePreviewTop || 0, maxScroll);
+    setTimeout(() => this._resumeScroll(), 0);
+  }
+
   async switchTab(index) {
     if (index === this.activeTabIndex || index < 0 || index >= this.tabs.length) return;
 
@@ -2913,20 +2925,14 @@ class MarkdownEditor {
       this.cm.setValue(newTab.content || '');
       clearTimeout(this.debounceTimer);
       this.cm.setCursor(restoreCursor);
-      this.cm.scrollTo(restoreScroll.left || 0, restoreScroll.top || 0);
       this.cm.clearHistory();
 
       this.updateTabDisplay();
       await this.updatePreview();
-      if (!this.settings.scrollSync) {
-        const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
-        this.preview.scrollTop = Math.min(restorePreviewTop, maxScroll);
-      } else if (document.querySelector('.editor-container').classList.contains('preview-mode')) {
-        setTimeout(() => {
-          const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
-          this.preview.scrollTop = Math.min(restorePreviewTop, maxScroll);
-        }, 0);
-      }
+      // 统一恢复该 tab 记忆的编辑器/预览滚动位置。临时关闭滚动同步，避免恢复过程中
+      // 程序化滚动事件互相重定位（分屏 + 滚动同步开启时预览会被编辑器同步覆盖，
+      // 表现为「切换后预览/页面跳到别处」）。
+      this._restoreSwitchScroll(restoreScroll, restorePreviewTop);
       this.updateWordCount();
       this.updateOutline();
       this.updateExternalChangeBanner();
@@ -5119,22 +5125,10 @@ class MarkdownEditor {
       // 取消 change 事件调度的 debounced 预览更新，后续显式调用 updatePreview 替代
       clearTimeout(this.debounceTimer);
       this.cm.setCursor(cursorPos);
-      this.cm.scrollTo(scrollInfo.left, scrollInfo.top);
       this.cm.clearHistory();
-      this.updatePreview();
-      // 恢复预览滚动位置：
-      // - 非 scrollSync：立即独立恢复
-      // - 预览模式 + scrollSync：延迟恢复，等滚动同步完成后覆盖
-      // - split 模式 + scrollSync：由滚动同步自动处理
-      if (!this.settings.scrollSync) {
-        const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
-        this.preview.scrollTop = Math.min(previewScrollTop, maxScroll);
-      } else if (document.querySelector('.editor-container').classList.contains('preview-mode')) {
-        setTimeout(() => {
-          const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
-          this.preview.scrollTop = Math.min(previewScrollTop, maxScroll);
-        }, 0);
-      }
+      await this.updatePreview();
+      // 统一恢复该 tab 记忆的编辑器/预览滚动位置（临时关闭滚动同步避免互相重定位）
+      this._restoreSwitchScroll(scrollInfo, previewScrollTop);
       this.updateWordCount();
       this.updateOutline();
       this.updateTabDisplay();
@@ -5281,20 +5275,12 @@ class MarkdownEditor {
 
     this.cm.setValue(this.activeTab.content || '');
     this.cm.setCursor(restoreCursor);
-    this.cm.scrollTo(restoreScroll.left || 0, restoreScroll.top || 0);
     this.cm.clearHistory();
     this.updateTabBar();
     this.updateTabDisplay();
-    this.updatePreview();
-    if (!this.settings.scrollSync) {
-      const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
-      this.preview.scrollTop = Math.min(restorePreviewTop, maxScroll);
-    } else if (document.querySelector('.editor-container').classList.contains('preview-mode')) {
-      setTimeout(() => {
-        const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
-        this.preview.scrollTop = Math.min(restorePreviewTop, maxScroll);
-      }, 0);
-    }
+    await this.updatePreview();
+    // 统一恢复该 tab 记忆的编辑器/预览滚动位置（临时关闭滚动同步避免互相重定位）
+    this._restoreSwitchScroll(restoreScroll, restorePreviewTop);
     this.updateOutline();
     this.updateWordCount();
     this.highlightTreeActiveFile();

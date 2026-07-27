@@ -1,0 +1,102 @@
+// 标签页切换滚动位置回归测试：
+// 编辑模式（分屏）+ 滚动同步开启（默认）时，切换不同标签页后编辑器与预览应各自恢复到
+// 该 tab 记忆的滚动位置，不应被滚动同步互相重定位（表现为「切换后页面跳到别处」）。
+// 使用真实渲染（eval unified-bundle.js 到 window.UnifiedRenderer），走真实 switchTab 链路。
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
+const { buildEnv, cleanup, delay, waitForEditor } = require('./helpers/app-env.cjs');
+
+const _bundle = fs.readFileSync(path.resolve(__dirname, '..', 'src/lib/unified-bundle.js'), 'utf8');
+function loadUnifiedRenderer(w) {
+  w.eval(_bundle.replace('var UnifiedRenderer =', 'window.UnifiedRenderer ='));
+}
+
+async function makeEditor() {
+  const { w } = await buildEnv();
+  loadUnifiedRenderer(w);
+  const ed = await waitForEditor(w);
+  return { w, ed };
+}
+
+test('tab-scroll: 切换标签后预览滚动位置恢复到目标 tab 记忆值（分屏 + 滚动同步开启）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    // 默认开启滚动同步，复现「分屏 + 滚动同步」场景
+    ed.settings.scrollSync = true;
+
+    // jsdom 无布局，桩出预览可滚动范围，使 maxScroll > 0 以便断言 clamp
+    Object.defineProperty(ed.preview, 'scrollHeight', { configurable: true, value: 1000 });
+    Object.defineProperty(ed.preview, 'clientHeight', { configurable: true, value: 500 });
+
+    // 桩编辑器滚动测量，让 switchTab 保存/恢复走可控值（jsdom 下 getScrollInfo 恒为 0）
+    ed.cm.getScrollInfo = () => ({ top: 50, left: 0, height: 1000, clientHeight: 500 });
+    let lastScrollTo = null;
+    ed.cm.scrollTo = (l, t) => { lastScrollTo = { l, t }; };
+
+    // 初始 tab0：模拟已滚动到预览 200 处
+    ed.cm.setValue('# Tab A\n\n正文内容 A'.repeat(20));
+    ed.preview.scrollTop = 200;
+
+    // 构造第二个 tab（无 filePath，避免触发文件加载）
+    const tab1 = {
+      name: 'tabB',
+      content: '# Tab B\n\n正文内容 B'.repeat(20),
+      filePath: null,
+      _loaded: true,
+      cursorPos: { line: 0, ch: 0 },
+      scrollPos: { top: 10, left: 0 },     // 切换回去后编辑器应恢复到这里
+      previewScrollTop: 100,               // 切换过去后预览应恢复到这里
+    };
+    ed.tabs.push(tab1);
+
+    // 切到 tab1
+    await ed.switchTab(1);
+    assert.strictEqual(ed.preview.scrollTop, 100,
+      '分屏 + 滚动同步开启时，切换到 tab1 预览应恢复到其记忆的 100（修复前会被编辑器同步覆盖）');
+    assert.ok(lastScrollTo && lastScrollTo.t === 10,
+      '编辑器应恢复到 tab1 记忆的滚动位置 top=10');
+
+    // 切回 tab0：应恢复到 tab0 记忆的预览 200 / 编辑器 50
+    await ed.switchTab(0);
+    assert.strictEqual(ed.preview.scrollTop, 200,
+      '切回 tab0 后预览应恢复到其记忆的 200，且 tab0 的预览位置未被切换过程破坏');
+    assert.ok(lastScrollTo && lastScrollTo.t === 50,
+      '编辑器应恢复到 tab0 记忆的滚动位置 top=50');
+
+    // 恢复滚动同步标志，交还给用户
+    await delay(10);
+    assert.strictEqual(ed._canScroll.editor, true, '_restoreSwitchScroll 后编辑器滚动同步应恢复');
+    assert.strictEqual(ed._canScroll.preview, true, '_restoreSwitchScroll 后预览滚动同步应恢复');
+  } finally {
+    cleanup(w);
+  }
+});
+
+test('tab-scroll: 关闭滚动同步时同样恢复预览滚动位置', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.settings.scrollSync = false;
+    Object.defineProperty(ed.preview, 'scrollHeight', { configurable: true, value: 1000 });
+    Object.defineProperty(ed.preview, 'clientHeight', { configurable: true, value: 500 });
+    ed.cm.getScrollInfo = () => ({ top: 30, left: 0, height: 1000, clientHeight: 500 });
+    ed.cm.scrollTo = () => {};
+
+    ed.cm.setValue('# A\n'.repeat(30));
+    ed.preview.scrollTop = 150;
+
+    const tab1 = {
+      name: 'b', content: '# B\n'.repeat(30), filePath: null, _loaded: true,
+      cursorPos: { line: 0, ch: 0 }, scrollPos: { top: 5, left: 0 }, previewScrollTop: 80,
+    };
+    ed.tabs.push(tab1);
+
+    await ed.switchTab(1);
+    assert.strictEqual(ed.preview.scrollTop, 80, '关闭滚动同步也应恢复预览到 80');
+    await ed.switchTab(0);
+    assert.strictEqual(ed.preview.scrollTop, 150, '切回后预览应恢复 150');
+  } finally {
+    cleanup(w);
+  }
+});
