@@ -24423,7 +24423,7 @@ var UnifiedRenderer = (() => {
             }
           }
           if (inCodeTag) {
-            result += content3[i];
+            result += escapeHTML(content3[i]);
             i++;
             continue;
           }
@@ -25233,11 +25233,16 @@ var UnifiedRenderer = (() => {
             const base = rehypeSanitize2.defaultSchema;
             const schema = {
               ...base,
+              // 放开常用原生 HTML 标签：demo.md 与用户文档里会用到的 <u>/<center>/<progress>/
+              // <mark>/<figure>/<figcaption> 等。注意 <mark> 也由 convertHighlights（==高亮==）
+              // 在净化之后生成，这里放开原始 <mark> 不影响那条路径。
+              tagNames: [...base.tagNames || [], "u", "center", "progress", "mark", "figure", "figcaption"],
               attributes: {
                 ...base.attributes,
                 // 放开内联 style：具体危险 CSS 由下游 sanitizeHTML -> sanitizeStyleValue 兜底过滤
                 "*": [...base.attributes["*"] || [], "style"],
-                img: [...base.attributes.img || ["src", "alt", "title"], "width", "height", "srcset", "loading"]
+                img: [...base.attributes.img || ["src", "alt", "title"], "width", "height", "srcset", "loading"],
+                progress: ["value", "max"]
               },
               allowedSchemes: [...base.allowedSchemes || ["http", "https", "mailto", "tel"], "file"]
             };

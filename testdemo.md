@@ -96,32 +96,32 @@ TizuMark 支持网络图片、相对路径、绝对路径三种来源。图片�
 
 **2. 相对路径图片**（相对于当前 `.md` 文件所在目录，移动文件夹仍有效）
 
-![应用图标](assets/icon.png)
+![应用图标](screenshots/01-main.png)
 
 ```markdown
-![应用图标](assets/icon.png)
+![应用图标](screenshots/01-main.png)
 ```
 
-说明：若文档在 `docs/note.md`，则实际读取 `docs/assets/icon.png`。
+说明：若文档在 `docs/note.md`，则实际读取 `docs/screenshots/01-main.png`。
 
 **3. 绝对路径图片**（Windows 盘符或 Unix 绝对路径，固定位置不受移动影响）
 
 `file://` 协议写法同样支持，例如 `file:///C:/Users/you/Pictures/photo.png` 或 `D:/images/photo.png`。下方示例复用已打包的应用图标以便离线展示实际渲染效果（你自己的文档填实际绝对路径即可）：
 
-![应用图标](assets/icon.png)
+![应用图标](screenshots/01-main.png)
 
 ```markdown
-![应用图标](assets/icon.png)
+![应用图标](screenshots/01-main.png)
 ```
 
-> 提示：本 demo 内图片均指向随应用打包的 `assets/icon.png`，因此即使离线、无截图目录也能正常显示，不会增大安装包体积。
+> 提示：本 demo 内图片均指向随应用打包的 `screenshots/01-main.png`，因此即使离线、无截图目录也能正常显示，不会增大安装包体积。
 
 **4. 指定显示尺寸**（需用原始 HTML `<img>` 标签，无 `![alt|WxH]()` 简写语法）
 
-<img src="assets/icon.png" width="400" alt="限制宽度展示">
+<img src="screenshots/01-main.png" width="400" alt="限制宽度展示">
 
 ```html
-<img src="assets/icon.png" width="400" alt="限制宽度展示">
+<img src="screenshots/01-main.png" width="400" alt="限制宽度展示">
 ```
 
 插入图片对话框自动生成带 `width` / `height` 的 `<img>` 标签；也支持百分比：`width="100%"`。
@@ -805,7 +805,7 @@ TizuMark 在兼容标准 Markdown 的同时，也支持一批常用的原生 HTM
 ### 图注（figure / figcaption）
 
 <figure>
-  <img src="assets/icon.png" alt="应用图标">
+  <img src="screenshots/01-main.png" alt="应用图标">
   <figcaption>TizuMark 应用图标（随包内置，离线可见）</figcaption>
 </figure>
 

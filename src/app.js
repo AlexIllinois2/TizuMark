@@ -4471,10 +4471,13 @@ class MarkdownEditor {
       // 任务列表 checkbox：点击切换 [ ] <-> [x] 并回写源码
       const checkbox = e.target.closest('input[type="checkbox"]');
       if (checkbox) {
+        // 注意：这里【不】调用 e.preventDefault()。一旦拦截默认行为，原生复选框不会
+        // 切换，需手动设置 checkbox.checked —— 但 appearance:none 的自定义勾选框在
+        // 真实 WebView 里手动改 checked 不一定重绘 :checked 样式，且我们用
+        // _suppressNextPreviewRerender 抑制了整篇重渲染，结果就是「点了没反应」。
+        // 正确做法：放行原生默认切换（浏览器自己画勾选态，必然有响应），处理器只
+        // 按源码反推目标态写回 [ ]/[x]，不再手动动 checkbox.checked。
         e.stopPropagation();
-        // 故意不 preventDefault：让原生 click 切換 checkbox.checked（即用户点击的目标态）。
-        // 否则浏览器会在 click 事件派发结束时撤销 JS 设置的 checked，
-        // 导致预览里的勾选框永远勾不上（源码却写了 [x]，表现为「点了没反应」）。
         this.handleTaskCheckboxToggle(checkbox);
         return;
       }
@@ -4545,8 +4548,7 @@ class MarkdownEditor {
             }
             // 无活动文件（如「使用说明」等打包资源 Tab）：
             // 1) 绝对路径链接（D:\... / D:/... / /...）直接用 Rust read_file 读取，不要走 fetch/URL；
-            // 2) 相对打包资源（如 demo.md）用 fetch 读取；
-            // 3) 再回退到 Rust 资源目录读取，与打开使用说明保持一致。
+            // 2) 相对打包资源（如 demo.md）走专用命令 read_bundled_file，dev/prod 都能找到。
             const normHref = this.normalizeLinkHref(href);
             if (/^[a-zA-Z]:[\\/]/.test(normHref) || normHref.startsWith('/')) {
               try {
@@ -4561,24 +4563,18 @@ class MarkdownEditor {
                 return;
               }
             }
+            // 相对打包资源（demo.md / screenshots/* 等）：read_bundled_file 在 dev 模式
+            // 回退到项目根读取，prod 模式从资源目录读取，统一入口。
             try {
-              const resp = await fetch(href);
-              if (resp.ok) {
-                const text = await resp.text();
-                if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
-                  await this._openBundledFile(href, text);
-                  return;
-                }
-              }
-            } catch (_) { /* 落到 Rust 资源目录兜底 */ }
-            try {
-              const baseDir = (window.__TAURI__.path && window.__TAURI__.path.resourceDir)
-                ? await window.__TAURI__.path.resourceDir() : '';
-              const p = baseDir ? (baseDir.replace(/[/\\]$/, '') + '/' + normHref) : normHref;
-              const content = await this.readFileNormalized(p);
+              const result = await invoke('read_bundled_file', { filename: normHref });
+              // 返回 { content, path }：path 是实际读取到的本地路径，
+              // dev 模式 = 项目根（D:/project/tizu-mark/demo.md），
+              // 生产 = 资源目录（C:/Program Files/.../resources/demo.md）。
+              // 用它设 tab.filePath，让 demo.md 内的相对图片能按真实目录解析。
+              const content = result && typeof result === 'object' ? result.content : result;
+              const realPath = result && typeof result === 'object' ? result.path : normHref;
               if (content && !content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
-                // 记录资源文件的真实路径，让 demo.md 内的相对图片可按资源目录解析。
-                await this._openBundledFile(href, content, p);
+                await this._openBundledFile(href, content, realPath);
                 return;
               }
             } catch (err) {
@@ -6835,12 +6831,29 @@ input[type="checkbox"]:checked::after { display: none !important; }
       if (filePath) {
         // 普通文件：相对当前 .md 所在目录补全
         const absPath = dir + '/' + rawSrc;
+        // 用绝对路径 key（dir/rawSrc）缓存，避免 absPath 重复 IO
+        const cacheKey = absPath;
         try {
-          const dataUri = await loadBase64(absPath, mimeOf(rawSrc));
+          const base64 = await invoke('fetch_image_as_base64', { url: absPath });
           if (gen !== this._renderGeneration) return;
+          const dataUri = `data:${mimeOf(rawSrc)};base64,${base64}`;
+          this._imageBase64Cache.set(cacheKey, dataUri);
           img.src = this.getCachedImageURL(dataUri);
         } catch (e) {
-          console.warn('[preview] Failed to load image:', absPath, e);
+          // 仅打包资源 tab（使用说明/demo）回退到资源定位命令：dev 模式从项目根、
+          // prod 模式从资源目录读。普通本地文档不回退——避免本地缺图时误加载
+          // 打包资源里恰好同名的文件（如用户自己的 assets/icon.png）。
+          if (this.activeTab && this.activeTab.isBundled) {
+            try {
+              const base64 = await invoke('read_bundled_image_as_base64', { filename: rawSrc });
+              if (gen !== this._renderGeneration) return;
+              const dataUri = `data:${mimeOf(rawSrc)};base64,${base64}`;
+              this._imageBase64Cache.set(cacheKey, dataUri);
+              img.src = this.getCachedImageURL(dataUri);
+              return;
+            } catch (e2) { /* 落到统一失败处理 */ }
+          }
+          console.warn('[preview] Failed to load image:', rawSrc, e);
           fail(img);
         }
         return;
@@ -7449,6 +7462,9 @@ input[type="checkbox"]:checked::after { display: none !important; }
     }
     this.addTab(name, content, filePath);
     this.activeTab.savedContent = content;
+    // 标记为打包资源 tab：processImages 仅对这类 tab 启用 read_bundled_image_as_base64
+    // 回退（dev 模式 filePath 目录可能读不到图片），普通本地文档不回退，避免误加载打包资源。
+    this.activeTab.isBundled = true;
     this.updateTabDisplay();
   }
 
@@ -7783,19 +7799,17 @@ input[type="checkbox"]:checked::after { display: none !important; }
     const taskRe = /^(\s*(?:>\s*)*(?:[*+-]|\d+[.)])\s+)\[([ xX])\](\s.*)?$/;
     const m = lineText.match(taskRe);
     if (!m) return;
-    // 采用原生 click 切换后的 checked 值作为目标态（点击委托已不 preventDefault，浏览器保留该切换）。
-    // 兜底：若个别环境原生切换未生效（checked 与源码当前标记一致），则手动取反并写入。
+    // 按源码标记取反作为目标态（与即将发生的原生 click 默认切换结果一致）。
+    // 这里【不】手动设置 checkbox.checked：不 preventDefault，原生默认行为会把
+    // checkbox 切到 newChecked 并自己重绘 :checked 样式；若我们抢先设了 checked，
+    // 原生默认行为会在事件末尾再翻一次，反而错。
     const sourceChecked = m[2] === 'x' || m[2] === 'X';
-    let newChecked = checkbox.checked;
-    if (newChecked === sourceChecked) {
-      // 点击委托未调用 preventDefault，此处在监听器内设置不会被浏览器撤销，会保留。
-      newChecked = !sourceChecked;
-      checkbox.checked = newChecked;
-    }
+    const newChecked = !sourceChecked;
     const newMark = newChecked ? 'x' : ' ';
     const newLine = m[1] + '[' + newMark + ']' + (m[3] || '');
     const cursor = this.cm.getCursor();
-    // 预览 DOM 已通过原生 checked 切换即时更新，无需手动 set；抑制全量重渲染避免跳动/重渲染还原。
+    // 预览 checkbox 已由原生 click 默认行为即时切到 newChecked（浏览器自绘，必然有响应）；
+    // 抑制整篇重渲染，避免重复重建把即时勾选态覆盖 / 引发预览或编辑器跳动。
     this._suppressNextPreviewRerender = true;
     // 同时取消任何已排队的防抖重建（如打字 / setValue 触发的待执行 300ms 定时器）：
     // 否则勾选后那个遗留定时器仍会到期并整篇重建 preview，覆盖即时勾选并引发跳动/“看似没反应”。

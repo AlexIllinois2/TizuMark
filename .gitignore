@@ -37,3 +37,9 @@ test.md
 .workbuddy/
 .agents/
 skills-lock.json
+
+# Local tool data / build artifacts (not part of source)
+release/
+.git-rewrite/
+.opencode/
+ccstart.bat

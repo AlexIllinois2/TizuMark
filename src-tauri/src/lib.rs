@@ -3,6 +3,7 @@ use encoding_rs::GB18030;
 use std::sync::Mutex;
 use notify::{Watcher, RecursiveMode, RecommendedWatcher, Config as NotifyConfig, Event as NotifyEvent};
 use tauri::{Emitter, Manager};
+use tauri::path::BaseDirectory;
 use tauri::WindowEvent;
 use tauri::tray::{TrayIcon, TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
 use tauri::menu::{Menu, MenuItem};
@@ -343,6 +344,61 @@ fn read_file(path: String) -> Result<String, String> {
     })?;
 
     Ok(decode_bytes(&raw))
+}
+
+// 读取打包资源文件（demo.md / screenshots/* 等），dev/prod 兼容：
+// 1) 优先从 Tauri 资源目录读取（生产 / 部分 dev 模式：target/debug/resources/...）；
+// 2) 找不到时回退到 CARGO_MANIFEST_DIR 父目录（项目根）的同名字段，dev 模式
+//    bundle.resources 不复制资源、目标目录为空，这里能直接读源码根的 demo.md / screenshots；
+// 3) 仍找不到返回结构化 NotFound 错误，前端按 openLink 错误码处理。
+// 返回 `{ content, path }`：path 是真正读到文件的本地路径（dev = 项目根，prod = 资源目录），
+// 让 _openBundledFile 能把它设为 tab.filePath，processImages 据此解析相对图片。
+#[tauri::command]
+fn read_bundled_file(app: tauri::AppHandle, filename: String) -> Result<serde_json::Value, String> {
+    if let Ok(p) = app.path().resolve(&filename, BaseDirectory::Resource) {
+        if let Ok(bytes) = fs::read(&p) {
+            return Ok(serde_json::json!({
+                "content": decode_bytes(&bytes),
+                "path": p.to_string_lossy().to_string(),
+            }));
+        }
+    }
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    if let Some(project_root) = manifest_dir.parent() {
+        let dev_path = project_root.join(&filename);
+        if let Ok(bytes) = fs::read(&dev_path) {
+            return Ok(serde_json::json!({
+                "content": decode_bytes(&bytes),
+                "path": dev_path.to_string_lossy().to_string(),
+            }));
+        }
+    }
+    Err(format!(
+        "{{\"kind\":\"NotFound\",\"path\":\"{}\",\"message\":\"bundled file not found: {}\"}}",
+        filename.replace('\\', "\\\\").replace('"', "\\\""),
+        filename
+    ))
+}
+
+// 与 read_bundled_file 同款的资源定位策略，返回 base64 字符串（用于 pack 资源如
+// screenshots/*.png）。demo.md 内的相对图片优先按 tab.filePath 拼路径走 fetch_image_as_base64，
+// 不存在本地时回退到这里，便于 dev 模式加载项目根 screenshots 与生产资源目录 images。
+#[tauri::command]
+async fn read_bundled_image_as_base64(app: tauri::AppHandle, filename: String) -> Result<String, String> {
+    let bytes_opt: Option<Vec<u8>> = if let Ok(p) = app.path().resolve(&filename, BaseDirectory::Resource) {
+        fs::read(&p).ok()
+    } else {
+        None
+    }
+    .or_else(|| {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        manifest_dir.parent().and_then(|root| fs::read(root.join(&filename)).ok())
+    });
+    let bytes = bytes_opt.ok_or_else(|| {
+        format!("bundled image not found: {}", filename)
+    })?;
+    use base64::Engine;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
 }
 
 // 解码字节为字符串：剥离 UTF-8 BOM → 优先 UTF-8 → 回退 GB18030（覆盖 GBK/GB2312/简繁）。
@@ -1600,7 +1656,9 @@ pub fn run() {
             save_image_to_assets,
             fetch_image_as_base64,
             generate_toc,
-            search_in_files
+            search_in_files,
+            read_bundled_file,
+            read_bundled_image_as_base64
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

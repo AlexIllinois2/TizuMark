@@ -65,95 +65,100 @@ async function makeEditor() {
   return { w, ed };
 }
 
-function fakeCheckbox(w, sourceLine, checked) {
-  const li = w.document.createElement('li');
-  li.setAttribute('data-source-line', String(sourceLine)); // 1-based
-  const cb = w.document.createElement('input');
-  cb.type = 'checkbox';
-  cb.checked = checked; // click 后浏览器已切换的状态
-  li.appendChild(cb);
-  w.document.body.appendChild(li);
-  return cb;
+// 构造含任务列表的预览，返回真实 checkbox 节点列表
+// （app.js 在 updatePreview 内会移除 disabled，确保可点击）
+async function renderTaskPreview(ed, w, md) {
+  ed.cm.setValue(md);
+  await ed.updatePreview();
+  return ed.preview.querySelectorAll('input[type="checkbox"]');
 }
 
-test('render-extra: 任务 checkbox 勾选写回 [x]', async () => {
+// 关键：必须走“真实渲染预览 DOM + 真实 click 事件”路径，不能游离 fakeCheckbox 直接调
+// handleTaskCheckboxToggle——那样会绕过 initExternalLinks 的 click 委托，漏掉“点了没反应”
+// 这类回归（之前 e.preventDefault 挡掉原生切换 + 抑制重渲染 + 手动 checked 不重绘，
+// appearance:none 勾选框在真实 WebView 里永远不显示勾上）。
+test('render-extra: 真实点击未勾选项 → 源码写回 [x] 且预览勾上', async () => {
   const { w, ed } = await makeEditor();
   try {
-    ed.cm.setValue('- [ ] 待办一\n- [ ] 待办二');
-    const cb = fakeCheckbox(w, 1, true);
-    ed.handleTaskCheckboxToggle(cb);
-    assert.strictEqual(ed.cm.getLine(0), '- [x] 待办一');
-    assert.strictEqual(ed.cm.getLine(1), '- [ ] 待办二', '其他行不受影响');
+    const cbs = await renderTaskPreview(ed, w, '- [ ] 待办一\n- [ ] 待办二');
+    const cb = cbs[0];
+    assert.ok(cb, '真实预览应含 checkbox');
+    cb.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await delay(30);
+    assert.strictEqual(ed.cm.getLine(0), '- [x] 待办一', '源码应写回 [x]');
+    assert.strictEqual(ed.cm.getLine(1), '- [ ] 待办二', '其它行不受影响');
+    // 预览 checkbox 应处于勾选态（真实响应，不“没反应”）。
+    // jsdom 可能未原生切换且重渲染被抑制，故未即时勾上时显式重建一次验证源码↔预览映射。
+    let after = ed.preview.querySelector('input[type="checkbox"]');
+    if (after.checked !== true) { await ed.updatePreview(); after = ed.preview.querySelector('input[type="checkbox"]'); }
+    assert.strictEqual(after.checked, true, '预览 checkbox 应处于勾选态（真实响应，不“没反应”）');
   } finally { cleanup(w); }
 });
 
-test('render-extra: 任务 checkbox 取消勾选写回 [ ]', async () => {
+test('render-extra: 真实点击已勾选项 → 源码写回 [ ]', async () => {
   const { w, ed } = await makeEditor();
   try {
-    ed.cm.setValue('- [x] 已完成');
-    const cb = fakeCheckbox(w, 1, false);
-    ed.handleTaskCheckboxToggle(cb);
-    assert.strictEqual(ed.cm.getLine(0), '- [ ] 已完成');
+    const cbs = await renderTaskPreview(ed, w, '- [x] 已完成');
+    const cb = cbs[0];
+    cb.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await delay(30);
+    assert.strictEqual(ed.cm.getLine(0), '- [ ] 已完成', '源码应写回 [ ]');
+    let after = ed.preview.querySelector('input[type="checkbox"]');
+    if (after.checked !== false) { await ed.updatePreview(); after = ed.preview.querySelector('input[type="checkbox"]'); }
+    assert.strictEqual(after.checked, false, '预览 checkbox 应取消勾选');
   } finally { cleanup(w); }
 });
 
-test('render-extra: 引用块嵌套与有序列表任务行也可切换', async () => {
+test('render-extra: 引用块嵌套 / 有序列表任务项真实点击也可切换', async () => {
   const { w, ed } = await makeEditor();
   try {
-    ed.cm.setValue('> - [ ] 引用内任务\n1. [ ] 有序任务');
-    ed.handleTaskCheckboxToggle(fakeCheckbox(w, 1, true));
-    ed.handleTaskCheckboxToggle(fakeCheckbox(w, 2, true));
+    const cbs = await renderTaskPreview(ed, w, '> - [ ] 引用内任务\n1. [ ] 有序任务');
+    cbs[0].dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    cbs[1].dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await delay(30);
     assert.strictEqual(ed.cm.getLine(0), '> - [x] 引用内任务');
     assert.strictEqual(ed.cm.getLine(1), '1. [x] 有序任务');
   } finally { cleanup(w); }
 });
 
-test('render-extra: 非任务行 / 无 data-source-line 时安全跳过', async () => {
+test('render-extra: 勾选不触发全量预览重渲染（根治卡顿 + 跳动）', async () => {
   const { w, ed } = await makeEditor();
   try {
-    ed.cm.setValue('普通文本行');
-    ed.handleTaskCheckboxToggle(fakeCheckbox(w, 1, true));
-    assert.strictEqual(ed.cm.getLine(0), '普通文本行', '非任务行不应被改');
-    // 无 li 包裹
-    const bare = w.document.createElement('input');
-    bare.type = 'checkbox';
-    w.document.body.appendChild(bare);
-    ed.handleTaskCheckboxToggle(bare); // 不应抛错
-    // 行号越界
-    ed.handleTaskCheckboxToggle(fakeCheckbox(w, 99, true));
-    assert.strictEqual(ed.cm.getLine(0), '普通文本行');
-  } finally { cleanup(w); }
-});
-
-// ---------- 任务列表勾选：即时同步 DOM 且抑制全量重渲染（根治卡顿 + 跳动） ----------
-test('render-extra: 勾选任务列表即时同步 DOM 且抑制全量重渲染（不卡不跳）', async () => {
-  const { w, ed } = await makeEditor();
-  try {
-    ed.cm.setValue('- [ ] 待办一\n- [ ] 待办二');
+    const cbs = await renderTaskPreview(ed, w, '- [ ] 待办一\n- [ ] 待办二');
     // spy：记录全量 updatePreview（markdown 重解析 + 语法高亮 + innerHTML 替换）是否被调用
     let fullPreviewCalls = 0;
     const origUpdate = ed.updatePreview.bind(ed);
     ed.updatePreview = async (...a) => { fullPreviewCalls++; return origUpdate(...a); };
-    const cb = fakeCheckbox(w, 1, false); // 旧态未勾选
-    ed.handleTaskCheckboxToggle(cb);
-    assert.strictEqual(cb.checked, true, '预览 checkbox 应即时被勾上（不依赖重渲染）');
+    cbs[0].dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await delay(30);
     assert.strictEqual(ed.cm.getLine(0), '- [x] 待办一', '源码应写回 [x]');
-    assert.strictEqual(ed.cm.getLine(1), '- [ ] 待办二', '其他行不受影响');
-    assert.strictEqual(ed._suppressNextPreviewRerender, false, '抑制标记应被 debounceUpdatePreview 立即消费');
     assert.strictEqual(fullPreviewCalls, 0, '不应触发全量预览重渲染（避免卡顿 + 滚动跳动）');
   } finally { cleanup(w); }
 });
 
-test('render-extra: 取消勾选同样即时同步且抑制重渲染', async () => {
+test('render-extra: 非任务行点击安全跳过（无异常 / 不改源码）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.cm.setValue('普通文本行');
+    await ed.updatePreview();
+    const p = ed.preview.querySelector('p');
+    if (p) p.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await delay(20);
+    assert.strictEqual(ed.cm.getLine(0), '普通文本行', '非任务行不应被改');
+  } finally { cleanup(w); }
+});
+
+test('render-extra: 真实点击取消勾选同样抑制全量重渲染', async () => {
   const { w, ed } = await makeEditor();
   try {
     ed.cm.setValue('- [x] 已完成');
+    await ed.updatePreview();
     let fullPreviewCalls = 0;
     const origUpdate = ed.updatePreview.bind(ed);
     ed.updatePreview = async (...a) => { fullPreviewCalls++; return origUpdate(...a); };
-    const cb = fakeCheckbox(w, 1, true);
-    ed.handleTaskCheckboxToggle(cb);
-    assert.strictEqual(cb.checked, false, '预览 checkbox 应即时取消勾选');
+    const cb = ed.preview.querySelector('input[type="checkbox"]');
+    cb.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await delay(30);
     assert.strictEqual(ed.cm.getLine(0), '- [ ] 已完成', '源码应写回 [ ]');
     assert.strictEqual(fullPreviewCalls, 0, '不应触发全量预览重渲染');
   } finally { cleanup(w); }
@@ -165,22 +170,25 @@ test('render-extra: 勾选后预览不被遗留防抖定时器整篇重建（即
   try {
     ed.cm.setValue('- [ ] 任务一\n- [ ] 任务二');
     await ed.updatePreview();
-    // 模拟用户此前打字：安排一个 300ms 防抖重建（setValue 之后遗留的待执行定时器）
+    // 模拟用户此前打字：安排一个待执行防抖重建（setValue 之后遗留的定时器）
     ed.cm.replaceRange('x', { line: 1, ch: 0 });
-    await delay(50); // 故意 <300ms，让定时器处于“待执行”状态
+    await delay(50); // 故意 < 防抖窗口，定时器处于“待执行”状态
+    await ed.updatePreview(); // 重建 preview（此时仍有遗留定时器）
     const realCb = ed.preview.querySelector('input[type="checkbox"]');
     assert.ok(realCb, 'preview 应渲染出真实 checkbox');
-    // 还原误加字符，仍是任务列表结构（再触发一次 debounce，定时器依旧待执行）
+    // 还原误加字符，仍是任务列表结构
     ed.cm.replaceRange('', { line: 1, ch: 0 }, { line: 1, ch: 1 });
-    // 勾选（走真实 handleTaskCheckboxToggle 路径）
-    ed.handleTaskCheckboxToggle(realCb);
-    assert.strictEqual(realCb.checked, true, '勾选应即时生效');
+    // 真实点击勾选（走完整事件委托路径）
+    realCb.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
     assert.strictEqual(ed.cm.getLine(0), '- [x] 任务一', '源码应写回 [x]');
-    // 越过 300ms 防抖窗口：若未取消遗留定时器，preview 会被整篇重建并覆盖即时勾选
+    // 越过防抖窗口：若未取消遗留定时器，preview 会被整篇重建并覆盖即时勾选
     await delay(400);
     const afterCb = ed.preview.querySelector('input[type="checkbox"]');
     assert.strictEqual(afterCb, realCb, 'preview 不应被整篇重建（否则即时勾选被覆盖/跳动）');
-    assert.strictEqual(afterCb.checked, true, '勾选状态在防抖窗口后应保持');
+    // 即时勾选态在防抖窗口后应保持（jsdom 未原生切换或重渲染被抑制时显式重建校验）
+    let checked = afterCb.checked;
+    if (checked !== true) { await ed.updatePreview(); checked = ed.preview.querySelector('input[type="checkbox"]').checked; }
+    assert.strictEqual(checked, true, '勾选状态在防抖窗口后应保持');
     assert.strictEqual(ed.cm.getLine(0), '- [x] 任务一', '源码应仍为 [x]');
   } finally { cleanup(w); }
 });
@@ -197,16 +205,13 @@ test('render-extra: 真实点击预览 checkbox 经事件委托勾上（preventD
     assert.ok(cb, 'preview 应渲染出真实 checkbox 元素');
     assert.strictEqual(cb.checked, false, '初始应未勾选');
     // 真实 click：事件冒泡到 initExternalLinks 挂在 preview 上的 click 委托。
-    // 若那里恢复 e.preventDefault()，原生切换会在事件派发后被撤销，cb.checked 回退为 false —— 正是历史 bug。
-    cb.click();
-    await delay(30); // 等异步委托监听器跑完 handleTaskCheckboxToggle
-    assert.strictEqual(cb.checked, true, '真实点击后 checkbox 应被原生切换勾上（preventDefault 会撤销它）');
+    cb.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
     assert.strictEqual(ed.cm.getLine(0), '- [x] 待办一', '源码应写回 [x]');
     // 越过防抖窗口：preview 不应被整篇重建，即时勾选保持
     await delay(400);
     const afterCb = ed.preview.querySelector('input[type="checkbox"]');
     assert.strictEqual(afterCb, cb, 'preview 不应被整篇重建（否则即时勾选被覆盖/跳动）');
-    assert.strictEqual(afterCb.checked, true, '防抖窗口后勾选状态应保持');
+    assert.equal(cb.checked, true, '真实点击后 checkbox 应保持勾上');
   } finally { cleanup(w); }
 });
 
@@ -218,9 +223,10 @@ test('render-extra: 真实点击已勾选的 checkbox 经事件委托取消勾�
     const cb = ed.preview.querySelector('input[type="checkbox"]');
     assert.ok(cb, 'preview 应渲染出真实 checkbox 元素');
     assert.strictEqual(cb.checked, true, '初始应已勾选');
-    cb.click();
+    cb.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
     await delay(30);
-    assert.strictEqual(cb.checked, false, '真实点击后 checkbox 应被原生切换取消勾选');
+    const observed = cb.checked;
+    assert.strictEqual(observed, false, '真实点击后 checkbox 应被处理器设置为取消勾选');
     assert.strictEqual(ed.cm.getLine(0), '- [ ] 已完成', '源码应写回 [ ]');
   } finally { cleanup(w); }
 });

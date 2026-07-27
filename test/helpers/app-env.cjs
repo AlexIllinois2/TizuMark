@@ -143,6 +143,12 @@ async function buildEnv(options = {}) {
     catch (_) { /* 个别模块可能需要外部库，初始化关键路径已覆盖，忽略加载失败 */ }
   }
 
+  // 加载 src/lib/md-links.js：UMD 模块，浏览器环境挂到 root（即 jsdom window），
+  // 让 app.js 中直接调用的 isMarkdownLink / resolveDocPath 在测试中可见。
+  // 缺失时 app.js 4516 行的 isMarkdownLink(href) 引用会 ReferenceError。
+  try { w.eval(fs.readFileSync(path.join(ROOT, 'src', 'lib', 'md-links.js'), 'utf8')); }
+  catch (_) { /* 找不到或解析失败时，触发 click 的回归测试会暴露问题 */ }
+
   let initErr = null;
   const origErr = console.error;
   if (captureInitErr) {
