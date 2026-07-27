@@ -787,7 +787,7 @@ const content = '# Hello\n\nWorld!';
 > 在 TizuMark 中构建项目：
 > 
 > ```shell
-npm run build
+> npm run build
 > ```
 > 
 > 构建产物位于 `src-tauri/target/release/`。

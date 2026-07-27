@@ -1,6 +1,6 @@
 // 搜索功能增强回归测试（覆盖 4 项需求）：
 //   需求1：文件中查找增加「循环查找」勾选框；跨文件搜索不再有该勾选框
-//   需求2：高亮改为醒目黄色，编辑与预览中的文字都高亮（编辑器 CM markText + 预览 DOM <mark>）
+//   需求2：高亮改为醒目祖母绿（与 Markdown ==高亮== 的黄色区分），编辑与预览中的文字都高亮（编辑器 CM markText + 预览 DOM <mark>）
 //   需求3：页面查找与跨文件搜索互斥（同时只能开一个）
 //   需求4：跨文件搜索 — 目录行/进度条显隐（修复 .hidden 无规则导致一直显示的 bug）、浏览按钮主题色
 //
@@ -14,10 +14,12 @@ const fs = require('fs');
 const path = require('path');
 const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'styles.css'), 'utf8');
 
-// ---------- 需求2：醒目黄色高亮（编辑 + 预览共用 .search-match）----------
-test('css: .search-match 为醒目黄色（编辑与预览共用）', async () => {
-  assert.ok(/\.search-match\s*\{[^}]*background-color:\s*#ffe24d/s.test(css),
-    '.search-match 应使用醒目黄色 background-color: #ffe24d（而非半透明浅黄）');
+// ---------- 需求2：醒目祖母绿高亮（编辑 + 预览共用 .search-match，与 Markdown 黄色区分）----------
+test('css: .search-match 为醒目祖母绿（与 Markdown 黄色高亮区分）', async () => {
+  assert.ok(/\.search-match\s*\{[^}]*background-color:\s*#00c389/s.test(css),
+    '.search-match 应使用醒目祖母绿 background-color: #00c389（与 Markdown ==高亮== 黄色区分）');
+  assert.ok(!/\.search-match\s*\{[^}]*background-color:\s*#ffe24d/s.test(css),
+    '.search-match 不应再是旧黄色 #ffe24d');
 });
 
 // ---------- 需求1：文件中查找出现循环查找勾选框；跨文件搜索不再有 ----------

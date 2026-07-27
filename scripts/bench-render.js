@@ -25,8 +25,9 @@ function buildVariant({ noRemarkBreaks, noRehypeSanitize }) {
   return moduleObj.exports.renderMarkdown;
 }
 
-const md = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'demo.md'), 'utf-8');
-console.log(`输入: src/demo.md (${md.length} 字符, ${md.split('\n').length} 行)\n`);
+const mdPath = path.resolve(__dirname, '..', 'demo.md');
+const md = fs.readFileSync(mdPath, 'utf-8');
+console.log(`输入: demo.md (${md.length} 字符, ${md.split('\n').length} 行)\n`);
 
 const variants = [
   { name: 'A. 当前完整管线 (remarkBreaks + rehype-sanitize)', opts: {} },

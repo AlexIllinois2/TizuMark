@@ -1048,12 +1048,21 @@ body {
 .find-panel.hidden { display: none; }
 
 /* 全部高亮：find 面板输入时遍历所有匹配并用 markText 标记 .search-match。
-   醒目黄色背景，编辑与预览共用同一配色；当前跳转项仍由 CM/原生选区高亮区分。*/
+   醒目祖母绿背景，与 Markdown ==高亮== 的黄色明显区分；当前跳转项仍由 CM/原生选区高亮区分。*/
 .search-match {
-  background-color: #ffe24d;
-  box-shadow: 0 0 0 1px rgba(255, 196, 0, 0.55);
+  background-color: #00c389;
+  box-shadow: 0 0 0 1px rgba(0, 150, 105, 0.6);
   border-radius: 2px;
   color: inherit;
+}
+/* 预览中的搜索高亮是 <mark> 元素，会被 .preview-content mark 的黄色规则以更高特异性覆盖，
+   故用更高特异性（.preview-content mark.search-match）确保搜索色生效，与 Markdown 黄色高亮区分 */
+.preview-content mark.search-match {
+  background-color: #00c389;
+  box-shadow: 0 0 0 1px rgba(0, 150, 105, 0.6);
+  color: inherit;
+  padding: 1px 4px;
+  border-radius: 3px;
 }
 
 /* 跨文件搜索弹框：非模态浮动面板，不遮挡编辑器交互，可拖动到任意位置。
@@ -1584,9 +1593,11 @@ body.is-resizing .side-btn {
   word-break: break-word;
 }
 
+.preview-content pre code,
 .preview-content pre code.hljs {
   padding: 0;
-  background: none;
+  background: transparent;
+  border: none;
   border-radius: 0;
   font-size: 0.9em;
   line-height: 1;

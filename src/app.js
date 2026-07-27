@@ -4471,8 +4471,10 @@ class MarkdownEditor {
       // 任务列表 checkbox：点击切换 [ ] <-> [x] 并回写源码
       const checkbox = e.target.closest('input[type="checkbox"]');
       if (checkbox) {
-        e.preventDefault();
         e.stopPropagation();
+        // 故意不 preventDefault：让原生 click 切換 checkbox.checked（即用户点击的目标态）。
+        // 否则浏览器会在 click 事件派发结束时撤销 JS 设置的 checked，
+        // 导致预览里的勾选框永远勾不上（源码却写了 [x]，表现为「点了没反应」）。
         this.handleTaskCheckboxToggle(checkbox);
         return;
       }
@@ -4575,7 +4577,8 @@ class MarkdownEditor {
               const p = baseDir ? (baseDir.replace(/[/\\]$/, '') + '/' + normHref) : normHref;
               const content = await this.readFileNormalized(p);
               if (content && !content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
-                await this._openBundledFile(href, content);
+                // 记录资源文件的真实路径，让 demo.md 内的相对图片可按资源目录解析。
+                await this._openBundledFile(href, content, p);
                 return;
               }
             } catch (err) {
@@ -5938,6 +5941,13 @@ input[type="checkbox"]:checked::after { display: none !important; }
   }
 
   debounceUpdatePreview() {
+    // 任务列表勾选来源：预览 DOM 已就地同步，跳过全量重渲染（不防抖，立即轻量刷新字数/大纲）
+    if (this._suppressNextPreviewRerender) {
+      this._suppressNextPreviewRerender = false;
+      this.updateWordCount();
+      this.updateOutline();
+      return;
+    }
     clearTimeout(this.debounceTimer);
     this.debounceTimer = setTimeout(() => {
       this.updatePreview(true);
@@ -6580,6 +6590,13 @@ input[type="checkbox"]:checked::after { display: none !important; }
   }
 
     async updatePreview(suppressLoading = false) {
+      // 防御：若被勾选抑制标记触发（应已被 debounceUpdatePreview 拦截），直接轻量返回，杜绝全量重渲染
+      if (this._suppressNextPreviewRerender) {
+        this._suppressNextPreviewRerender = false;
+        this.updateWordCount();
+        this.updateOutline();
+        return;
+      }
       const gen = ++this._renderGeneration;
       let needLoad = false;
       try {
@@ -6709,13 +6726,6 @@ input[type="checkbox"]:checked::after { display: none !important; }
         // 仅大纲跳转 / 打开文件等显式跳转才贴顶定位
         if (!this._previewScrollDriven) this._focusPreviewToLine(this._previewFocusLine);
         this._previewScrollDriven = false;
-        // 预览发起的编辑（如 checkbox toggle）需保留预览滚动位置，不被 scrollSync 覆盖
-        if (this._previewEditPreserveScroll) {
-          const maxPS = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
-          this.preview.scrollTop = Math.min(this._restorePreviewScrollTop || 0, maxPS);
-          this._previewEditPreserveScroll = false;
-          this._restorePreviewScrollTop = 0;
-        }
         requestAnimationFrame(() => {
           if (gen === this._renderGeneration) this._resumeScroll();
         });
@@ -6725,7 +6735,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
       // 重建滚动同步数据（blocks + 预览子元素）
       this.rebuildScrollSync();
 
-      // 恢复预览滚动位置（逐行密集插值）
+      // 恢复预览滚动位置（逐行密集插值）；预览发起的编辑（复选框勾选）已保存位置，跳过以免被重算覆盖
       if (this.settings.scrollSync && this._editorElementList && this._editorElementList.length > 1) {
         const cmInfo = this.cm.getScrollInfo();
         const top = cmInfo.top;
@@ -6757,13 +6767,6 @@ input[type="checkbox"]:checked::after { display: none !important; }
       } else {
         const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
         if (this.preview.scrollTop > maxScroll) this.preview.scrollTop = maxScroll;
-      }
-      // 预览发起的编辑（如 checkbox toggle）需保留预览滚动位置
-      if (this._previewEditPreserveScroll) {
-        const maxPS = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
-        this.preview.scrollTop = Math.min(this._restorePreviewScrollTop || 0, maxPS);
-        this._previewEditPreserveScroll = false;
-        this._restorePreviewScrollTop = 0;
       }
       requestAnimationFrame(() => {
         if (gen === this._renderGeneration) this._resumeScroll();
@@ -6842,7 +6845,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
         }
         return;
       }
-      // 打包文档（使用说明 / demo）：相对 webview 根 fetch（dev: src/；screenshots 已复制到 src/ 以命中）
+      // 打包文档（使用说明 / demo）：相对资源由 _openBundledFile 记录真实资源路径，按其目录读取图片
       try {
         const resp = await fetch(rawSrc);
         if (!resp.ok) { fail(img); return; }
@@ -7780,17 +7783,39 @@ input[type="checkbox"]:checked::after { display: none !important; }
     const taskRe = /^(\s*(?:>\s*)*(?:[*+-]|\d+[.)])\s+)\[([ xX])\](\s.*)?$/;
     const m = lineText.match(taskRe);
     if (!m) return;
-    // checkbox.checked 已被浏览器在 click 时切换；据此决定写 x 还是空格
-    const newMark = checkbox.checked ? 'x' : ' ';
+    // 采用原生 click 切换后的 checked 值作为目标态（点击委托已不 preventDefault，浏览器保留该切换）。
+    // 兜底：若个别环境原生切换未生效（checked 与源码当前标记一致），则手动取反并写入。
+    const sourceChecked = m[2] === 'x' || m[2] === 'X';
+    let newChecked = checkbox.checked;
+    if (newChecked === sourceChecked) {
+      // 点击委托未调用 preventDefault，此处在监听器内设置不会被浏览器撤销，会保留。
+      newChecked = !sourceChecked;
+      checkbox.checked = newChecked;
+    }
+    const newMark = newChecked ? 'x' : ' ';
     const newLine = m[1] + '[' + newMark + ']' + (m[3] || '');
     const cursor = this.cm.getCursor();
-    // 捕获预览当前滚动位置：replaceRange 会同步触发 change → debounceUpdatePreview → updatePreview
-    // → preview.innerHTML 替换后 scrollTop 归零。在此保存，供 updatePreview 内恢复使用。
-    this._restorePreviewScrollTop = this.preview.scrollTop;
-    this._previewEditPreserveScroll = true;
+    // 预览 DOM 已通过原生 checked 切换即时更新，无需手动 set；抑制全量重渲染避免跳动/重渲染还原。
+    this._suppressNextPreviewRerender = true;
+    // 同时取消任何已排队的防抖重建（如打字 / setValue 触发的待执行 300ms 定时器）：
+    // 否则勾选后那个遗留定时器仍会到期并整篇重建 preview，覆盖即时勾选并引发跳动/“看似没反应”。
+    clearTimeout(this.debounceTimer);
+    // 临时关闭滚动同步：cm.replaceRange/cm.setCursor 可能让编辑器自动滚动，
+    // 触发 _syncEditorToPreview 把预览滚到光标行（任务列表某行），导致上方 H3「任务列表」
+    // 被滚出视野顶部——表现为「点完之后预览框根本没有渲染出来」。
+    // _resumeScroll 会在 100ms 后自动恢复 _canScroll 标志，不影响正常滚动同步。
+    const prevCanScroll = { editor: this._canScroll.editor, preview: this._canScroll.preview };
+    this._canScroll.editor = false;
+    this._canScroll.preview = false;
     this.cm.replaceRange(newLine, { line: lineNum, ch: 0 }, { line: lineNum, ch: lineText.length });
-    this.cm.setCursor(cursor);  // 保持光标位置不跳动
-    // activeTab.content 由 change 事件同步；预览由 change 事件 debounce 自动刷新（会重新启用 checkbox）
+    this.cm.setCursor(cursor, { scroll: false });  // 保持光标位置不跳动且不让编辑器自动滚动
+    setTimeout(() => {
+      if (this._canScroll) {
+        this._canScroll.editor = prevCanScroll.editor;
+        this._canScroll.preview = prevCanScroll.preview;
+      }
+    }, 120);
+    // activeTab.content 由 change 事件同步；预览 DOM 已就地更新，无需重渲染。
   }
 
   insertLinePrefix(prefix, ordered = false) {
