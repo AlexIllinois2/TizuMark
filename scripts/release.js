@@ -1,0 +1,84 @@
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
+const { VERSION, notesLines } = require('./release-notes');
+
+const TOKEN = process.env.GITEE_TOKEN;
+
+const releaseBody = {
+  tag_name: 'v' + VERSION,
+  name: 'v' + VERSION,
+  target_commitish: 'master',
+  body: notesLines.join('\n'),
+  prerelease: false,
+};
+
+// === 通用 API 请求函数 ===
+function apiRequest(method, p, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : null;
+    const options = {
+      hostname: 'gitee.com',
+      path: `/api/v5/repos/tizu/tizu-mark/releases${p}`,
+      method,
+      headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json; charset=utf-8' },
+    };
+    if (payload) options.headers['Content-Length'] = Buffer.byteLength(payload, 'utf-8');
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try { resolve(JSON.parse(data)); } catch { resolve(data); }
+        } else { reject(new Error(`HTTP ${res.statusCode}: ${data}`)); }
+      });
+    });
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+// === 上传附件函数（multipart/form-data）===
+function uploadFile(releaseId, filePath) {
+  return new Promise((resolve, reject) => {
+    const fileName = path.basename(filePath);
+    const boundary = '----' + Date.now();
+    const header = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`;
+    const footer = `\r\n--${boundary}--\r\n`;
+    const fileContent = fs.readFileSync(filePath);
+    const body = Buffer.concat([Buffer.from(header, 'utf-8'), fileContent, Buffer.from(footer, 'utf-8')]);
+    const options = {
+      hostname: 'gitee.com',
+      path: `/api/v5/repos/tizu/tizu-mark/releases/${releaseId}/attach_files`,
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': body.length },
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve(data); } });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+// === 主流程 ===
+(async () => {
+  const release = await apiRequest('POST', '', releaseBody);
+  console.log('Created release #' + release.id);
+  const files = [
+    `D:/project/tizu-mark/release/TizuMark_${VERSION}_x64-setup.exe`,
+    `D:/project/tizu-mark/release/TizuMark_${VERSION}_x64_en-US.msi`,
+    `D:/project/tizu-mark/release/TizuMark_${VERSION}_x64.exe`,
+    `D:/project/tizu-mark/release/update-windows-x86_64.json`,
+  ];
+  for (const f of files) {
+    if (!fs.existsSync(f)) { console.error('MISSING FILE: ' + f); continue; }
+    await uploadFile(release.id, f);
+    console.log('Uploaded: ' + path.basename(f));
+  }
+  console.log('All done!');
+})().catch(e => { console.error('FAILED:', e.message); process.exit(1); });

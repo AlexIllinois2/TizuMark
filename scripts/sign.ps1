@@ -24,8 +24,9 @@ $TimestampUrl = if ($env:CODE_SIGN_TIMESTAMP_URL) {
     "http://timestamp.sectigo.com"
 }
 
-# signtool.exe 路径
-$SignTool = "signtool.exe"
+# signtool.exe 路径（自动在 Windows Kits 中搜索绝对路径，避免依赖 PATH）
+$SignTool = @(Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue)[0]
+if ($SignTool) { $SignTool = $SignTool.FullName } else { $SignTool = "signtool.exe" }
 
 # 如果证书主题名称未配置，尝试使用默认方式签名
 $CertSubject = if ($env:CODE_SIGN_CERT_SUBJECT) {
