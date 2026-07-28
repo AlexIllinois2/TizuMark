@@ -22,9 +22,15 @@ TizuMark 不止是一个 Markdown 编辑器，它在几个关键场景上做到�
   
 - ⌨️ **快捷键全自定义**：每一条快捷键都可在 `文件 → 快捷键设置` 中改键，符合你的肌肉记忆。
   
-- 📂 **多标签页 + 工作区**：同时编辑多个文件、拖拽批量打开、文件夹工作区、`.md` 文件关联。
-  
-- 🎨 **个性化主题**：亮色 / 暗黑 / 跟随系统一键切换，字体、行高、内容宽度自由调节。
+- 📂 **多标签页 + 工作区**：同时编辑多个文件、拖拽批量打开、文件夹工作区（侧边栏文件树）、`.md` 文件关联。
+
+- 🔍 **三级查找体系**：编辑器内查找替换、预览区查找、跨文件搜索，均支持正则与循环跳转。
+
+- 🎨 **个性化主题**：亮色 / 暗黑 / 跟随系统 + 5 套配色方案，自定义字体导入，中英一键切换。
+
+- 🔧 **更多细节**：外部变更检测（非阻塞提示条）、会话恢复（重启保留标签页与工作区）、静默自动更新、拖拽标签排序、可折叠格式工具栏。
+
+> 下文是完整语法演示。想快速体验特色功能，直接跳到 [导出功能](#导出功能)、[数学公式](#数学公式)、[流程图与图表](#流程图与图表)、[查找与替换](#查找与替换)、[文件与工作区](#文件与工作区)、[个性化与设置](#个性化与设置) 几个章节即可。
   
 > 下文是完整语法演示。想快速体验特色功能，直接跳到 [数学公式](#数学公式)、[流程图与图表](#流程图与图表)、[提示框callout](#提示框callout) 几个小节即可。
 > 
@@ -134,7 +140,7 @@ TizuMark 支持网络图片、相对路径、绝对路径三种来源。图片�
 ![image](data:image/png;base64,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)
 ```
 
-> 图片管理相关功能：支持 MD5 自动去重粘贴图片；存储方式可选「复制到 assets/」或「Base64 嵌入」；路径模式可选「相对路径」（默认）或「绝对路径」，详见 `文件 → 设置`。
+> 图片管理相关功能：支持 MD5 自动去重粘贴图片；存储方式可选「复制到 assets/」或「Base64 嵌入」；路径模式可选「相对路径」（默认）或「绝对路径」；**图片查看器**：点击预览区图片可弹出查看，支持鼠标拖拽平移和滚轮缩放。详见 `文件 → 设置`。
 > 
 ---
 
@@ -174,13 +180,13 @@ TizuMark 支持网络图片、相对路径、绝对路径三种来源。图片�
   
 - [x] Review 代码
   
-- [ ] 发布 v0.2.0 版本
+- [x] 发布 v1.0.6 版本
   
 - [ ] 准备 macOS 适配
   
 - [ ] 撰写博客文章
   
-> 注：预览中为只读展示，勾选/取消勾选需回到源码修改。
+> 提示：预览中的勾选框可直接点击勾选/取消，编辑区源码自动同步。也支持在编辑器中手动写 `[x]` 或 `[ ]`。
 > 
 ### 定义列表
 
@@ -501,19 +507,19 @@ gantt
     axisFormat  %Y-%m
 
     section 核心功能
-    Markdown 编辑器       :done,    core1, 2024-01, 2024-03
-    实时预览引擎          :done,    core2, 2024-02, 2024-04
-    多标签页管理          :done,    core3, 2024-04, 2024-05
+    Markdown 编辑器       :done,    core1, 2025-01, 2025-03
+    实时预览引擎          :done,    core2, 2025-02, 2025-04
+    多标签页管理          :done,    core3, 2025-04, 2025-05
 
     section 高级特性
-    KaTeX 数学公式        :done,    adv1, 2024-05, 2024-06
-    Mermaid 图表           :done,    adv2, 2024-06, 2024-07
-    导出功能              :done,    adv3, 2024-07, 2024-08
+    KaTeX 数学公式        :done,    adv1, 2025-05, 2025-06
+    Mermaid 图表           :done,    adv2, 2025-06, 2025-07
+    导出功能              :done,    adv3, 2025-07, 2025-08
 
     section 平台扩展
-    Windows 发布           :done,    plat1, 2024-08, 2024-09
-    macOS 适配             :active,  plat2, 2024-09, 2025-01
-    Linux 适配             :         plat3, 2025-01, 2025-03
+    Windows 发布           :done,    plat1, 2025-08, 2025-09
+    macOS 适配             :active,  plat2, 2025-09, 2026-06
+    Linux 适配             :         plat3, 2026-07, 2026-12
 ```
 
 ### 状态图
@@ -583,7 +589,82 @@ TizuMark 支持 GitHub 风格的提示框，让文档中的注意事项更加醒
 
 > [!CAUTION]
 > **安全注意**：TizuMark 导出的 HTML 文件是自包含的独立网页，可以安全分享给他人。但在分享前，请检查文档中是否包含敏感信息（如密钥、密码等）。
-> 
+
+### 自定义标题
+
+在提示框类型名称后直接跟空格加标题文字即可：
+
+> [!WARNING] 自定义提醒标题
+> 提示框会显示你指定的标题文字，而不是默认的类型名。
+
+```markdown
+> [!WARNING] 自定义提醒标题
+> 提示框会显示你指定的标题文字。
+```
+
+> 支持所有五种提示框类型设置自定义标题。
+
+---
+
+## 导出功能
+
+TizuMark 支持三种导出方式，覆盖不同的使用场景。
+
+### 导出 HTML
+
+`文件 → 导出 HTML` 可生成一个**自包含的单文件网页**。特点：
+
+- 完整保留编辑器的**主题配色、字体方案**（亮色/暗黑/任意配色）
+- 所有图片内联为 Base64，**完全离线**即可浏览
+- 支持 KaTeX 数学公式、Mermaid 图表的完整渲染
+- 代码块高亮保留原样
+
+适合：打包笔记分享给同事、发布到个人网站作为文章页、本地离线存档。
+
+### 导出 PNG 长图
+
+`文件 → 导出为图片` 可将当前文档导出为**高清长图 PNG**（宽度 800px，2x DPI）：
+
+- 导出范围：仅预览区已渲染内容（含公式与图表）
+- 自动跟随当前明暗主题配色
+- 图片中的相对路径图片自动解析，与预览效果一致
+
+适合：分享到社交媒体、嵌入到不支持 Markdown 的平台、快速生成文档截图。
+
+### 导出 PDF
+
+使用快捷键 `Ctrl+P` 调出系统打印对话框，保存为 PDF 即可。导出的 PDF 同样保留主题样式。
+
+---
+
+## 查找与替换
+
+TizuMark 提供三种层级的查找能力：
+
+### 编辑器内查找
+
+`Ctrl+F` 打开查找面板，支持：
+
+- 区分大小写
+- 正则表达式
+- 循环查找（到末尾后`回车`继续）
+- 替换（可选逐次替换或全部替换）
+
+查找结果会在编辑区实时高亮（最多 2000 处），按 `Enter` 跳转下一个匹配项。
+
+### 预览区查找
+
+在预览面板中也可独立查找（右键 → 在预览中查找），支持正则与循环，适合在长文档的预览中快速定位内容。
+
+### 跨文件搜索
+
+`Ctrl+Shift+F` 打开跨文件搜索面板，可在以下范围搜索：
+
+- 当前已打开的所有标签页
+- 指定目录（含子目录）
+
+搜索结果在**编辑区与预览区同时高亮导航**，一键跳转。支持正则表达式和循环搜索。
+
 ---
 
 ## 水平分隔线
@@ -628,6 +709,95 @@ TizuMark 支持 Markdown 扩展脚注语法[^1]。
 [^1]: 这是脚注一的内容。脚注可以包含任何 Markdown 格式：**粗体**、*斜体*、`代码` 等。
 
 [^2]: 这是脚注二的内容。脚注非常适合添加引用来源、补充说明和额外信息。
+
+---
+
+## 文件与工作区
+
+TizuMark 不只是单文件编辑器，它提供了完整的文件管理体验。
+
+### 多标签页
+
+- 同时打开多个文件，标签栏支持横向滚动
+- 拖拽标签页可自由**调整排序**
+- 右键标签页菜单：关闭 / 关闭其他 / 关闭全部 / 复制文件路径
+- `Ctrl+Tab` / `Ctrl+Shift+Tab` 快速切换标签
+- 拖拽 `.md` 文件到窗口可批量打开
+
+### 文件夹工作区
+
+`文件 → 打开文件夹` 可将整个目录加载为工作区：
+
+- 侧边栏显示**文件树**，支持展开 / 收起子目录
+- 点击文件树中的文件直接在新标签页打开
+- 外部程序增删文件后，文件树**自动刷新**
+
+### 最近打开
+
+- 自动记录最近打开的文件，`文件 → 最近打开` 可快速重新打开
+- 支持清空最近文件列表
+
+### 外部变更检测
+
+当文件被其他程序（如 Git、网盘同步、其他编辑器）修改时：
+
+- 菜单栏下方弹出**非阻塞提示条**
+- 可选择「重新加载」或「忽略」
+- 多文件变更支持逐个处理或批量操作
+
+### 系统集成
+
+- **文件关联**：双击 `.md` / `.markdown` 文件直接用 TizuMark 打开
+- **命令行打开**：`tizumark.exe document.md` 可直接打开指定文件
+- **系统托盘**：可显示托盘图标，关闭窗口行为可选「每次询问」「退出应用」「最小化到托盘」
+- **会话恢复**：重启后自动恢复上次的标签页、文件夹工作区与展开目录
+
+---
+
+## 个性化与设置
+
+TizuMark 提供丰富的自定义选项，`文件 → 设置` 可随时调整。
+
+### 主题与配色
+
+三种视觉模式，一键切换：
+
+- **亮色主题**：适合白天的清爽浅色界面
+- **暗黑主题**：适合夜间使用的护眼深色界面
+- **跟随系统**：自动与操作系统主题保持同步
+
+在主题基础上，还可选择**5 套配色方案**：
+
+| 方案 | 风格 |
+|------|------|
+| 基准 (Default) | 中性简洁 |
+| 暖橙 (Sunset) | 温暖舒适 |
+| 翠林 (Forest) | 自然清新 |
+| 极夜 (Nord) | 冷淡专业 |
+| 暮紫 (Dusk) | 深沉优雅 |
+
+切换主题与配色**即时生效，无需重启**。（当前显示为默认亮色主题，菜单栏左上角可切换查看效果）
+
+### 字体与排版
+
+- **编辑器字号**和**预览正文字号**分别可调
+- **行高**和**预览最大宽度**自由设定
+- 2 套内置字体方案：简约风格 (system-sans) / 印刷风格 (classic-serif)
+- 支持导入**自定义字体**（.ttf / .otf / .woff），编辑器字体与预览字体可分别指定，含实时字体预览
+
+### 其他常用设置
+
+- **默认视图**：启动时自动进入预览模式或编辑模式
+- **语言切换**：中/英界面语言一键切换
+- **TOC 目录**：在文档中插入 `[TOC]` 自动生成目录
+- **大文档优化**：超长文档自动切换滑动窗口渲染（~1200 行），数万行文件依然流畅
+- **软换行**：回车渲染为 `<br>` 或保持传统段落模式，开关可控
+- **代码块行号与自动换行**：开关可控
+- **系统托盘**：可显示托盘图标，关闭窗口行为可选「每次询问」「退出应用」「最小化到托盘」
+- **外部变更检测**：文件被其他程序修改后，以非阻塞提示条提醒，支持逐个/批量重新加载或忽略
+- **快捷键预设**：内置 Default / VSCode / Typora / Sublime Text 四种预设方案，也可逐条自定义
+
+> 所有设置在关闭软件后自动保存，下次启动恢复。
 
 ---
 
@@ -689,7 +859,7 @@ gitGraph
     commit id: "支持主题切换"
     checkout main
     merge feature/mermaid
-    commit id: "v0.1.0 发布"
+    commit id: "v1.0.6 发布"
 ```
 
 ### 用户旅程图

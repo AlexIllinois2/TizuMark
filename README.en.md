@@ -43,28 +43,50 @@ The world isn't short of Markdown editors. But most fall into one of two camps: 
 
 ---
 
-## Features
+## Key Features
+
+> TizuMark lands right in the sweet spot between heavyweight IDEs and barebones notepads — nailing the things writers care about most.
+
+- ⚡ **Blazing fast & lightweight**: Built on **Rust + Tauri v2** (native WebView), ~**7MB** installer, **<50MB** RAM, launches in under a second — 4/5 less memory than Electron apps.
+- 👁️ **Live WYSIWYG preview**: Write on the left, see it render on the right. Editor and preview scroll auto-synced — no window switching.
+- 🧭 **Smart outline navigation**: Auto-parses heading hierarchy, one click to any chapter. Never get lost in long docs.
+- 📐 **Built-in KaTeX math**: Inline formulas, display blocks, matrices, equation systems — papers, notes, formulas all handled.
+- 📊 **Built-in Mermaid diagrams**: Flowcharts, sequence diagrams, Gantt charts, class diagrams, state diagrams… **draw with code, auto-adapts to light/dark theme**.
+- 🖼️ **Paste-to-insert images**: Screenshots or drag-drop, auto-dedup via MD5. Store in `assets/` or inline as Base64. Relative paths resolve identically in preview and export.
+- 📤 **Multi-format export**: Standalone HTML (full styling, fully offline), high-res PNG long screenshot, PDF (system print dialog) — all preserve dark/light theme.
+- ⌨️ **Fully customizable shortcuts**: Every single shortcut can be rebound in `File → Keyboard Shortcuts` to match your muscle memory.
+- 📂 **Multi-tab + workspace**: Edit multiple files at once, drag-drop batch open, folder workspace with sidebar file tree, `.md` file association.
+- 🚀 **Huge-doc smooth preview**: Sliding-window + virtual rendering for documents with tens of thousands of lines — never lags. External file changes auto-detected with reload prompt.
+- 🎨 **Deep personalization**: Light / Dark / Follow System; 5 color schemes (Default / Sunset / Forest / Nord / Dusk), 2 font schemes (Sans / Serif), plus custom font import (`.ttf` / `.otf` / `.woff`) with separate editor & preview fonts.
+- 🌐 **Bilingual UI**: Chinese / English interface toggle at any time.
+- 💾 **Session restore**: Reopens tabs, folder workspace, and expanded directories from last session.
+
+---
+
+## Feature Matrix
 
 | 📝 Editing | 👁️ Preview | 📤 Export |
 |---|---|---|
 | Full GFM syntax highlighting | Live scroll-synced preview | Standalone HTML (with full styling) |
 | 100+ language code highlighting | KaTeX math rendering | High-res long screenshot PNG |
 | Find & replace with regex | Mermaid flowcharts, sequences, Gantt, state | Export PDF (`Ctrl+P` print dialog) |
-| Auto bracket & quote pairing | Emoji shortcodes (`:rocket:` → 🚀) | Dark / light theme preserved |
-| Insert menu (tables, callouts, TOC) | Adaptive image sizing | 100% offline |
-| Image paste, auto-dedup (MD5 hash) | Auto width/height on image insert | CJK Emoji support |
-| | | Custom image asset path |
+| Cross-file search (`Ctrl+Shift+F`) | Emoji shortcodes (`:rocket:` → 🚀) | Dark / light theme preserved |
+| Collapsible format toolbar | Image viewer (drag-pan + scroll-zoom) | 100% offline |
+| Auto bracket & quote pairing | Adaptive image sizing | CJK Emoji support |
+| Image paste, auto-dedup (MD5) | Clickable task-list checkboxes | Custom image asset path |
+| Insert menu (tables, callouts, TOC) | Auto width/height on image insert | |
 
 | ⚡ Productivity | 🎨 Style | 🔧 Power |
 |---|---|---|
-| Outline sidebar — jump anywhere | Light / Dark / Follow System themes | CLI file opening |
-| Drag & drop, batch file open | Font size, line height, max width | File association: .md, .markdown |
-| Free-drag split pane ratio | Tab width, word wrap toggle | Unsaved-state markers + close prompt |
-| Multi-tab + right-click context menus | Fully rebindable shortcuts | Status bar word & char count |
-| Custom image asset path (relative/absolute) | Import custom fonts (editor & preview separately) | |
-| Huge-doc sliding-window preview (no lag on 10k+ lines) | 5 color schemes + 2 font schemes | External-change detection & reload prompt |
-| Find in preview (regex) + copy as HTML | Light / Dark / Follow System + 中文/English UI | Session restore (tabs & workspace) |
-| Soft line break toggle | Frameless custom window controls | |
+| Outline sidebar — jump anywhere | Light / Dark / Follow System | CLI file opening |
+| Folder workspace (sidebar file tree) | Font size, line height, max width | File association: .md, .markdown |
+| Cross-file search (regex + directory) | Tab width, word wrap toggle | Recently opened files list |
+| Tab drag-to-reorder | Code block line numbers / auto-wrap | Unsaved-state markers + close prompt |
+| Drag & drop, batch file open | Fully rebindable shortcuts | System tray (hideable) + close behavior |
+| Free-drag split pane ratio | Import custom fonts (editor & preview separately) | Status bar word & char count |
+| Find in preview (regex) + copy as HTML | 5 color schemes + 2 font schemes | External-change detection & reload prompt |
+| Soft line break toggle | 中文 / English UI toggle | |
+| Session restore (tabs & workspace) | Frameless custom window controls | |
 | | Silent update check on startup | |
 
 ---
@@ -110,6 +132,8 @@ The world isn't short of Markdown editors. But most fall into one of two camps: 
 <a href="https://gitee.com/tizu/tizu-mark/releases"><img src="https://img.shields.io/badge/⬇_Download_from_Gitee-C71D23?style=for-the-badge&logo=gitee&logoColor=white" alt="Download from Gitee"></a>
 
 > On first launch, the user guide opens automatically. You can also find it in `Help → User Guide` anytime.
+
+> 🔔 **On first install or after a version upgrade, TizuMark automatically opens the User Guide and the full syntax demo (demo.md) to help you get started with new features.**
 
 📖 Want to see every syntax in action? Open [demo.md](demo.md) for a full syntax showcase.
 

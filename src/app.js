@@ -8448,13 +8448,37 @@ window.addEventListener('DOMContentLoaded', async () => {
     try {
       const args = await invoke('get_cli_args');
       const hadSession = await window.editor.restoreSession();
+      let currentVersion = '';
       if (args && args.length > 0) {
         for (const filePath of args) {
           if (filePath.startsWith('-')) continue;
           await window.editor.openFilePath(filePath);
         }
-      } else if (!hadSession && isFirstLaunch) {
-        window.editor.openUserGuide();
+      } else {
+        // 首次安装 / 升级后首次打开：自动展示使用说明和 demo.md
+        const lastVersion = localStorage.getItem('tizumark-app-version');
+        try {
+          currentVersion = await window.__TAURI__.app.getVersion();
+        } catch (_) { /* fallback 到静默跳过 */ }
+        if (isFirstLaunch || (currentVersion && lastVersion !== currentVersion)) {
+          window.editor.openUserGuide();
+          // 同步打开 demo.md（使用说明内嵌的 demo.md 链接已可手动点开，
+          // 此处自动打开省去用户多一步点击）
+          try {
+            const result = await invoke('read_bundled_file', { filename: 'demo.md' });
+            const demoContent = result && typeof result === 'object' ? result.content : result;
+            const demoPath = result && typeof result === 'object' ? result.path : 'demo.md';
+            if (demoContent && !demoContent.trim().startsWith('<!DOCTYPE') && !demoContent.trim().startsWith('<html')) {
+              await window.editor._openBundledFile('demo.md', demoContent, demoPath);
+            }
+          } catch (_) {
+            // demo.md 读取失败不影响主功能
+          }
+        }
+      }
+      // 持久化当前应用版本，供下次启动比对
+      if (currentVersion) {
+        localStorage.setItem('tizumark-app-version', currentVersion);
       }
     } catch (e) {
       console.warn('Failed to load session / cli args:', e);
