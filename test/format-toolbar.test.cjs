@@ -158,3 +158,24 @@ test('format: 图片 web 路径 OK 插入 ![alt](url)', async () => {
     assert.ok(w.document.getElementById('insert-image-dialog').classList.contains('hidden'), '确认后对话框应关闭');
   } finally { cleanup(w); }
 });
+
+test('format: 点击格式工具栏下拉项后菜单强制隐藏，鼠标移出后恢复', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    const item = w.document.querySelector('#format-toolbar .fmt-dropdown .dropdown-item[data-action="insert-table"]');
+    assert.ok(item, '应存在 结构插入→表格 菜单项');
+    const menu = item.closest('.dropdown-menu');
+    const dd = item.closest('.fmt-dropdown');
+
+    // 点击前不应有 force-hide
+    assert.ok(!menu.classList.contains('force-hide'), '点击前菜单不应处于 force-hide');
+
+    // 真实派发 click，触发 initFormatToolbar 的点击委托
+    item.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    assert.ok(menu.classList.contains('force-hide'), '点击菜单项后菜单应被强制隐藏（force-hide）');
+
+    // 鼠标移出下拉区应清除 force-hide，恢复 hover 展开能力
+    dd.dispatchEvent(new w.MouseEvent('mouseleave', { bubbles: true }));
+    assert.ok(!menu.classList.contains('force-hide'), '鼠标移出后 force-hide 应被清除');
+  } finally { cleanup(w); }
+});

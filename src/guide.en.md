@@ -28,9 +28,11 @@ TizuMark's interface has four main areas:
 | Open Folder | `File → Open Folder` | — |
 | Save File | `File → Save` | <kbd>Ctrl</kbd> + <kbd>S</kbd> |
 | Save As | `File → Save As` | — |
+| Recent Files | `File → Recent Files` | — |
+| CLI Open | `tizumark.exe document.md` | — |
 | Close Tab | Click × on tab or right-click | <kbd>Ctrl</kbd> + <kbd>W</kbd> |
 
-> **Drag and drop** `.md` files directly into the window — supports multiple files.
+> **Drag and drop** `.md` files directly into the window — supports multiple files. `File → Recent Files` quickly reopens previously edited documents.
 
 ---
 
@@ -64,11 +66,14 @@ Click `View → Sidebar` to show or hide the sidebar. It has two tabs:
 |--------|--------|
 | New Tab | Click <kbd>+</kbd> on tab bar or <kbd>Ctrl</kbd> + <kbd>N</kbd> |
 | Switch Tab | <kbd>Ctrl</kbd> + <kbd>Tab</kbd> / <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Tab</kbd> |
+| Drag to Reorder | Drag a tab to rearrange its position |
 | Close Tab | Click × or <kbd>Ctrl</kbd> + <kbd>W</kbd> |
 | Right-Click Menu | Close / Close Others / Close All / Copy Path |
 | Double-Click | On empty tab bar space to create new tab |
 
 Unsaved tabs show a `*` indicator.
+
+**Session Restore**: When you reopen TizuMark after closing it, your previous tabs, folder workspace, and expanded directories are automatically restored — picking up exactly where you left off.
 
 ### Find & Replace
 
@@ -84,6 +89,8 @@ Two independent search systems:
 | Regex | JavaScript-compatible regular expressions |
 
 **Preview Find** (<kbd>Ctrl</kbd> + <kbd>F</kbd> in preview mode): Search directly within rendered content with highlights.
+
+**Cross-file Search** (<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd>): Search across all open tabs or a specified directory, with regex support. Results are highlighted in both the editor and preview simultaneously, with one-click navigation. Ideal for quickly locating content in large project docs.
 
 ### Context Menus
 
@@ -118,6 +125,8 @@ When a document exceeds ~5000 lines or 4MB, the preview automatically switches t
 | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Q</kbd> | Blockquote | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd> | Toggle Theme |
 
 > All shortcuts are customizable in **`File → Keyboard Shortcuts`**. Click "Modify" and press your new key combination. Click "Clear" to remove, "Restore Default" to reset.
+> 
+> **Shortcut Presets**: Built-in **Default / VSCode / Typora / Sublime Text** presets can be switched instantly in `File → Keyboard Shortcuts`. All shortcuts take effect immediately after switching, no restart needed.
 
 ---
 
@@ -255,6 +264,10 @@ You can edit or remove `width`/`height` directly in the source:
 - Change to a percentage: `width="100%"`
 - Remove entirely: the editor renders at original dimensions
 
+### Image Viewer
+
+Click any image in the preview to open a dedicated viewer with **drag-to-pan** and **scroll-to-zoom** support. No need to leave TizuMark to inspect an image closely.
+
 ---
 
 ## Auto Updates
@@ -349,6 +362,8 @@ All options are available in `File → Settings`:
 | Soft Line Break (Enter = newline) | On / Off | When on, a single Enter creates a line break; when off, CommonMark standard applies (Enter = space) |
 | Image Storage Mode | Copy to assets / Base64 Embed | See Image Management |
 | Image Asset Path | Relative / Absolute | See Image Management |
+| Close Behavior | Ask / Quit / Minimize to Tray | What happens when closing the last window. Minimize to tray lets you bring the window back via the tray icon |
+| Show Tray Icon | On / Off | Show or hide the system tray icon |
 
 ### Custom Fonts
 

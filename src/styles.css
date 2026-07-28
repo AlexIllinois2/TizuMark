@@ -913,6 +913,9 @@ body {
 .fmt-dropdown:hover > .dropdown-menu {
   display: block;
 }
+.fmt-dropdown > .dropdown-menu.force-hide {
+  display: none !important;
+}
 .fmt-dropdown .dropdown-item {
   white-space: nowrap;
 }

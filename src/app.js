@@ -2595,7 +2595,7 @@ class MarkdownEditor {
     const s = this.shortcuts;
     const LIST_LINE_RE = /^(\s*)(?:>[> ]*|[*+-]\s\[[xX ]\]\s|[*+-]\s|\d+[.)]\s)/;
     this.cm.setOption('extraKeys', {
-      'Enter': 'newlineAndIndentContinueMarkdownList',
+      'Enter': (cm) => this._handleTableEnter(cm),
       'Tab': (cm) => {
         if (cm.somethingSelected()) {
           cm.indentSelection('add');
@@ -2724,7 +2724,7 @@ class MarkdownEditor {
       autoCloseBrackets: true,
       indentUnit: this.settings.tabSize,
       extraKeys: {
-        'Enter': 'newlineAndIndentContinueMarkdownList',
+        'Enter': (cm) => this._handleTableEnter(cm),
         'Tab': (cm) => {
           if (cm.somethingSelected()) {
             cm.indentSelection('add');
@@ -7398,6 +7398,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
     }
     let content = null;
     // 优先用 fetch 读取打包后的前端资源（开发/多数运行环境）
+    // guide.md 位于 src/ 目录，webview 前端路径 frontendDist: ../src 可访问
     try {
       const resp = await fetch(fileName);
       if (resp.ok) {
@@ -7858,6 +7859,60 @@ input[type="checkbox"]:checked::after { display: none !important; }
     cm.focus();
   }
 
+  // 表格行内按 Enter 自动补充表格结构
+  _handleTableEnter(cm) {
+    const TABLE_ROW_RE = /^\|.*\|\s*$/;
+    const TABLE_SEPARATOR_RE = /^\|\s*[-:][-:\s]*\|/;
+    const pos = cm.getCursor();
+    const line = cm.getLine(pos.line);
+    // 非表格行或分隔行 → 交回原有列表延续逻辑
+    if (!TABLE_ROW_RE.test(line) || TABLE_SEPARATOR_RE.test(line)) {
+      const cmdName = 'newlineAndIndentContinueMarkdownList';
+      if (CodeMirror.commands[cmdName]) {
+        cm.execCommand(cmdName);
+      } else {
+        cm.execCommand('newlineAndIndent');
+      }
+      return;
+    }
+    // 有选区（多行选择）→ 交回原有逻辑
+    if (cm.somethingSelected()) {
+      const cmdName = 'newlineAndIndentContinueMarkdownList';
+      if (CodeMirror.commands[cmdName]) {
+        cm.execCommand(cmdName);
+      } else {
+        cm.execCommand('newlineAndIndent');
+      }
+      return;
+    }
+    // 计算列数
+    const colCount = (line.match(/\|/g) || []).length - 1;
+    if (colCount < 1) {
+      cm.execCommand('newlineAndIndentContinueMarkdownList');
+      return;
+    }
+    // 判断是否空行（去除 | 和空白后无内容）
+    const stripped = line.replace(/\|/g, '').trim();
+    if (stripped === '') {
+      // 空表格行 → 退出表格：删除本行
+      const nextLine = cm.getLine(pos.line + 1);
+      if (nextLine !== undefined) {
+        cm.replaceRange('', { line: pos.line, ch: 0 }, { line: pos.line + 1, ch: 0 });
+      } else {
+        // 最后一行：清空内容
+        cm.replaceRange('', { line: pos.line, ch: 0 }, { line: pos.line, ch: line.length });
+      }
+      cm.setCursor({ line: pos.line, ch: 0 });
+      return;
+    }
+    // 正常表格行 → 插入等列新行，光标置于第一格
+    const cells = [];
+    for (let i = 0; i < colCount; i++) cells.push(' ');
+    const newRow = '| ' + cells.join(' | ') + ' |';
+    cm.replaceRange('\n' + newRow, { line: pos.line, ch: line.length });
+    cm.setCursor({ line: pos.line + 1, ch: 2 });
+  }
+
   insertBlock(text, cursorOffset) {
     const cursor = this.cm.getCursor();
     const line = this.cm.getLine(cursor.line);
@@ -8280,6 +8335,16 @@ input[type="checkbox"]:checked::after { display: none !important; }
         item.addEventListener('click', (e) => {
           e.stopPropagation();
           this.executeMenuAction(item.dataset.action);
+          // 点击菜单项后关闭弹出菜单：强制隐藏，直到鼠标移出下拉区再恢复 hover 展开
+          const menu = item.closest('.dropdown-menu');
+          if (menu) menu.classList.add('force-hide');
+        });
+      });
+      // 鼠标移出下拉区后清除强制隐藏，恢复 hover 展开能力
+      fmtToolbar.querySelectorAll('.fmt-dropdown').forEach(dd => {
+        dd.addEventListener('mouseleave', () => {
+          const m = dd.querySelector('.dropdown-menu');
+          if (m) m.classList.remove('force-hide');
         });
       });
       const fmtCollapse = document.getElementById('fmt-collapse');

@@ -111,6 +111,9 @@
   <br>
   <img src="screenshots/11-export.png" alt="导出菜单" width="45%">
   <img src="screenshots/12-find.png" alt="查找替换" width="45%">
+  <br>
+  <img src="screenshots/13-workspace.png" alt="文件夹工作区" width="45%">
+  <img src="screenshots/14-callout.png" alt="提示框渲染" width="45%">
 </p>
 
 ---

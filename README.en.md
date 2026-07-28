@@ -111,6 +111,9 @@ The world isn't short of Markdown editors. But most fall into one of two camps: 
   <br>
   <img src="screenshots/11-export.png" alt="Export Menu" width="45%">
   <img src="screenshots/12-find.png" alt="Find & Replace" width="45%">
+  <br>
+  <img src="screenshots/13-workspace.png" alt="Folder Workspace" width="45%">
+  <img src="screenshots/14-callout.png" alt="Callout Rendering" width="45%">
 </p>
 
 ---
