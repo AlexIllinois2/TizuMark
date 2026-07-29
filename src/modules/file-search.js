@@ -40,14 +40,16 @@ function initFileSearch() {
 
   __fs_inputEl.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fsCloseDialog(); return; }
+    const len = __fs_filteredFiles.length;
+    if (!len) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      __fs_selectedIndex = Math.min(__fs_selectedIndex + 1, __fs_filteredFiles.length - 1);
+      __fs_selectedIndex = __fs_selectedIndex < 0 ? 1 : (__fs_selectedIndex + 1) % len;
       fsRenderList(); fsScrollToSelected(); return;
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
-      __fs_selectedIndex = Math.max(__fs_selectedIndex - 1, 0);
+      __fs_selectedIndex = __fs_selectedIndex < 0 ? len - 1 : (__fs_selectedIndex - 1 + len) % len;
       fsRenderList(); fsScrollToSelected(); return;
     }
     if (e.key === 'Enter') {
@@ -130,6 +132,7 @@ async function fsScanWorkspace(dir) {
   mdFiles.sort((a, b) => a.name.localeCompare(b.name));
   __fs_allFiles = mdFiles;
   __fs_filteredFiles = __fs_allFiles.slice(0, 50);
+  __fs_selectedIndex = -1;
   fsRenderList();
 }
 
