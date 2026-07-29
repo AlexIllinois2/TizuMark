@@ -12,15 +12,23 @@ function createPreviewDom() {
   return { dom, window: dom.window, document, preview };
 }
 
-// 加载项目内置 highlight.js（UMD，挂载到 window.hljs）
+// 加载 highlight.js（优先项目内置 UMD，缺失时回退到 node_modules，使测试在 git 清理 vendor 后仍可运行）
 function loadHljs(window) {
-  const hljsPath = path.resolve(__dirname, '..', '..', 'src', 'lib', 'highlight.js', 'highlight.min.js');
-  const code = require('fs').readFileSync(hljsPath, 'utf8');
-  // highlight.min.js 是 UMD：用 window 作为 global 上下文执行，使其挂到 window.hljs
-  const fn = new Function('window', 'self', 'module', 'exports', code);
-  const mod = { exports: {} };
-  fn(window, window, mod, mod.exports);
-  return window.hljs || mod.exports;
+  const fs = require('fs');
+  const builtinPath = path.resolve(__dirname, '..', '..', 'src', 'lib', 'highlight.js', 'highlight.min.js');
+  const npmPath = path.resolve(__dirname, '..', '..', 'node_modules', 'highlight.js', 'lib', 'index.js');
+  let hljs;
+  if (fs.existsSync(builtinPath)) {
+    const code = fs.readFileSync(builtinPath, 'utf8');
+    // highlight.min.js 是 UMD：用 window 作为 global 上下文执行，使其挂到 window.hljs
+    const fn = new Function('window', 'self', 'module', 'exports', code);
+    const mod = { exports: {} };
+    fn(window, window, mod, mod.exports);
+    hljs = window.hljs || mod.exports;
+  } else {
+    hljs = require(npmPath);
+  }
+  return hljs;
 }
 
 // 反引号构造助手，避免 shell/字符串转义问题

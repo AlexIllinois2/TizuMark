@@ -196,3 +196,56 @@ test('无语言标识的代码块重渲染后结构合法', async () => {
   const s = structureOf(preview);
   assert.deepStrictEqual(s, { ok: true }, '无语言标识块重渲染后结构破损: ' + (s.reason || 'ok'));
 });
+
+// 回归：含 = 的 ASCII 图表代码块被 highlight.js（如 gherkin）识别时，
+// 跨行 <span> 不得被 innerHTML.split('\n') 切断，导致结构破损 / 换行错乱。
+const MD_ASCII_DIAGRAM = B + B + B + '\n' +
+  '雷达点云 → 雷达特征编码器 → 雷达特征 f_r [D]\n' +
+  '|\n' +
+  '相机图像 → CNN(ResNet) → 相机特征 f_c [D] —|\n' +
+  '|\n' +
+  '特征融合\n' +
+  '| f = w_r·f_r ⊕ w_c·f_c |\n' +
+  '| （拼接 / 加权 / 注意力）|\n' +
+  '|\n' +
+  '检测头 → 检测结果\n' +
+  B + B + B;
+
+function hasBalancedTags(html) {
+  const stack = [];
+  const re = /<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const tag = m[1].toLowerCase();
+    if (m[0].startsWith('</')) {
+      if (stack.length === 0 || stack[stack.length - 1] !== tag) return false;
+      stack.pop();
+    } else if (!m[0].endsWith('/>')) {
+      stack.push(tag);
+    }
+  }
+  return stack.length === 0;
+}
+
+test('含 = 的 ASCII 图表代码块高亮后结构合法', async () => {
+  const { preview } = createPreviewDom();
+  const win = preview.ownerDocument.defaultView;
+  const hljs = loadHljs(win);
+  const cache = new Map();
+
+  renderInto(preview, MD_ASCII_DIAGRAM);
+  processCodeBlocks(preview, { hljs, cache, lineNumbers: true });
+  const s = structureOf(preview);
+  assert.deepStrictEqual(s, { ok: true }, '含 = 代码块高亮后结构破损: ' + (s.reason || 'ok'));
+
+  // 额外校验：每一行的 .code-line-text 内部 HTML 标签必须自平衡，
+  // 防止 highlight.js 的跨行 span 被切断后产生未闭合标签碎片。
+  for (const lineText of preview.querySelectorAll('pre code .code-line-text')) {
+    assert.ok(hasBalancedTags(lineText.innerHTML), `code-line-text 标签不平衡: ${lineText.innerHTML.slice(0, 80)}`);
+  }
+
+  // 内容应完整保留
+  const text = preview.querySelector('pre code .code-scroll').textContent;
+  assert.ok(text.includes('f = w_r·f_r ⊕ w_c·f_c'), '代码块文本内容应保留等号表达式');
+  assert.ok(text.includes('相机图像 → CNN(ResNet)'), '代码块文本内容应保留第二行');
+});

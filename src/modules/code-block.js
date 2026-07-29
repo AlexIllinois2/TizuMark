@@ -7,10 +7,62 @@
 //   - opts.cache: 缓存 Map（对应原 app.js 的 this._hljsCache）
 //   - opts.lineNumbers: 是否开启行号（对应原 preview.classList.contains('code-line-numbers')）
 //
-// 关键修复（避免预览代码块出现多余 []）：
+// 关键修复（避免预览代码块出现多余 [] / 结构破损）：
 //   1. 已包裹 .code-scroll 的块直接跳过，避免对已包装内容重复切分/高亮；
 //   2. 高亮前清除 hljs 的 dataset.highlighted，消除 "previously highlighted" 警告与错误处理；
-//   3. 缓存键纳入行号状态，开/关行号不共用不匹配 display 规则的缓存。
+//   3. 缓存键纳入行号状态，开/关行号不共用不匹配 display 规则的缓存；
+//   4. 行号包裹在语法高亮之前完成：按原始文本行拆分并包装，再对每行单独高亮。
+//      这避免 highlight.js 的跨行 <span>（如 gherkin 对 |...| 的字符串包裹）被 block.innerHTML.split('\n')
+//      在标签中间切断，导致预览代码块 HTML 结构破碎、换行错乱。
+
+function escapeHTML(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+}
+
+function detectLanguage(hljs, block) {
+  const cls = block.className || '';
+  const m = cls.match(/language-([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  try {
+    const auto = hljs.highlightAuto(block.textContent);
+    return auto.language || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function highlightLine(hljs, lang, line) {
+  if (!lang || !hljs.getLanguage(lang)) return escapeHTML(line);
+  try {
+    return hljs.highlight(line, { language: lang, ignoreIllegals: true }).value;
+  } catch (_) {
+    return escapeHTML(line);
+  }
+}
+
+function buildCodeScroll(lines, hljs, lang) {
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
+  if (lines.length <= 1) {
+    return `<div class="code-scroll">${highlightLine(hljs, lang, lines[0] || '')}</div>`;
+  }
+  return `<div class="code-scroll">${
+    lines.map((line, i) =>
+      `<span class="code-line"><span class="code-line-num">${i + 1}</span><span class="code-line-text">${highlightLine(hljs, lang, line) || '&nbsp;'}</span></span>`
+    ).join('')
+  }</div>`;
+}
+
+function buildCodeScrollNoHljs(lines) {
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
+  if (lines.length <= 1) {
+    return `<div class="code-scroll">${escapeHTML(lines[0] || '')}</div>`;
+  }
+  return `<div class="code-scroll">${
+    lines.map((line, i) =>
+      `<span class="code-line"><span class="code-line-num">${i + 1}</span><span class="code-line-text">${escapeHTML(line) || '&nbsp;'}</span></span>`
+    ).join('')
+  }</div>`;
+}
 
 function processCodeBlocks(preview, opts) {
   const { hljs, cache, lineNumbers } = opts;
@@ -41,20 +93,16 @@ function processCodeBlocks(preview, opts) {
           delete block.dataset.highlighted;
           block.className = (block.className || '').replace(/\bhljs\b/g, '').trim();
         }
-        hljs.highlightElement(block);
-        const lines = block.innerHTML.split('\n');
-        while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
-        let finalHtml;
-        if (lines.length <= 1) {
-          finalHtml = `<div class="code-scroll">${lines[0] || ''}</div>`;
-        } else {
-          finalHtml = `<div class="code-scroll">${
-            lines.map((line, i) =>
-              `<span class="code-line"><span class="code-line-num">${i + 1}</span><span class="code-line-text">${line || '&nbsp;'}</span></span>`
-            ).join('')
-          }</div>`;
-        }
+        // 先按原始文本拆分行并包裹行号，再对每行单独高亮，避免跨行 span 被切断。
+        const lang = detectLanguage(hljs, block);
+        const lines = block.textContent.split('\n');
+        const finalHtml = buildCodeScroll(lines, hljs, lang);
         block.innerHTML = finalHtml;
+        block.classList.add('hljs');
+        if (lang && !block.classList.contains(`language-${lang}`)) {
+          block.classList.add(`language-${lang}`);
+        }
+        block.dataset.highlighted = 'yes';
         cache.set(key, finalHtml);
       });
     } catch (e) {
@@ -66,17 +114,7 @@ function processCodeBlocks(preview, opts) {
       preview.querySelectorAll('pre code').forEach((block) => {
         if (block.querySelector('.code-scroll')) return;
         const lines = block.textContent.split('\n');
-        while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
-        const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        if (lines.length <= 1) {
-          block.innerHTML = `<div class="code-scroll">${esc(lines[0] || '')}</div>`;
-          return;
-        }
-        block.innerHTML = `<div class="code-scroll">${
-          lines.map((line, i) =>
-            `<span class="code-line"><span class="code-line-num">${i + 1}</span><span class="code-line-text">${esc(line) || '&nbsp;'}</span></span>`
-          ).join('')
-        }</div>`;
+        block.innerHTML = buildCodeScrollNoHljs(lines);
       });
     } catch (e) {
       if (typeof console !== 'undefined') console.warn('[preview] Code line error:', e);
