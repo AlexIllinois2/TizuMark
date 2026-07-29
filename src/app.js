@@ -243,7 +243,9 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: '本软件基于 GPL v3 开源协议发布。',
     noUnauthorized: '欢迎自由使用、修改和分发，衍生作品须延续 GPL v3 协议。',
-    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', fileSearch: '文件搜索', globalSearch: '全局搜索', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要' },
+    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', fileSearch: '文件搜索',
+    globalSearch: '全局搜索',
+    toggleSidebar: '显示/隐藏侧边栏', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要' },
     shortcutGroup: { file: '文件', search: '查找与搜索', tabView: '标签页与视图', format: '文本格式', insert: '插入', heading: '标题', callout: '提示块' },
     shortcutScheme: '快捷键方案',
     shortcutList: '快捷键',
@@ -581,7 +583,9 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: 'This software is released under the GPL v3 open-source license.',
     noUnauthorized: 'Free to use, modify, and distribute. Derivative works must remain under GPL v3.',
-    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', fileSearch: 'File Search', globalSearch: 'Global Search', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important' },
+    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', fileSearch: 'File Search',
+    globalSearch: 'Global Search',
+    toggleSidebar: 'Toggle Sidebar', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important' },
     shortcutGroup: { file: 'File', search: 'Find & Search', tabView: 'Tabs & View', format: 'Text Format', insert: 'Insert', heading: 'Headings', callout: 'Callouts' },
     shortcutScheme: 'Shortcut Scheme',
     shortcutList: 'Shortcuts',
@@ -2197,6 +2201,7 @@ class MarkdownEditor {
       nextTab: { key: 'Ctrl+Tab', label: '下一个标签页' },
       prevTab: { key: 'Ctrl+Shift+Tab', label: '上一个标签页' },
       bold: { key: 'Ctrl+B', label: '加粗' },
+      toggleSidebar: { key: 'Ctrl+B', label: '显示/隐藏侧边栏' },
       italic: { key: 'Ctrl+I', label: '斜体' },
       insertLink: { key: 'Ctrl+K', label: '插入链接' },
       exportPDF: { key: 'Ctrl+P', label: '导出 PDF' },
@@ -2244,9 +2249,10 @@ class MarkdownEditor {
         newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', saveAs:'Ctrl+Shift+S',
         closeTab:'Ctrl+W', find:'Ctrl+F', crossSearch:'Ctrl+H',
         nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
-        bold:'Ctrl+B', italic:'Ctrl+I', inlineCode:'Ctrl+`', insertLink:'Ctrl+K',
+        bold:'', italic:'Ctrl+I', inlineCode:'Ctrl+`', insertLink:'Ctrl+K',
         insertMathBlock:'Ctrl+Shift+M', toggleTheme:'Ctrl+Shift+T',
         fileSearch:'Ctrl+P', globalSearch:'Ctrl+Shift+F',
+        toggleSidebar:'Ctrl+B',
       },
       typora: {
         newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', closeTab:'Ctrl+W',
@@ -2422,7 +2428,7 @@ class MarkdownEditor {
     const groups = [
       { key: 'file', ids: ['newFile', 'openFile', 'saveFile', 'saveAs', 'closeTab', 'exportPDF'] },
       { key: 'search', ids: ['find', 'crossSearch', 'fileSearch', 'globalSearch'] },
-      { key: 'tabView', ids: ['nextTab', 'prevTab', 'toggleView', 'toggleTheme'] },
+      { key: 'tabView', ids: ['nextTab', 'prevTab', 'toggleView', 'toggleTheme', 'toggleSidebar'] },
       { key: 'format', ids: ['bold', 'italic', 'strikethrough', 'inlineCode', 'highlight', 'insertSuperscript', 'insertSubscript'] },
       { key: 'insert', ids: ['insertLink', 'insertImage', 'insertTable', 'insertUl', 'insertOl', 'insertTask', 'insertHr', 'codeBlock', 'blockquote', 'insertMathBlock', 'insertMermaid', 'insertToc'] },
       { key: 'heading', ids: ['insertH1', 'insertH2', 'insertH3', 'insertH4', 'insertH5', 'insertH6'] },
@@ -2670,6 +2676,7 @@ class MarkdownEditor {
       crossSearch: () => this.openCrossSearchDialog(),
       fileSearch: () => this.openFileSearchDialog(),
       globalSearch: () => this.openGlobalSearchDialog(),
+      toggleSidebar: () => this.toggleSidebar(),
       nextTab: () => {
         const next = (this.activeTabIndex + 1) % this.tabs.length;
         this.switchTab(next);
