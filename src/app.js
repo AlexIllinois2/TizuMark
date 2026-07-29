@@ -396,7 +396,7 @@ const I18N = {
     files: '文件',
     closeFolder: '关闭文件夹',
     folderOpened: '已打开文件夹: {path}',
-    extraDirIgnored: '已忽略多余目录: {path}（每次仅打开一个文件夹）',
+    extraDirsIgnoredBatch: '已忽略 {n} 个多余目录（每次仅打开一个文件夹）',
     switchWorkspaceTitle: '切换工作区',
     switchWorkspaceMsg: '当前已打开工作区，是否切换到 {path}？',
     sidebar: '侧边栏',
@@ -738,7 +738,7 @@ const I18N = {
     files: 'Files',
     closeFolder: 'Close Folder',
     folderOpened: 'Opened folder: {path}',
-    extraDirIgnored: 'Extra folder ignored: {path} (only one folder can be opened at a time)',
+    extraDirsIgnoredBatch: 'Ignored {n} extra folders (only one folder can be opened at a time)',
     switchWorkspaceTitle: 'Switch Workspace',
     switchWorkspaceMsg: 'A workspace is already open. Switch to {path}?',
     sidebar: 'Sidebar',
@@ -4781,13 +4781,10 @@ class MarkdownEditor {
       window.__TAURI__.event.listen('tauri://drag-drop', async (event) => {
         app.classList.remove('drag-over');
         dragOverlay.classList.add('hidden');
-        this.showLoading();
-        try {
-          // 目录/文件统一分发：目录进工作区（已有不同工作区时弹确认），文件开 tab
-          await this.openPathsSmart(event.payload.paths || []);
-        } finally {
-          this.hideLoading();
-        }
+        // 目录/文件统一分发：目录进工作区（已有不同工作区时弹确认），文件开 tab。
+        // 注意：不要在此先 showLoading——加载遮罩 z-index(10000) 会盖住确认框，
+        // 导致切换工作区确认框点不到而卡在加载页；加载由 openFolderPath 内部负责。
+        await this.openPathsSmart(event.payload.paths || []);
       });
 
       window.__TAURI__.event.listen('tauri://drag-leave', () => {
@@ -5365,6 +5362,7 @@ class MarkdownEditor {
   // 文件走 openFilePath。drag-drop / file-open 事件 / 启动 CLI 参数三处入口共用。
   async openPathsSmart(paths, { confirmWorkspaceSwitch = true } = {}) {
     let dirOpened = false;
+    const ignoredDirs = [];
     for (const p of paths || []) {
       if (!p || p.startsWith('-')) continue;
       try {
@@ -5373,7 +5371,7 @@ class MarkdownEditor {
         catch (_) { /* 非 Tauri 环境或路径不可访问，按文件处理 */ }
         if (isDir) {
           if (dirOpened) {
-            this.setStatus(this.t('extraDirIgnored', { path: p }));
+            ignoredDirs.push(p);
             continue;
           }
           const opened = await this.maybeOpenFolderPath(p, { confirm: confirmWorkspaceSwitch });
@@ -5384,6 +5382,10 @@ class MarkdownEditor {
       } catch (err) {
         this.setStatus(`${this.t('openFailed')}: ${err}`);
       }
+    }
+    // 多余目录合并成一条 toast，避免一次拖十几个文件夹时刷屏
+    if (ignoredDirs.length > 0) {
+      this.showToast(this.t('extraDirsIgnoredBatch', { n: ignoredDirs.length }), 'warning');
     }
   }
 
@@ -8544,13 +8546,10 @@ window.addEventListener('DOMContentLoaded', async () => {
         await w.setFocus();
       } catch (_) {}
 
-      window.editor.showLoading();
-      try {
-        // 二次实例传参：目录进工作区（已有不同工作区时弹确认），文件开 tab
-        await window.editor.openPathsSmart(args);
-      } finally {
-        window.editor.hideLoading();
-      }
+      // 二次实例传参：目录进工作区（已有不同工作区时弹确认），文件开 tab。
+      // 注意：不要在此先 showLoading——加载遮罩 z-index(10000) 会盖住确认框，
+      // 导致切换工作区确认框点不到而卡在加载页；加载由 openFolderPath 内部负责。
+      await window.editor.openPathsSmart(args);
     });
 
     updateLoadingProgress(85, '正在加载文件…');

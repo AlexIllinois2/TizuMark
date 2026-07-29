@@ -2683,8 +2683,10 @@ body.is-resizing .side-btn {
   z-index: 1001;
 }
 
-/* EULA 协议对话框必须在加载遮罩（z-index: 10000）之上 */
-#eula-dialog.dialog-overlay {
+/* EULA 协议对话框、工作区切换确认框必须在加载遮罩（z-index: 10000）之上，
+   否则加载遮罩会盖住确认框导致点不到、卡在加载页 */
+#eula-dialog.dialog-overlay,
+#confirm-dialog.dialog-overlay {
   z-index: 20000;
 }
 
