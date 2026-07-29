@@ -1801,6 +1801,41 @@ body.is-resizing .side-btn {
   opacity: 1;
 }
 
+/* 编辑器 Ctrl+滚轮缩放提示（顶部居中，样式参考 .lightbox-hint） */
+.zoom-hint {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255,255,255,0.9);
+  font-size: 15px;
+  background: rgba(0,0,0,0.55);
+  padding: 10px 22px;
+  border-radius: 20px;
+  z-index: 10000;
+  user-select: none;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.zoom-hint.show { opacity: 1; pointer-events: auto; }
+.zoom-hint .zoom-hint-reset {
+  cursor: pointer;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.18);
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+.zoom-hint .zoom-hint-reset:hover { background: rgba(255,255,255,0.32); }
+.zoom-hint .zoom-hint-reset.hidden { display: none; }
+
 .preview-content hr {
   border: none;
   height: 1px;
