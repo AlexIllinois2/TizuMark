@@ -499,6 +499,11 @@ fn file_meta(path: String) -> Result<Option<FileMeta>, String> {
     }))
 }
 
+#[tauri::command]
+fn is_directory(path: String) -> bool {
+    std::path::Path::new(&path).is_dir()
+}
+
 #[derive(serde::Serialize, Clone)]
 struct DirEntryInfo {
     name: String,
@@ -1614,6 +1619,8 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 show_window(&window);
+                // files_from_args 滤掉 argv[0]（第二实例 exe 自身路径），
+                // 避免前端误把 exe 当文件打开；与 get_cli_args 的 skip(1) 对齐
                 let _ = app.emit("file-open", files_from_args(argv));
             }
         }))
@@ -1647,6 +1654,7 @@ pub fn run() {
             read_file,
             write_file,
             file_meta,
+            is_directory,
             list_dir,
             write_binary_file,
             ensure_dir,
@@ -1676,6 +1684,19 @@ mod tests {
         ];
         let files = files_from_args(argv);
         assert_eq!(files, vec!["D:\\docs\\note.md".to_string()]);
+    }
+
+    #[test]
+    fn test_is_directory_distinguishes_dir_and_file() {
+        let tmp = std::env::temp_dir().join("tizumark_isdir_test");
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        let file = tmp.join("a.md");
+        fs::write(&file, "x").unwrap();
+        assert!(is_directory(tmp.to_string_lossy().to_string()));
+        assert!(!is_directory(file.to_string_lossy().to_string()));
+        assert!(!is_directory("Z:\\definitely\\not\\exists".to_string()));
+        let _ = fs::remove_dir_all(&tmp);
     }
 
     #[test]

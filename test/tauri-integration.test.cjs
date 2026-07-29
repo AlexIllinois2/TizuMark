@@ -210,3 +210,83 @@ test('tauri: 粘贴图片 base64 模式插入 data URL', async () => {
     assert.ok(/!\[image\]\(data:image\/png;base64,[A-Za-z0-9+/=]+\)/.test(doc), '应插入 base64 data URL 图片');
   } finally { cleanup(w); }
 });
+
+// ===== PR #25 目录分发（openPathsSmart / maybeOpenFolderPath）=====
+
+// 目录路径集中在 mock 里判定：is_directory 按路径后缀 '/dir' 约定返回
+function dirAwareInvoke(extra = {}) {
+  return async (cmd, args) => {
+    if (cmd === 'is_directory') return String(args.path).includes('/dir');
+    if (cmd === 'read_file') return '# 内容';
+    if (cmd === 'list_dir') return [];
+    if (cmd === 'get_cli_args') return extra.cliArgs || [];
+    if (cmd === 'app_data_dir') return 'C:/tmp/tizumark-data';
+    if (extra.impl) return extra.impl(cmd, args);
+    return undefined;
+  };
+}
+
+test('tauri: drag-drop 拖入目录加载为工作区且不新增标签', async () => {
+  const { w, ed, listeners } = await makeEnv(dirAwareInvoke());
+  try {
+    const before = ed.tabs.length;
+    await fire(listeners, 'tauri://drag-drop', { paths: ['C:/t/dir-ws'] });
+    await delay(50);
+    assert.strictEqual(ed.workspaceFolder, 'C:/t/dir-ws', '目录应设为工作区');
+    assert.strictEqual(ed.tabs.length, before, '目录不应新增标签');
+  } finally { cleanup(w); }
+});
+
+test('tauri: drag-drop 混拖目录+文件——目录进工作区、文件开标签', async () => {
+  const { w, ed, listeners } = await makeEnv(dirAwareInvoke());
+  try {
+    ed.applyViewMode = () => {};
+    await fire(listeners, 'tauri://drag-drop', { paths: ['C:/t/dir-ws', 'C:/t/note.md'] });
+    await delay(50);
+    assert.strictEqual(ed.workspaceFolder, 'C:/t/dir-ws');
+    assert.ok(ed.tabs.some((t) => t.filePath === 'C:/t/note.md'), '文件应打开为标签');
+  } finally { cleanup(w); }
+});
+
+test('tauri: drag-drop 拖入两个目录——第二个忽略并提示 extraDirIgnored', async () => {
+  const { w, ed, listeners } = await makeEnv(dirAwareInvoke());
+  try {
+    const statuses = [];
+    const origSetStatus = ed.setStatus.bind(ed);
+    ed.setStatus = (msg) => { statuses.push(String(msg)); origSetStatus(msg); };
+    await fire(listeners, 'tauri://drag-drop', { paths: ['C:/t/dir-a', 'C:/t/dir-b'] });
+    await delay(50);
+    assert.strictEqual(ed.workspaceFolder, 'C:/t/dir-a', '仅第一个目录进工作区');
+    const expected = ed.t('extraDirIgnored', { path: 'C:/t/dir-b' });
+    assert.ok(statuses.includes(expected), '第二个目录应提示已忽略（而非打开失败）');
+    assert.ok(!statuses.some((s) => s.includes(ed.t('openFailed') + ': C:/t/dir-b')), '不应误报打开失败');
+  } finally { cleanup(w); }
+});
+
+test('tauri: file-open 传目录且已有不同工作区——确认取消则不切换', async () => {
+  const { w, ed, listeners } = await makeEnv(dirAwareInvoke());
+  try {
+    ed.workspaceFolder = 'C:/t/dir-old';
+    const confirms = [];
+    ed.showConfirmDialog = async (title, msg) => { confirms.push({ title, msg }); return false; };
+    await fire(listeners, 'file-open', ['C:/t/dir-new']);
+    await delay(50);
+    assert.strictEqual(confirms.length, 1, '应弹出切换工作区确认');
+    assert.strictEqual(confirms[0].title, ed.t('switchWorkspaceTitle'));
+    assert.strictEqual(ed.workspaceFolder, 'C:/t/dir-old', '取消后工作区不变');
+    // 确认「切换」则替换工作区
+    ed.showConfirmDialog = async () => true;
+    await fire(listeners, 'file-open', ['C:/t/dir-new']);
+    await delay(50);
+    assert.strictEqual(ed.workspaceFolder, 'C:/t/dir-new', '确认后应切换工作区');
+  } finally { cleanup(w); }
+});
+
+test('tauri: CLI 参数传目录直接作为工作区打开（不弹确认）', async () => {
+  const { w, ed } = await makeEnv(dirAwareInvoke({ cliArgs: ['C:/t/dir-cli', 'C:/t/a.md'] }));
+  try {
+    await delay(80);
+    assert.strictEqual(ed.workspaceFolder, 'C:/t/dir-cli', 'CLI 目录应直接设为工作区');
+    assert.ok(ed.tabs.some((t) => t.filePath === 'C:/t/a.md'), 'CLI 文件参数应打开为标签');
+  } finally { cleanup(w); }
+});
