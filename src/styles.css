@@ -10,6 +10,7 @@
   --alert-important-rgb: 139, 92, 246;
   --alert-warning-rgb: 245, 158, 11;
   --alert-caution-rgb: 239, 68, 68;
+  --preview-pane-width: 360px;
 }
 
 /* ========== 字体方案 ========== */
@@ -593,13 +594,9 @@ body {
   color: var(--accent-text) !important;
 }
 
+/* 隐藏预览/编辑切换胶囊 —— VSCode 风格界面 */
 .view-mode-tabs {
-  display: flex;
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
-  padding: 3px;
-  gap: 0;
+  display: none;
 }
 
 .view-mode-tab {
@@ -1147,6 +1144,147 @@ body {
   border-left: 2px solid transparent; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cs-match:hover { background: var(--accent-subtle); color: var(--text-primary); border-left-color: var(--accent-color); }
+
+/* 文件搜索弹窗 (VSCode 风格) */
+.file-search-dialog {
+  width: 480px;
+  max-width: 90vw;
+  margin: 15vh auto;
+}
+.file-search-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+.file-search-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+.file-search-list {
+  margin-top: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.file-search-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.file-search-item:hover,
+.file-search-item.selected {
+  background: var(--accent-subtle);
+}
+.file-search-item .fs-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+.file-search-item .fs-path {
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 全局搜索弹窗 (VSCode 风格) */
+.global-search-dialog {
+  width: 560px;
+  max-width: 90vw;
+  margin: 12vh auto;
+}
+.global-search-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+.global-search-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+.global-search-options {
+  display: flex;
+  gap: 18px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+.global-search-options label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.global-search-options input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  width: 14px; height: 14px; margin: 0;
+  border: 1.5px solid var(--text-secondary); border-radius: 3px;
+  background: var(--bg-primary); cursor: pointer; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease;
+}
+.global-search-options input[type="checkbox"]:checked {
+  border-color: var(--accent-color);
+  background: var(--accent-color);
+}
+.global-search-options input[type="checkbox"]:checked::after {
+  content: ''; width: 3px; height: 6px;
+  border-right: 1.5px solid var(--accent-text);
+  border-bottom: 1.5px solid var(--accent-text);
+  transform: rotate(45deg); margin-bottom: 1px;
+}
+.global-search-options input[type="checkbox"]:hover { border-color: var(--accent-color); }
+.global-search-results {
+  margin-top: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+  min-height: 80px;
+}
+.global-search-result-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  border-left: 2px solid transparent;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.global-search-result-item:hover {
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+  border-left-color: var(--accent-color);
+}
+.global-search-result-item .gs-filename {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.global-search-result-item .gs-line {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-left: 8px;
+}
+.global-search-result-item .gs-match {
+  background: rgba(255, 200, 0, 0.3);
+  padding: 0 2px;
+  border-radius: 2px;
+}
 .cs-match.current { background: var(--accent-subtle); color: var(--text-primary); border-left-color: var(--accent-color); font-weight: 600; }
 
 .find-row {

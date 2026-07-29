@@ -759,6 +759,43 @@
     </div>
   </div>
 
+  <!-- 文件搜索对话框 (VSCode 风格 Ctrl+P) -->
+  <div id="file-search-dialog" class="dialog-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="file-search-title">
+    <div class="dialog file-search-dialog">
+      <div class="dialog-header">
+        <h2 id="file-search-title">文件搜索</h2>
+        <button class="dialog-close" id="file-search-close" aria-label="关闭">&times;</button>
+      </div>
+      <div class="dialog-content">
+        <input type="text" id="file-search-input" class="file-search-input" placeholder="输入文件名筛选..." />
+        <div id="file-search-list" class="file-search-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全局搜索对话框 (VSCode 风格 Ctrl+Shift+F) -->
+  <div id="global-search-dialog" class="dialog-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="global-search-title">
+    <div class="dialog global-search-dialog">
+      <div class="dialog-header">
+        <h2 id="global-search-title">全局搜索</h2>
+        <button class="dialog-close" id="global-search-close" aria-label="关闭">&times;</button>
+      </div>
+      <div class="dialog-content">
+        <input type="text" id="global-search-input" class="global-search-input" placeholder="输入搜索内容..." />
+        <div class="global-search-options">
+          <label><input type="checkbox" id="global-search-case"> 区分大小写</label>
+          <label><input type="checkbox" id="global-search-regex"> 正则</label>
+        </div>
+        <div id="global-search-progress" class="cs-progress hidden"></div>
+        <div id="global-search-total" class="cs-total"></div>
+        <div id="global-search-results" class="global-search-results"></div>
+      </div>
+      <div class="dialog-footer">
+        <button id="global-search-run" class="dialog-btn dialog-btn-primary">搜索</button>
+      </div>
+    </div>
+  </div>
+
   <div id="settings-dialog" class="dialog-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <div class="dialog settings-dialog">
       <div class="dialog-header">
@@ -1075,6 +1112,8 @@
 <script src="modules/outline.js"></script>
 <script src="modules/dialogs.js"></script>
 <script src="modules/find-replace.js"></script>
+<script src="modules/file-search.js"></script>
+<script src="modules/global-search.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

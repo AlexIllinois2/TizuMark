@@ -243,7 +243,7 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: '本软件基于 GPL v3 开源协议发布。',
     noUnauthorized: '欢迎自由使用、修改和分发，衍生作品须延续 GPL v3 协议。',
-    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要' },
+    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', fileSearch: '文件搜索', globalSearch: '全局搜索', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要' },
     shortcutGroup: { file: '文件', search: '查找与搜索', tabView: '标签页与视图', format: '文本格式', insert: '插入', heading: '标题', callout: '提示块' },
     shortcutScheme: '快捷键方案',
     shortcutList: '快捷键',
@@ -581,7 +581,7 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: 'This software is released under the GPL v3 open-source license.',
     noUnauthorized: 'Free to use, modify, and distribute. Derivative works must remain under GPL v3.',
-    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important' },
+    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', fileSearch: 'File Search', globalSearch: 'Global Search', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important' },
     shortcutGroup: { file: 'File', search: 'Find & Search', tabView: 'Tabs & View', format: 'Text Format', insert: 'Insert', heading: 'Headings', callout: 'Callouts' },
     shortcutScheme: 'Shortcut Scheme',
     shortcutList: 'Shortcuts',
@@ -771,9 +771,9 @@ class MarkdownEditor {
     this._previewChildrenCount = 0;
     this._editorPercent = null;
     this.isDark = false;
-    this.viewMode = 'preview';
 
     this.settings = this.loadSettings();
+    this.viewMode = this.settings.defaultView || 'edit';
     this.shortcuts = this.loadShortcuts();
     this.shortcutScheme = this.loadShortcutScheme();
     this._recentFiles = [];
@@ -794,6 +794,7 @@ class MarkdownEditor {
     this.applyShortcuts();
     this.initEventListeners();
     this.initResizer();
+    this.applyPreviewPaneWidth();
     this.initFindReplace();
     this.initScrollTopBtn();
     this.initExternalLinks();
@@ -802,6 +803,8 @@ class MarkdownEditor {
     this.applyWindowBehavior();
     this.initShortcutsDialog();
     this.initCrossSearch();
+    this.initFileSearchModule();
+    this.initGlobalSearchModule();
     this.initOutline();
     this.initOutlineResizer();
     this.updateOutlineCheck();
@@ -1313,7 +1316,8 @@ class MarkdownEditor {
       themeMode: 'light',
       colorScheme: 'default',
       fontScheme: 'system-sans',
-      defaultView: 'preview',
+      defaultView: 'edit',
+      previewPaneWidth: 360,
       scrollSync: true,
       language: 'zh',
       imageInsertMode: 'assets',
@@ -2196,6 +2200,8 @@ class MarkdownEditor {
       italic: { key: 'Ctrl+I', label: '斜体' },
       insertLink: { key: 'Ctrl+K', label: '插入链接' },
       exportPDF: { key: 'Ctrl+P', label: '导出 PDF' },
+      fileSearch: { key: '', label: '文件搜索' },
+      globalSearch: { key: '', label: '全局搜索' },
       inlineCode: { key: 'Ctrl+`', label: '行内代码' },
       strikethrough: { key: 'Ctrl+Shift+S', label: '删除线' },
       codeBlock: { key: 'Ctrl+Shift+C', label: '代码块' },
@@ -2239,7 +2245,8 @@ class MarkdownEditor {
         closeTab:'Ctrl+W', find:'Ctrl+F', crossSearch:'Ctrl+H',
         nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
         bold:'Ctrl+B', italic:'Ctrl+I', inlineCode:'Ctrl+`', insertLink:'Ctrl+K',
-        insertMathBlock:'Ctrl+Shift+M', toggleTheme:'Ctrl+Shift+T', exportPDF:'Ctrl+P',
+        insertMathBlock:'Ctrl+Shift+M', toggleTheme:'Ctrl+Shift+T',
+        fileSearch:'Ctrl+P', globalSearch:'Ctrl+Shift+F',
       },
       typora: {
         newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', closeTab:'Ctrl+W',
@@ -2316,13 +2323,8 @@ class MarkdownEditor {
     const VALID = ['default', 'vscode', 'typora', 'sublime', 'custom'];
     const stored = localStorage.getItem('tizumark-shortcut-scheme');
     if (stored && VALID.includes(stored)) return stored; // 白名单校验，防脏数据
-    // 旧数据无 scheme：与默认逐项比对，有差异视为自定义（保留用户旧自定义数据）
-    const def = this.getDefaultShortcuts();
-    const cur = this.shortcuts || def;
-    for (const [aid, d] of Object.entries(def)) {
-      if ((cur[aid] && cur[aid].key || '') !== (d.key || '')) return 'custom';
-    }
-    return 'default';
+    // 没有保存的方案时，默认使用 VSCode 方案
+    return 'vscode';
   }
 
   saveShortcutScheme(name) {
@@ -2419,7 +2421,7 @@ class MarkdownEditor {
     // 按功能分组展示，便于在长列表中查找
     const groups = [
       { key: 'file', ids: ['newFile', 'openFile', 'saveFile', 'saveAs', 'closeTab', 'exportPDF'] },
-      { key: 'search', ids: ['find', 'crossSearch'] },
+      { key: 'search', ids: ['find', 'crossSearch', 'fileSearch', 'globalSearch'] },
       { key: 'tabView', ids: ['nextTab', 'prevTab', 'toggleView', 'toggleTheme'] },
       { key: 'format', ids: ['bold', 'italic', 'strikethrough', 'inlineCode', 'highlight', 'insertSuperscript', 'insertSubscript'] },
       { key: 'insert', ids: ['insertLink', 'insertImage', 'insertTable', 'insertUl', 'insertOl', 'insertTask', 'insertHr', 'codeBlock', 'blockquote', 'insertMathBlock', 'insertMermaid', 'insertToc'] },
@@ -2666,6 +2668,8 @@ class MarkdownEditor {
       toggleTheme: () => this.toggleTheme(),
       find: () => this.toggleFindPanel(),
       crossSearch: () => this.openCrossSearchDialog(),
+      fileSearch: () => this.openFileSearchDialog(),
+      globalSearch: () => this.openGlobalSearchDialog(),
       nextTab: () => {
         const next = (this.activeTabIndex + 1) % this.tabs.length;
         this.switchTab(next);
@@ -2937,6 +2941,8 @@ class MarkdownEditor {
       this.updateOutline();
       this.updateExternalChangeBanner();
       this.highlightTreeActiveFile();
+      // 延迟恢复保存的预览区宽度，确保布局更新完成
+      setTimeout(() => this.applyPreviewPaneWidth(), 50);
     } finally {
       this._endPaneLoad();
     }
@@ -3592,6 +3598,12 @@ class MarkdownEditor {
       if (!isResizing) return;
       isResizing = false;
       document.body.classList.remove('is-resizing');
+      // 保存预览区宽度到设置
+      const pw = previewPane.getBoundingClientRect().width;
+      this.settings.previewPaneWidth = Math.round(pw);
+      this.saveSettings();
+      // 更新 CSS 变量
+      document.documentElement.style.setProperty('--preview-pane-width', Math.round(pw) + 'px');
     };
 
     resizer.addEventListener('mousedown', (e) => {
@@ -3604,6 +3616,37 @@ class MarkdownEditor {
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+  }
+
+  applyPreviewPaneWidth() {
+    const pw = this.settings.previewPaneWidth;
+    if (!pw) return;
+    const editorPane = document.getElementById('editor-pane');
+    const previewPane = document.getElementById('preview-pane');
+    if (!editorPane || !previewPane) return;
+    const container = document.querySelector('.editor-container');
+    if (!container) return;
+    const outlineSidebar = document.getElementById('outline-sidebar');
+    const resizer = document.getElementById('resizer');
+    const outlineWidth = outlineSidebar && outlineSidebar.classList.contains('hidden') ? 0 : (outlineSidebar ? outlineSidebar.offsetWidth : 0);
+    const resizerWidth = resizer ? resizer.offsetWidth : 6;
+    const totalContentWidth = container.offsetWidth - outlineWidth - resizerWidth;
+    if (totalContentWidth <= 0) return;
+    const editorWidth = totalContentWidth - pw;
+    const editorRatio = (editorWidth / totalContentWidth);
+    if (editorRatio > 0.1 && editorRatio < 0.9) {
+      editorPane.style.flex = editorRatio.toFixed(4) + ' 0 0px';
+      previewPane.style.flex = (1 - editorRatio).toFixed(4) + ' 0 0px';
+      this._editorPercent = editorRatio * 100;
+    } else {
+      // 比例超出范围时，直接用预设宽度设置预览区
+      previewPane.style.flex = '0 0 auto';
+      previewPane.style.width = pw + 'px';
+      editorPane.style.flex = '1 1 0px';
+      this._editorPercent = ((totalContentWidth - pw) / totalContentWidth) * 100;
+    }
+    // 更新 CSS 变量
+    document.documentElement.style.setProperty('--preview-pane-width', pw + 'px');
   }
 
   initFindReplace() {
@@ -4147,6 +4190,30 @@ class MarkdownEditor {
     }
   }
 
+  openFileSearchDialog() {
+    if (typeof openFileSearchDialog === 'function') {
+      openFileSearchDialog();
+    } else {
+      const dlg = document.getElementById('file-search-dialog');
+      if (!dlg) return;
+      dlg.classList.remove('hidden');
+      const input = document.getElementById('file-search-input');
+      if (input) { input.value = ''; input.focus(); }
+    }
+  }
+
+  openGlobalSearchDialog() {
+    if (typeof openGlobalSearchDialog === 'function') {
+      openGlobalSearchDialog();
+    } else {
+      const dlg = document.getElementById('global-search-dialog');
+      if (!dlg) return;
+      dlg.classList.remove('hidden');
+      const input = document.getElementById('global-search-input');
+      if (input) { input.value = ''; input.focus(); }
+    }
+  }
+
   openCrossSearchDialog() {
     const dlg = document.getElementById('cross-search-dialog');
     if (!dlg) return;
@@ -4181,6 +4248,18 @@ class MarkdownEditor {
     if (this.cm && this.cm.somethingSelected()) q.value = this.cm.getSelection();
     q.focus();
     q.select();
+  }
+
+  initFileSearchModule() {
+    if (typeof initFileSearch === 'function') {
+      initFileSearch();
+    }
+  }
+
+  initGlobalSearchModule() {
+    if (typeof initGlobalSearch === 'function') {
+      initGlobalSearch();
+    }
   }
 
   initCrossSearch() {
@@ -5170,7 +5249,7 @@ class MarkdownEditor {
           console.error('Failed to open file:', filePath, e);
         }
       }
-      this.viewMode = 'preview';
+      this.viewMode = this.settings.defaultView || 'edit';
       this.applyViewMode();
       this.updateWordCount();
       this.setStatus(openedCount > 0 ? this.t('openedFiles', { n: openedCount }) : this.t('alreadyOpen'));
@@ -5311,7 +5390,7 @@ class MarkdownEditor {
       const content = await this.readFileNormalized(filePath);
       const name = filePath.split(/[/\\]/).pop();
       await this.addTab(name, content, filePath);
-      this.viewMode = 'preview';
+      this.viewMode = this.settings.defaultView || 'edit';
       this.applyViewMode();
       this.updateWordCount();
       this.setStatus(this.t('fileOpened', { name }));
@@ -7289,6 +7368,8 @@ input[type="checkbox"]:checked::after { display: none !important; }
     setTimeout(() => {
       this.cm.refresh();
       this.updateSideButtons();
+      // 恢复用户保存的预览区宽度
+      this.applyPreviewPaneWidth();
       // 切换视图模式后，若虚拟滚动状态与新模式不一致则按新模式重建预览
       if (this.previewWindow && this._previewVirtual !== (this.viewMode === 'preview')) {
         this.updatePreview();
