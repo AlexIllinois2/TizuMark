@@ -594,8 +594,8 @@ body {
   color: var(--accent-text) !important;
 }
 
-/* 隐藏预览/编辑切换胶囊 —— VSCode 风格界面 */
 .view-mode-tabs {
+  /* display: flex; */
   display: none;
 }
 
