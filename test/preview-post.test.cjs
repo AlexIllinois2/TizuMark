@@ -61,10 +61,16 @@ test('protectUnpairedDollar：块级公式内含 | > ｜ 不应被误判为不�
   assert.strictEqual(PP.protectUnpairedDollar(multi), multi, '块级跨行公式应保持原样');
 });
 
-test('protectUnpairedDollar：行内 $...$ 内含 | 仍应被忽略（防 markdown 表格列误吃）', async () => {
-  const inline = 'see $P(A|B)$ here';
+test('protectUnpairedDollar：行内 $...$ 内含 | > ｜ 应保留为成对公式', async () => {
+  assert.strictEqual(PP.protectUnpairedDollar('see $P(A|B)$ here'), 'see $P(A|B)$ here', '含 | 的行内公式应保留');
+  assert.strictEqual(PP.protectUnpairedDollar('$x>0$'), '$x>0$', '含 > 的行内公式应保留');
+  assert.strictEqual(PP.protectUnpairedDollar('$x｜y$'), '$x｜y$', '含 ｜ 的行内公式应保留');
+});
+
+test('protectUnpairedDollar：行内 $...$ 在表格分隔符环境中仍不被跨单元格配对', async () => {
+  const inline = '| $x | y$ |';
   const out = PP.protectUnpairedDollar(inline);
-  assert.ok(out.includes('katex-ignore'), '行内含 | 应被忽略 span 包住');
+  assert.ok(out.includes('katex-ignore'), '表格行内的 $ 仍应被忽略 span 保护');
 });
 
 test('protectUnpairedDollar：真不成对的孤 $ 应被忽略', async () => {

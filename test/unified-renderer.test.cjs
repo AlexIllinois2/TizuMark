@@ -87,6 +87,15 @@ test('孤立不成对 $ 原样显示不吞后续', async () => {
   assert.ok(!html.includes('MATHBLOCK'), '不应生成 MATHBLOCK');
 });
 
+test('行内 $...$ 含 | > ｜ 原样保留供 KaTeX 渲染', async () => {
+  const decodeHtml = (s) => s.replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
+  for (const expr of ['$x=x_{a+1|a}$', '$x>0$', '$x｜y$']) {
+    const html = renderMarkdown(expr, { softBreaks: false });
+    assert.ok(decodeHtml(html).includes(expr), `${expr} 应原样保留在输出中供 KaTeX 渲染`);
+    assert.ok(!html.includes('katex-ignore'), `${expr} 不应被 katex-ignore 跳过`);
+  }
+});
+
 test('代码块/反引号内 $ 不处理', async () => {
   const md = [
     '```',
