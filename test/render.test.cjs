@@ -89,3 +89,47 @@ test('render: 引用块', async () => {
   const html = render('> 引用内容');
   assert.ok(html.includes('<blockquote'), '应渲染 blockquote');
 });
+
+// C12（P1-7）：承接 Rust render_markdown 退役用例的 XSS 语义 —— 前端 unified-renderer 是
+// 唯一生产渲染路径，其 sanitizeHTML/sanitizeTagAttributes 必须挡住同类注入。
+test('render: XSS 标题内 script 被剥离但文本保留', async () => {
+  const html = render('# <script>alert(1)</script>');
+  assert.ok(!html.includes('<script>'), '标题内 script 标签必须被剥离');
+  assert.ok(html.includes('alert(1)'), '脚本文本内容应作为纯文本保留');
+});
+
+test('render: 文本内 img onerror 被剥离但 img 保留', async () => {
+  const html = render('Hello <img src=x onerror=alert(1)>');
+  assert.ok(!html.includes('onerror'), '内联 onerror 事件处理器必须被剥离');
+  assert.ok(html.includes('<img'), 'img 标签本身应保留');
+});
+
+test('render: 裸 script 标签被剥离', async () => {
+  const html = render('Text <script>document.cookie</script> more');
+  assert.ok(!html.includes('<script>'), 'script 开标签必须被剥离');
+  assert.ok(!html.includes('</script>'), 'script 闭标签必须被剥离');
+  assert.ok(html.includes('Text') && html.includes('more'), '前后文本应保留');
+});
+
+test('render: iframe 被剥离', async () => {
+  const html = render('Text <iframe src="evil.com"></iframe> more');
+  assert.ok(!html.includes('<iframe'), 'iframe 开标签必须被剥离');
+  assert.ok(!html.includes('</iframe>'), 'iframe 闭标签必须被剥离');
+});
+
+test('render: 图片 src 保留', async () => {
+  const html = render('![alt](https://example.com/img.png)');
+  assert.ok(html.includes('<img'), '应渲染 img 标签');
+  assert.ok(html.includes('src='), '图片 src 属性应保留');
+});
+
+test('render: 数字实体编码的 javascript: 绕过被拦截', async () => {
+  const html = render('<a href="&#x6A;avascript:alert(1)">click</a>');
+  assert.ok(!html.includes('javascript:'), '数字实体解码后的 javascript: 必须被拦截');
+  assert.ok(html.includes('click'), '链接文本应保留');
+});
+
+test('render: 明文 javascript: 链接被拦截', async () => {
+  const html = render('<a href="javascript:alert(1)">x</a>');
+  assert.ok(!html.includes('javascript:'), '明文 javascript: 必须被拦截');
+});
