@@ -1,0 +1,8575 @@
+
+// 超大文档预览保护阈值：超过则预览只渲染头部，避免整篇同步解析/渲染卡死主线程
+const MAX_PREVIEW_LINES = 5000;
+const MAX_PREVIEW_CHARS = 4 * 1024 * 1024;
+// 头部渲染的字符上限（防止含超长行的文档渲染耗时过久）
+const HEAD_RENDER_CHAR_CAP = 1.5 * 1024 * 1024;
+// 大文档预览滑动窗口：预览只渲染围绕当前焦点的一段源码，避免整篇渲染卡死，
+// 同时保证任意位置（大纲跳转 / 滚动）都可在预览中落点
+const PREVIEW_WINDOW_LINES = 1200;  // 窗口源码行数上限
+const PREVIEW_WINDOW_LEAD = 200;    // 焦点行前预留行数（让焦点不至于贴顶）
+
+async function dialogOpen(options = {}) {
+  return await TauriApi.dialogOpen({ options });
+}
+
+async function dialogSave(options = {}) {
+  return await TauriApi.dialogSave({ options });
+}
+
+class Tab {
+  constructor(name = '', content = '', filePath = null) {
+    this.name = name;
+    this.content = content;
+    this.savedContent = content;
+    this.filePath = filePath;
+    this.cursorPos = { line: 0, ch: 0 };
+    this.scrollPos = { top: 0, left: 0 };
+    this.fileMeta = null;
+    this.pendingExternalChange = false;
+    this._loaded = true;
+    this.previewScrollTop = 0;
+    this.fontSize = null; // 每标签独立缩放字号；null=未初始化，切换时按 settings.fontSize 初始化
+  }
+
+  get isModified() {
+    return this.content !== this.savedContent;
+  }
+}
+
+// ====== 错误码文案字典（用户友好 + 开发可诊断） ======
+// code -> { zh/en: { title, detail } }，detail 支持 {param} 插值
+const ERROR_MESSAGES = {
+  E_ENCODING: { zh: { title: '文件编码不被支持', detail: '该文件使用了 {encoding} 编码，当前仅支持 UTF-8' }, en: { title: 'Unsupported file encoding', detail: 'This file uses {encoding} encoding, only UTF-8 is supported' } },
+  E_ENCODING_UNKNOWN: { zh: { title: '无法识别文件编码', detail: '文件包含无法识别的字符编码' }, en: { title: 'Unrecognized file encoding', detail: 'The file contains an unrecognized encoding' } },
+  E_NOT_FOUND: { zh: { title: '文件不存在', detail: '文件「{name}」可能已被移动或删除' }, en: { title: 'File not found', detail: 'File "{name}" may have been moved or deleted' } },
+  E_LOCKED: { zh: { title: '文件正被其他程序占用', detail: '请关闭占用「{name}」的程序后重试' }, en: { title: 'File is locked by another program', detail: 'Please close the program using "{name}" and retry' } },
+  E_PERMISSION: { zh: { title: '没有访问权限', detail: '系统拒绝访问该文件' }, en: { title: 'Permission denied', detail: 'The system denied access to this file' } },
+  E_PATH_TOO_LONG: { zh: { title: '文件路径过长', detail: '路径超过 260 字符，请缩短路径或移动文件' }, en: { title: 'File path too long', detail: 'Path exceeds 260 chars, please shorten or move it' } },
+  E_EMPTY: { zh: { title: '无法读取文件内容', detail: '文件内容为空或读取失败' }, en: { title: 'Unable to read file content', detail: 'File is empty or reading failed' } },
+  E_IO: { zh: { title: '读取文件时出错', detail: '发生未知读写错误' }, en: { title: 'Error reading file', detail: 'An unknown read/write error occurred' } },
+  E_SAVE: { zh: { title: '保存失败', detail: '无法写入「{name}」，请检查路径和权限' }, en: { title: 'Save failed', detail: 'Cannot write to "{name}", check path and permissions' } },
+  E_INIT: { zh: { title: '编辑器初始化失败', detail: '程序启动异常，请重启应用' }, en: { title: 'Editor initialization failed', detail: 'Startup error, please restart the app' } },
+  E_RENDER: { zh: { title: '内容渲染失败', detail: '部分内容无法正常显示' }, en: { title: 'Content rendering failed', detail: 'Some content could not be displayed' } },
+  E_UNKNOWN: { zh: { title: '发生未知错误', detail: '程序遇到意外问题' }, en: { title: 'An unexpected error occurred', detail: 'An unexpected problem occurred' } },
+  // 迁移的硬编码中文错误
+  openLink: { zh: { title: '无法打开文件', detail: '{href}' }, en: { title: 'Cannot open file', detail: '{href}' } },
+  devtools: { zh: { title: '无法打开开发者工具', detail: '' }, en: { title: 'Cannot open DevTools', detail: '' } },
+  clipboardImage: { zh: { title: '无法读取剪贴板图片', detail: '' }, en: { title: 'Cannot read clipboard image', detail: '' } },
+  guide: { zh: { title: '打开使用说明失败', detail: '' }, en: { title: 'Failed to open guide', detail: '' } },
+};
+
+const I18N = {
+  zh: {
+    file: '文件',
+    new: '新建',
+    open: '打开',
+    save: '保存',
+    saveAs: '另存为',
+    exportHTML: '导出 HTML',
+    exportImg: '导出长图',
+    exportPDF: '导出 PDF',
+    shortcuts: '快捷键设置',
+    settings: '设置',
+    insert: '插入',
+    structure: '结构插入',
+    heading: '标题',
+    codeBlock: '代码块',
+    table: '表格',
+    quoteBlock: '引用块',
+    callout: '提示块',
+    expandToolbar: '展开工具栏',
+    collapseToolbar: '收起工具栏',
+    mathBlock: '数学公式',
+    mermaidChart: 'Mermaid 图表',
+    hr: '水平线',
+    toc: '目录 [TOC]',
+    textFormat: '文本格式',
+    bold: '加粗',
+    italic: '斜体',
+    strikethrough: '删除线',
+    inlineCode: '行内代码',
+    highlight: '高亮',
+    superscript: '上标',
+    subscript: '下标',
+    list: '列表',
+    ul: '无序列表',
+    ol: '有序列表',
+    taskList: '任务列表',
+    linkMedia: '链接与媒体',
+    link: '链接',
+    image: '图片',
+    view: '视图',
+    outline: '大纲',
+    help: '帮助',
+    userGuide: '使用说明',
+    about: '关于',
+    preview: '预览',
+    edit: '编辑',
+    themeLight: '明亮',
+    themeDark: '暗黑',
+    minimize: '最小化',
+    maximize: '最大化',
+    close: '关闭',
+    ready: '就绪',
+    words: '字数',
+    chars: '字符',
+    lines: '行数',
+    untitled: 'Untitled',
+    noHeadings: '暂无标题',
+    copy: '复制',
+    copied: '已复制',
+    copyCode: '复制代码',
+    cut: '剪切',
+    paste: '粘贴',
+    selectAll: '全选',
+    findReplace: '查找替换',
+    find: '查找',
+    replace: '替换',
+    replaceAll: '全部替换',
+    replaceAllDone: '已替换 {n} 处',
+    findNext: '下一个',
+    findPrev: '上一个',
+    caseSensitive: '区分大小写',
+    regex: '正则',
+    matches: '个结果',
+    noMatches: '无结果',
+    tooManyMatches: '结果过多',
+    findInPreview: '在预览中查找',
+    copyAsHTML: '复制为 HTML',
+    closeTab: '关闭',
+    closeOther: '关闭其他',
+    closeAll: '关闭所有',
+    copyFilePath: '复制文件路径',
+    recentFiles: '打开最近的文件',
+    noRecentFiles: '暂无最近文件',
+    clearRecentFiles: '清空最近文件',
+    newFileCreated: '新文件已创建',
+    opened: '已打开',
+    openedFiles: '已打开 {n} 个文件',
+    alreadyOpen: '文件已在打开中',
+    saved: '已保存',
+    savedAs: '已另存为',
+    saveFailed: '保存失败',
+    failed: '失败',
+    externalChanged: '文件已在外部被修改',
+    externalChangedDirty: '文件已在外部被修改，重新加载将丢失未保存的内容',
+    reloadFailed: '重新加载失败',
+    sessionLoadFailed: '会话恢复失败',
+    ecbReload: '重新加载',
+    ecbIgnore: '忽略',
+    ecbReloadAll: '全部重新加载',
+    ecbIgnoreAll: '全部忽略',
+    openFailed: '打开失败',
+    exportFailed: '导出失败',
+    fileModified: '已修改，是否保存？',
+    saveChanges: '保存更改',
+    dontSave: '不保存',
+    cancel: '取消',
+    fontSize: '字体大小',
+    tabSize: 'Tab 宽度',
+    lineWrap: '自动换行',
+    lineNumbers: '显示行号',
+    previewFontSize: '正文字号',
+    lineHeight: '行高',
+    maxWidth: '最大宽度',
+    unlimited: '无限制',
+    language: '界面语言',
+    behavior: '行为',
+    themeMode: '主题模式',
+    colorScheme: '配色方案',
+    schemeDefault: '基准',
+    schemeForest: '翠林风',
+    schemeNord: '极夜风',
+    schemeDusk: '暮紫风',
+    schemeSunset: '暖橙风',
+    defaultView: '默认视图',
+    scrollSync: '滚动同步',
+    softBreaks: '软换行（回车即换行）',
+    softBreaksHint: '开启后，段落内单个回车直接换行（与「空格+空格+回车」一致），更符合日常写作习惯，也便于从其他笔记软件迁移。关闭则恢复 CommonMark 标准（回车视为空格）。',
+    showTrayIcon: '显示托盘图标',
+    showTrayIconHint: '关闭后隐藏系统托盘图标；此时关闭窗口会直接退出应用（否则无法通过托盘恢复窗口）。',
+    tabSizeHint: '每按一次 Tab 键缩进几个空格。列表要往里缩一级（做子列表）也靠这个宽度，建议用 4，最稳。',
+    closeAction: '关闭窗口时',
+    closeActionAsk: '每次询问',
+    closeActionQuit: '退出应用',
+    closeActionMinimize: '最小化到托盘',
+    followSystem: '跟随系统',
+    resetDefault: '恢复默认',
+    done: '完成',
+    confirm: '确认',
+    themeSwitched: '已切换到{theme}主题',
+    basic: '基本',
+    fontScheme: '字体方案',
+    fontSchemeSystemSans: '简约风格',
+    fontSchemeClassicSerif: '印刷风格',
+    customFonts: '自定义字体',
+    addFont: '添加字体',
+    editorFont: '编辑器字体',
+    previewFont: '预览字体',
+    followScheme: '跟随方案',
+    fontPreview: '字体预览',
+    deleteFont: '删除',
+    noCustomFont: '尚未添加自定义字体',
+    importingFonts: '正在导入字体 ({n}/{total})…',
+    confirmDeleteFont: '确定要删除字体「{name}」吗？此操作不可恢复。',
+    importSuccess: '成功导入 {n} 个字体',
+    importFailed: '失败 {n} 个字体：{detail}',
+    fontAlreadyExists: '已存在',
+    processing: '处理中…',
+    scrollTop: 'TOP',
+    collapseEditor: '折叠编辑器',
+    collapsePreview: '折叠预览',
+    restoreEditor: '恢复编辑器',
+    restorePreview: '恢复预览',
+    collapseHint: '请先切换到编辑视图再使用折叠功能',
+    noteHint: 'Note 提示',
+    tipHint: 'Tip 建议',
+    warningHint: 'Warning 警告',
+    cautionHint: 'Caution 注意',
+    importantHint: 'Important 重要',
+    version: '版本信息',
+    contact: '联系我们',
+    contactDesc: '反馈建议 · 报告 Bug · 交流使用心得 · 获取更新',
+    qqGroupName: 'QQ 交流群',
+    joinGroup: '点击加群',
+    license: '许可协议',
+    thirdParty: '第三方组件',
+    copyright: '版权声明',
+    aboutTitle: '关于 TizuMark',
+    versionInfo: 'TizuMark v1.1.0',
+    versionDesc: '轻量级跨平台 Markdown 编辑器',
+    buildInfo: '基于 Tauri v2.5 + Rust 构建',
+    copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
+    proprietary: '本软件基于 GPL v3 开源协议发布。',
+    noUnauthorized: '欢迎自由使用、修改和分发，衍生作品须延续 GPL v3 协议。',
+    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要' },
+    shortcutGroup: { file: '文件', search: '查找与搜索', tabView: '标签页与视图', format: '文本格式', insert: '插入', heading: '标题', callout: '提示块' },
+    shortcutScheme: '快捷键方案',
+    shortcutList: '快捷键',
+    crossSearch: '跨文件搜索',
+    crossSearchTitle: '跨文件搜索',
+    scopeOpenFiles: '已打开文件',
+    scopeDir: '目录',
+    loopSearch: '循环查找',
+    loop: '循环查找',
+    searchRunning: '搜索中...',
+    totalMatches: '共 {n} 处匹配',
+    noResults: '无匹配结果',
+    truncated: '结果过多，已截断',
+    csBrowse: '浏览',
+    csRun: '搜索',
+    csQueryPlaceholder: '输入搜索内容...',
+    schemeDefault: '默认',
+    schemeVSCode: 'VSCode',
+    schemeTypora: 'Typora',
+    schemeSublime: 'Sublime Text',
+    schemeCustom: '自定义',
+    schemeOverrideConfirm: '这将覆盖当前所有快捷键，确定切换方案吗？',
+    modify: '修改',
+    clear: '清除',
+    none: '无',
+    pressKeys: '按下快捷键...',
+    generatingImg: '正在生成长图...',
+    preparingPrint: '正在准备打印...',
+    exportedImg: '已导出长图',
+    exportedHTML: '已导出 HTML',
+    exportedPDF: '已导出 PDF',
+    exportError: '导出失败',
+    printTip1: '可在<b>更多设置</b>中<b>取消勾选"页眉和页脚"</b>，去除 PDF 顶部的日期、标题等多余信息。',
+    printTip2: '如果代码高亮或背景色显示异常，请在<b>更多设置</b>中<b>勾选"背景图形"</b>。',
+    editor: '编辑器',
+    previewSection: '预览',
+    paneEdit: '编辑',
+    panePreview: '预览',
+    column1: '列1',
+    column2: '列2',
+    column3: '列3',
+    content: '内容',
+    noteContent: '提示内容',
+    tipContent: '建议内容',
+    warningContent: '警告内容',
+    cautionContent: '注意内容',
+    importantContent: '重要内容',
+    linkText: '链接文本',
+    notSaved: '该文件尚未保存',
+    pathCopied: '已复制文件路径',
+    copyFailed: '复制失败',
+    openedGuide: '已打开使用说明',
+    openedGuideEn: 'Opened User Guide',
+    failedGuide: '打开使用说明失败',
+    giteeAction: '访问仓库',
+    githubAction: '访问仓库',
+    giteeTitle: '访问 Gitee 仓库',
+    githubTitle: '访问 GitHub 仓库',
+    qqTitle: '点击加群',
+    donateTitle: '捐赠支持',
+    donateDesc: '如果 TizuMark 帮到了你，欢迎支持一下。',
+    donateWechat: '微信赞赏',
+    donateAlipay: '支付宝赞赏',
+    depCodeMirror: '代码编辑器组件',
+    depHighlight: '语法高亮库',
+    depCmark: 'Markdown 解析器（Rust）',
+    depKatex: '数学公式渲染',
+    depMermaid: '图表绘制库',
+    depHtml2canvas: '截图导出',
+    depTauri: '桌面应用框架',
+    spaces: '空格',
+    settingsReset: '已恢复默认设置',
+    shortcutsReset: '已恢复默认快捷键',
+    saveDialogMessage: '文件已修改，是否保存？',
+    imageLoadFailed: '[图片加载失败]',
+    dropFileHere: '拖放文件到此处打开',
+    allFiles: '所有文件',
+    confirmResetSettings: '确认恢复默认设置？',
+    tablistLabel: '标签页',
+    closeAria: '关闭',
+    heading1: '# 标题 1',
+    heading2: '## 标题 2',
+    heading3: '### 标题 3',
+    heading4: '#### 标题 4',
+    heading5: '##### 标题 5',
+    heading6: '###### 标题 6',
+    previewMode: '预览模式',
+    editMode: '编辑模式',
+    newTab: '新建标签页',
+    scrollLeft: '向左滚动',
+    scrollRight: '向右滚动',
+    backToTop: '回到顶部',
+    loading: '加载中...',
+    cursorPos: '行 {line}, 列 {col}',
+    insertLinkTitle: '插入链接',
+    linkText: '显示文本',
+    linkUrl: '链接地址',
+    insertImageTitle: '插入图片',
+    imageSource: '图片来源',
+    imageLocal: '本地图片',
+    imageWeb: '网络图片',
+    imageFile: '文件',
+    imageBrowse: '浏览...',
+    imageUrlLabel: '图片地址',
+    imageAlt: '替代文本',
+    imageAltHint: '当图片无法显示时展示此文本，屏幕阅读器也用它描述图片内容。',
+    imageStoreModeHint: '图片存储支持复制到 assets/ 和 Base64 嵌入两种方式，可在设置中更改。',
+    imageStoreMode: '存储方式',
+    imageStoreAssets: '复制到 assets/（推荐）',
+    imageStoreBase64: 'Base64 嵌入',
+    imageStoreAssetsHint: '复制到 assets/：图片保存为独立文件，md 文件轻量，便于版本管理。',
+    imageStoreBase64Hint: 'Base64 嵌入：图片编码到 md 文件内，单文件即可分享，但文件体积显著增大（约原图1.4倍），修改图片需重新编码。',
+    imageSettingLabel: '图片存储方式',
+    imageSettingAssets: '复制到 assets/（推荐）',
+    imageSettingBase64: 'Base64 嵌入',
+    imageSettingHint: '复制到 assets/：图片保存为独立文件，md 文件轻量，便于版本管理。Base64 嵌入：图片编码到 md 文件内，单文件即可分享，但文件体积显著增大（约原图1.4倍），修改图片需重新编码。',
+    imageAssetPathLabel: '图片存储路径',
+    imageAssetPathModeRelative: '相对路径',
+    imageAssetPathModeAbsolute: '绝对路径',
+    imageAssetPathRelativeHint: '相对于 markdown 文件所在目录的路径。例如 assets → 图片将保存在 docs/assets/。将整个文件夹移动到其他位置后，路径仍然有效，无需额外操作。',
+    imageAssetPathAbsoluteHint: '完整的磁盘路径。例如 D:/images → 图片将直接保存到 D:/images/。如果将 markdown 文件夹移动到其他位置，图片路径会失效，需要手动更新引用。',
+    imageAssetPathPlaceholder: 'assets',
+    imageFileRequired: '请选择要插入的本地图片',
+    imageUrlRequired: '请输入网络图片地址',
+    needSaveFirst: '请先保存 markdown 文件后再插入图片',
+    imageFallbackBase64: '文件未保存，已自动切换为 Base64 嵌入',
+    imagePasted: '图片已粘贴',
+    imagePasteFailed: '图片粘贴失败',
+    linkAutoDetected: '（已从剪贴板检测到链接）',
+    checkUpdate: '检查更新',
+    updateChecking: '正在检查更新...',
+    updateAvailable: '发现新版本',
+    updateLatest: '已是最新版本',
+    updateDownloadLabel: '下载更新',
+    updateDownloading: '下载中...',
+    updateInstallNow: '立即安装',
+    updateLater: '稍后再说',
+    updateReady: '更新已就绪，是否现在安装？',
+    updateNoUpdate: '已是最新版本',
+    updateFailed: '检查更新失败',
+    updateConfirm: '确认',
+    updateProgress: '下载中 {pct}%',
+    noUpdateNotes: '暂无更新说明',
+    unsafeRegex: '正则表达式不安全或过长',
+    filesModifiedConfirm: '有 {n} 个文件未保存，是否保存更改？',
+    saveAll: '保存全部',
+    discardAll: '放弃全部',
+    fileOpened: '已打开: {name}',
+    openFolder: '打开文件夹',
+    files: '文件',
+    closeFolder: '关闭文件夹',
+    folderOpened: '已打开文件夹: {path}',
+    extraDirsIgnoredBatch: '已忽略 {n} 个多余目录（每次仅打开一个文件夹）',
+    fontSizeChanged: '字号 {size}px',
+    fontSizeHint: '字号 {size}px',
+    fontSizeReset: '还原 {base}px',
+    switchWorkspaceTitle: '切换工作区',
+    switchWorkspaceMsg: '当前已打开工作区，是否切换到 {path}？',
+    sidebar: '侧边栏',
+  },
+  en: {
+    file: 'File',
+    new: 'New',
+    open: 'Open',
+    recentFiles: 'Open Recent',
+    noRecentFiles: 'No recent files',
+    clearRecentFiles: 'Clear Recent Files',
+    save: 'Save',
+    saveAs: 'Save As',
+    exportHTML: 'Export HTML',
+    exportImg: 'Export Image',
+    exportPDF: 'Export PDF',
+    shortcuts: 'Shortcuts',
+    settings: 'Settings',
+    insert: 'Insert',
+    structure: 'Structure',
+    heading: 'Heading',
+    codeBlock: 'Code Block',
+    table: 'Table',
+    quoteBlock: 'Blockquote',
+    callout: 'Callout',
+    expandToolbar: 'Expand Toolbar',
+    collapseToolbar: 'Collapse Toolbar',
+    externalChanged: 'File changed externally',
+    externalChangedDirty: 'File changed externally; reloading will discard unsaved changes',
+    reloadFailed: 'Reload failed',
+    sessionLoadFailed: 'Session restore failed',
+    ecbReload: 'Reload',
+    ecbIgnore: 'Ignore',
+    ecbReloadAll: 'Reload All',
+    ecbIgnoreAll: 'Ignore All',
+    mathBlock: 'Math Block',
+    mermaidChart: 'Mermaid Chart',
+    hr: 'Horizontal Rule',
+    toc: 'Table of Contents',
+    textFormat: 'Text Format',
+    bold: 'Bold',
+    italic: 'Italic',
+    strikethrough: 'Strikethrough',
+    inlineCode: 'Inline Code',
+    highlight: 'Highlight',
+    superscript: 'Superscript',
+    subscript: 'Subscript',
+    list: 'List',
+    ul: 'Unordered List',
+    ol: 'Ordered List',
+    taskList: 'Task List',
+    linkMedia: 'Links & Media',
+    link: 'Link',
+    image: 'Image',
+    view: 'View',
+    outline: 'Outline',
+    help: 'Help',
+    userGuide: 'User Guide',
+    about: 'About',
+    preview: 'Preview',
+    edit: 'Edit',
+    themeLight: 'Light',
+    themeDark: 'Dark',
+    minimize: 'Minimize',
+    maximize: 'Maximize',
+    close: 'Close',
+    ready: 'Ready',
+    words: 'Words',
+    chars: 'Chars',
+    lines: 'Lines',
+    untitled: 'Untitled',
+    noHeadings: 'No headings',
+    copy: 'Copy',
+    copied: 'Copied',
+    copyCode: 'Copy code',
+    cut: 'Cut',
+    paste: 'Paste',
+    selectAll: 'Select All',
+    findReplace: 'Find & Replace',
+    find: 'Find',
+    replace: 'Replace',
+    replaceAll: 'Replace All',
+    replaceAllDone: 'Replaced {n} occurrences',
+    findNext: 'Next',
+    findPrev: 'Previous',
+    caseSensitive: 'Case Sensitive',
+    regex: 'Regex',
+    matches: ' matches',
+    noMatches: 'No matches',
+    tooManyMatches: 'Too many matches',
+    findInPreview: 'Find in Preview',
+    copyAsHTML: 'Copy as HTML',
+    closeTab: 'Close',
+    closeOther: 'Close Others',
+    closeAll: 'Close All',
+    copyFilePath: 'Copy File Path',
+    newFileCreated: 'New file created',
+    opened: 'Opened',
+    openedFiles: 'Opened {n} files',
+    alreadyOpen: 'File already open',
+    saved: 'Saved',
+    savedAs: 'Saved as',
+    saveFailed: 'Save failed',
+    failed: 'Failed',
+    openFailed: 'Open failed',
+    exportFailed: 'Export failed',
+    fileModified: ' has been modified. Save?',
+    saveChanges: 'Save Changes',
+    dontSave: 'Don\'t Save',
+    cancel: 'Cancel',
+    fontSize: 'Font Size',
+    tabSize: 'Tab Size',
+    lineWrap: 'Line Wrap',
+    lineNumbers: 'Line Numbers',
+    previewFontSize: 'Preview Font Size',
+    lineHeight: 'Line Height',
+    maxWidth: 'Max Width',
+    unlimited: 'Unlimited',
+    language: 'Language',
+    behavior: 'Behavior',
+    themeMode: 'Theme Mode',
+    colorScheme: 'Color Scheme',
+    schemeDefault: 'Default',
+    schemeForest: 'Forest',
+    schemeNord: 'Nord',
+    schemeDusk: 'Dusk',
+    schemeSunset: 'Sunset',
+    defaultView: 'Default View',
+    scrollSync: 'Scroll Sync',
+    softBreaks: 'Soft Line Break (Enter = newline)',
+    softBreaksHint: 'When enabled, a single Enter inside a paragraph creates a line break (same as "two spaces + Enter"), matching everyday writing and easing migration from other note apps. When disabled, CommonMark standard applies (Enter is treated as a space).',
+    showTrayIcon: 'Show tray icon',
+    showTrayIconHint: 'When disabled, the system tray icon is hidden; closing the window then quits the app directly (otherwise the window could not be restored via the tray).',
+    tabSizeHint: 'How many spaces a Tab press indents. Indenting a list one level (to make a sub-list) also uses this width; 4 is recommended for the safest nesting.',
+    closeAction: 'On window close',
+    closeActionAsk: 'Ask every time',
+    closeActionQuit: 'Quit app',
+    closeActionMinimize: 'Minimize to tray',
+    followSystem: 'Follow System',
+    resetDefault: 'Reset Default',
+    done: 'Done',
+    confirm: 'Confirm',
+    themeSwitched: 'Switched to {theme} theme',
+    basic: 'Basic',
+    fontScheme: 'Font Scheme',
+    fontSchemeSystemSans: 'Minimalist',
+    fontSchemeClassicSerif: 'Print Style',
+    customFonts: 'Custom Fonts',
+    addFont: 'Add Font',
+    editorFont: 'Editor Font',
+    previewFont: 'Preview Font',
+    followScheme: 'Follow Scheme',
+    fontPreview: 'Font Preview',
+    deleteFont: 'Delete',
+    noCustomFont: 'No custom font added yet',
+    importingFonts: 'Importing fonts ({n}/{total})…',
+    confirmDeleteFont: 'Are you sure you want to delete the font "{name}"? This cannot be undone.',
+    importSuccess: 'Successfully imported {n} font(s)',
+    importFailed: 'Failed to import {n} font(s): {detail}',
+    fontAlreadyExists: 'already exists',
+    processing: 'Processing…',
+    scrollTop: 'TOP',
+    collapseEditor: 'Collapse Editor',
+    collapsePreview: 'Collapse Preview',
+    restoreEditor: 'Restore Editor',
+    restorePreview: 'Restore Preview',
+    collapseHint: 'Switch to edit view first to use panel collapse',
+    noteHint: 'Note',
+    tipHint: 'Tip',
+    warningHint: 'Warning',
+    cautionHint: 'Caution',
+    importantHint: 'Important',
+    version: 'Version',
+    contact: 'Contact Us',
+    contactDesc: 'Feedback · Bug Reports · Tips & Discussion · Updates',
+    qqGroupName: 'QQ Community',
+    joinGroup: 'Join Group',
+    license: 'License',
+    thirdParty: 'Third-Party Components',
+    copyright: 'Copyright Notice',
+    aboutTitle: 'About TizuMark',
+    versionInfo: 'TizuMark v1.1.0',
+    versionDesc: 'Lightweight cross-platform Markdown editor',
+    buildInfo: 'Built with Tauri v2.5 + Rust',
+    copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
+    proprietary: 'This software is released under the GPL v3 open-source license.',
+    noUnauthorized: 'Free to use, modify, and distribute. Derivative works must remain under GPL v3.',
+    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important' },
+    shortcutGroup: { file: 'File', search: 'Find & Search', tabView: 'Tabs & View', format: 'Text Format', insert: 'Insert', heading: 'Headings', callout: 'Callouts' },
+    shortcutScheme: 'Shortcut Scheme',
+    shortcutList: 'Shortcuts',
+    crossSearch: 'Cross-file Search',
+    crossSearchTitle: 'Cross-file Search',
+    scopeOpenFiles: 'Opened Files',
+    scopeDir: 'Directory',
+    loopSearch: 'Wrap Around',
+    loop: 'Wrap Around',
+    searchRunning: 'Searching...',
+    totalMatches: '{n} matches',
+    noResults: 'No results',
+    truncated: 'Too many results, truncated',
+    csBrowse: 'Browse',
+    csRun: 'Search',
+    csQueryPlaceholder: 'Enter search query...',
+    schemeDefault: 'Default',
+    schemeVSCode: 'VSCode',
+    schemeTypora: 'Typora',
+    schemeSublime: 'Sublime Text',
+    schemeCustom: 'Custom',
+    schemeOverrideConfirm: 'This will override all current shortcuts. Switch scheme?',
+    modify: 'Modify',
+    clear: 'Clear',
+    none: 'None',
+    pressKeys: 'Press keys...',
+    generatingImg: 'Generating image...',
+    preparingPrint: 'Preparing to print...',
+    exportedImg: 'Exported image',
+    exportedHTML: 'Exported HTML',
+    exportedPDF: 'PDF exported',
+    exportError: 'Export failed',
+    printTip1: 'Go to <b>More settings</b> and <b>uncheck "Headers and footers"</b> to remove date, title and other extra info from the PDF.',
+    printTip2: 'If code highlighting or background colors look wrong, go to <b>More settings</b> and <b>check "Background graphics"</b>.',
+    editor: 'Editor',
+    previewSection: 'Preview',
+    paneEdit: 'Edit',
+    panePreview: 'Preview',
+    column1: 'Col 1',
+    column2: 'Col 2',
+    column3: 'Col 3',
+    content: 'Content',
+    noteContent: 'Note content',
+    tipContent: 'Tip content',
+    warningContent: 'Warning content',
+    cautionContent: 'Caution content',
+    importantContent: 'Important content',
+    linkText: 'Link text',
+    notSaved: 'File not saved yet',
+    pathCopied: 'File path copied',
+    copyFailed: 'Copy failed',
+    openedGuide: 'User guide opened',
+    openedGuideEn: 'Opened User Guide',
+    failedGuide: 'Failed to open user guide',
+    failedGuideEn: 'Failed to open guide',
+    giteeAction: 'Visit Repository',
+    githubAction: 'Visit Repository',
+    giteeTitle: 'Visit Gitee Repository',
+    githubTitle: 'Visit GitHub Repository',
+    qqTitle: 'Join Group',
+    donateTitle: 'Donate',
+    donateDesc: 'If TizuMark has helped you, please consider supporting it.',
+    donateWechat: 'WeChat Pay',
+    donateAlipay: 'Alipay',
+    depCodeMirror: 'Code editor component',
+    depHighlight: 'Syntax highlighting library',
+    depCmark: 'Markdown parser (Rust)',
+    depKatex: 'Math formula rendering',
+    depMermaid: 'Diagram drawing library',
+    depHtml2canvas: 'Screenshot export',
+    depTauri: 'Desktop application framework',
+    spaces: 'spaces',
+    settingsReset: 'Settings reset to defaults',
+    shortcutsReset: 'Shortcuts reset to defaults',
+    saveDialogMessage: 'File has been modified. Save?',
+    imageLoadFailed: '[Image failed to load]',
+    dropFileHere: 'Drop file here to open',
+    allFiles: 'All Files',
+    confirmResetSettings: 'Restore default settings?',
+    tablistLabel: 'Tabs',
+    closeAria: 'Close',
+    heading1: '# Heading 1',
+    heading2: '## Heading 2',
+    heading3: '### Heading 3',
+    heading4: '#### Heading 4',
+    heading5: '##### Heading 5',
+    heading6: '###### Heading 6',
+    previewMode: 'Preview Mode',
+    editMode: 'Edit Mode',
+    newTab: 'New Tab',
+    scrollLeft: 'Scroll Left',
+    scrollRight: 'Scroll Right',
+    backToTop: 'Back to Top',
+    loading: 'Loading...',
+    cursorPos: 'Line {line}, Col {col}',
+    insertLinkTitle: 'Insert Link',
+    linkText: 'Text',
+    linkUrl: 'URL',
+    insertImageTitle: 'Insert Image',
+    imageSource: 'Source',
+    imageLocal: 'Local Image',
+    imageWeb: 'Web Image',
+    imageFile: 'File',
+    imageBrowse: 'Browse...',
+    imageUrlLabel: 'Image URL',
+    imageAlt: 'Alt Text',
+    imageAltHint: 'Shown when the image cannot be displayed; also used by screen readers to describe the image.',
+    imageStoreModeHint: 'Supports "Copy to assets/" and "Embed as Base64". Change in Settings.',
+    imageStoreMode: 'Storage',
+    imageStoreAssets: 'Copy to assets/ (Recommended)',
+    imageStoreBase64: 'Embed as Base64',
+    imageStoreAssetsHint: 'Copy to assets/: Images saved as separate files, keeps markdown lightweight, suitable for version control.',
+    imageStoreBase64Hint: 'Embed as Base64: Encodes image into the markdown file for self-contained sharing, but significantly increases file size (~1.4x original). Requires re-encoding to modify.',
+    imageSettingLabel: 'Image Storage',
+    imageSettingAssets: 'Copy to assets/ (Recommended)',
+    imageSettingBase64: 'Embed as Base64',
+    imageSettingHint: 'Copy to assets/: Images are saved as separate files, keeping the markdown file lightweight and suitable for version control. Embed as Base64: Encodes images into the markdown file for self-contained sharing, but file size increases significantly (~1.4x original). Requires re-encoding to modify.',
+    imageAssetPathLabel: 'Image Asset Path',
+    imageAssetPathModeRelative: 'Relative Path',
+    imageAssetPathModeAbsolute: 'Absolute Path',
+    imageAssetPathRelativeHint: 'Relative to the markdown file\'s directory. Example: assets → images saved in docs/assets/. Path remains valid when moving the entire folder to another location.',
+    imageAssetPathAbsoluteHint: 'Full disk path. Example: D:/images → images saved directly in D:/images/. Path will break if the markdown folder is moved to another location.',
+    imageAssetPathPlaceholder: 'assets',
+    imageFileRequired: 'Please select a local image file',
+    imageUrlRequired: 'Please enter an image URL',
+    needSaveFirst: 'Save the markdown file first before inserting images',
+    imageFallbackBase64: 'File not saved, auto-switched to Base64 embed',
+    imagePasted: 'Image pasted',
+    imagePasteFailed: 'Image paste failed',
+    linkAutoDetected: '(Link detected from clipboard)',
+    checkUpdate: 'Check for Updates',
+    updateChecking: 'Checking for updates...',
+    updateAvailable: 'Update Available',
+    updateLatest: 'Up to Date',
+    updateDownloadLabel: 'Download Update',
+    updateDownloading: 'Downloading...',
+    updateInstallNow: 'Install Now',
+    updateLater: 'Later',
+    updateReady: 'Update ready. Install now?',
+    updateNoUpdate: 'You\'re up to date',
+    updateFailed: 'Check for updates failed',
+    updateConfirm: 'OK',
+    updateProgress: 'Downloading {pct}%',
+    noUpdateNotes: 'No release notes',
+    unsafeRegex: 'Unsafe or too long regex pattern',
+    filesModifiedConfirm: '{n} unsaved files. Save changes?',
+    saveAll: 'Save All',
+    discardAll: 'Discard All',
+    fileOpened: 'Opened: {name}',
+    openFolder: 'Open Folder',
+    files: 'Files',
+    closeFolder: 'Close Folder',
+    folderOpened: 'Opened folder: {path}',
+    extraDirsIgnoredBatch: 'Ignored {n} extra folders (only one folder can be opened at a time)',
+    fontSizeChanged: 'Font size {size}px',
+    fontSizeHint: 'Font size {size}px',
+    fontSizeReset: 'Reset to {base}px',
+    switchWorkspaceTitle: 'Switch Workspace',
+    switchWorkspaceMsg: 'A workspace is already open. Switch to {path}?',
+    sidebar: 'Sidebar',
+  }
+};
+
+class MarkdownEditor {
+  constructor() {
+    this.untitledCounter = 1;
+    this.tabs = [];
+    this.activeTabIndex = 0;
+    // 外部变更队列：在此先初始化为 []，作为异步 initFileWatcher 之前的兜底，
+    // 避免初始化未完成时调用 enqueueExternalChange 触发 _externalQueue.includes 崩溃。
+    this._externalQueue = [];
+    this._externalBannerVisible = false;
+    this.cm = null;
+    this.workspaceFolder = null;
+    this.expandedFolders = new Set();
+    this.debounceTimer = null;
+    this._imageURLCache = new Map();
+    this._imageBase64Cache = new Map(); // key: 绝对路径 → value: base64 data URI，省去每次打字跨 IPC 读磁盘
+    this._hljsCache = new Map();
+    this._mermaidCache = new Map(); // key: themeKey+'::'+code → 渲染后的 SVG innerHTML，避免打字时全量重渲染 mermaid
+    this._renderGeneration = 0;
+    this._mermaidGeneration = 0;
+    this.previewWindow = null;       // 大文档窗口模式：{start, end}（0-based 源码行），普通文档为 null
+    this._previewVirtual = false;    // 纯预览模式 + 大文档：虚拟滚动（spacer 撑高，可拖到任意位置）
+    this._avgLineHeight = null;      // 虚拟滚动平均行高（首次渲染后校准一次，之后恒定）
+    this._virtualRenderTimer = null; // 虚拟滚动重渲染 debounce 计时器
+    this._previewScrollDriven = false; // 虚拟滚动：滚动驱动的重渲染保留 scrollTop（不回弹贴顶）
+    this._previewSliceOffset = 0;    // 窗口切片起点（0-based），用于把 data-source-line 还原为绝对行号
+    this._previewFocusLine = 0;      // 窗口焦点（0-based 源码行），决定窗口中心
+    this._windowLineTops = null;     // 窗口模式下 [data-source-line] 元素相对预览内容顶部的像素偏移，用于定位
+    this._linePositions = [{ line: 0, fraction: 0 }];
+    this._blocks = [];
+    this._previewChildrenCount = 0;
+    this._editorPercent = null;
+    this.isDark = false;
+    this.viewMode = 'preview';
+
+    this.settings = this.loadSettings();
+    this.shortcuts = this.loadShortcuts();
+    this.shortcutScheme = this.loadShortcutScheme();
+    this._recentFiles = [];
+    this._recentSubmenuVisible = false;
+    this.loadRecentFiles();
+    this.recordingAction = null;
+    this.tabs.push(new Tab(this.t('untitled') + this.untitledCounter++));
+
+    this.preview = document.getElementById('preview');
+    if (this.preview) this.preview.style.scrollBehavior = 'auto';
+    this.statusText = document.getElementById('status-text');
+    this.cursorPosition = document.getElementById('cursor-position');
+    this.wordCountEl = document.getElementById('word-count');
+    this.charCountEl = document.getElementById('char-count');
+    this.lineCountEl = document.getElementById('line-count');
+
+    this.initEditor();
+    this.applyShortcuts();
+    this.initEventListeners();
+    this.initResizer();
+    this.initFindReplace();
+    this.initScrollTopBtn();
+    this.initExternalLinks();
+    this.initDragDrop();
+    this.initSettings();
+    this.applyWindowBehavior();
+    this.initShortcutsDialog();
+    this.initCrossSearch();
+    this.initOutline();
+    this.initOutlineResizer();
+    this.updateOutlineCheck();
+    this.initContextMenu();
+    this.initFormatToolbar();
+    this.applySidebarState();
+    this.initInsertDialogs();
+    this.initImagePaste();
+    this.initTabScroll();
+    this.loadTheme();
+    this.applyFontScheme();
+    this.updatePreview();
+    this.applyViewMode();
+    this.updateMaximizeIcon();
+    this.updateWordCount();
+    setTimeout(() => this.checkUpdate(false), 5000);
+    this.updateSideButtons();
+    this.applyLanguage();
+  }
+
+  showLoading() {
+    this._loadingStart = Date.now();
+    const overlay = document.getElementById('loading-overlay');
+    overlay.classList.remove('hidden');
+    overlay.offsetHeight;
+  }
+
+  async hideLoading() {
+    const elapsed = Date.now() - (this._loadingStart || 0);
+    const minDuration = 200;
+    if (elapsed < minDuration) {
+      await new Promise(r => setTimeout(r, minDuration - elapsed));
+    }
+    document.getElementById('loading-overlay').classList.add('hidden');
+  }
+
+  showPaneLoading() {
+    const el = document.getElementById('pane-loading');
+    if (el && el.classList.contains('hidden')) {
+      this._paneLoadingStart = Date.now();
+      el.classList.remove('hidden');
+    }
+  }
+
+  async hidePaneLoading() {
+    const el = document.getElementById('pane-loading');
+    if (!el) return;
+    const elapsed = Date.now() - (this._paneLoadingStart || 0);
+    const minDuration = 180;
+    if (elapsed < minDuration) {
+      await new Promise(r => setTimeout(r, minDuration - elapsed));
+    }
+    el.classList.add('hidden');
+  }
+
+  // 引用计数的加载层控制：多次嵌套的「开始/结束」只在实际最外层结束（count 归零）时才隐藏，
+  // 从而让大文件重渲染（可能跨多次 updatePreview 调用）期间 loading 持续可见
+  _beginPaneLoad() {
+    this._paneLoadingCount = (this._paneLoadingCount || 0) + 1;
+    this.showPaneLoading();
+  }
+
+  _endPaneLoad() {
+    this._paneLoadingCount = Math.max(0, (this._paneLoadingCount || 0) - 1);
+    if (this._paneLoadingCount === 0) this.hidePaneLoading();
+  }
+
+  showLargeFileNotice(key, totalLines, totalChars) {
+    // 纯预览模式使用虚拟滚动，可拖到任意位置查看全文，无需提示横幅
+    if (this.viewMode === 'preview') { this.hideLargeFileNotice(); return; }
+    if (this._largeFileNoticeDismissed && this._largeFileNoticeKey === key) return;
+    const banner = document.getElementById('large-file-banner');
+    const textEl = document.getElementById('large-file-banner-text');
+    if (!banner || !textEl) return;
+    const sizeMB = (totalChars / 1048576).toFixed(1);
+    textEl.textContent = `⚠ 文档过大（约 ${totalLines} 行 / ${sizeMB} MB），预览仅显示当前位置附近内容，滚动编辑区可逐步查看全文。`;
+    banner.classList.remove('hidden');
+    this._largeFileNoticeKey = key;
+  }
+
+  hideLargeFileNotice() {
+    const banner = document.getElementById('large-file-banner');
+    if (banner) banner.classList.add('hidden');
+    this._largeFileNoticeKey = null;
+  }
+
+  t(key, params = {}) {
+    const lang = this.settings.language === 'en' ? 'en' : 'zh';
+    let text = I18N[lang][key];
+    if (text === undefined) {
+      text = I18N.zh[key] || key;
+    }
+    if (text && params) {
+      for (const [k, v] of Object.entries(params)) {
+        text = text.replace('{' + k + '}', v);
+      }
+    }
+    return text;
+  }
+
+  applyLanguage() {
+    const t = (k, p) => this.t(k, p);
+    const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    const setPlaceholder = (id, text) => { const el = document.getElementById(id); if (el) el.placeholder = text; };
+    const setTitle = (id, text) => { const el = document.getElementById(id); if (el) el.title = text; };
+
+    // Toolbar buttons — skip the dropdown-arrow span, target the label span
+    const updateToolbarBtn = (btnId, text) => {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+      const span = btn.querySelector('span:not(.dropdown-arrow)');
+      if (span) span.textContent = text;
+    };
+    updateToolbarBtn('btn-file', t('file'));
+    updateToolbarBtn('btn-view', t('view'));
+    updateToolbarBtn('btn-help', t('help'));
+
+    // File menu items
+    // Use direct approach for menu items
+    const updateMenuText = (id, text) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const span = el.querySelector('span:not(.shortcut):not(.icon)');
+      if (span) span.textContent = text;
+    };
+
+    updateMenuText('btn-new', t('new'));
+    updateMenuText('btn-open', t('open'));
+    updateMenuText('btn-recent', t('recentFiles'));
+    updateMenuText('btn-save', t('save'));
+    updateMenuText('btn-save-as', t('saveAs'));
+    updateMenuText('btn-export-html', t('exportHTML'));
+    updateMenuText('btn-export-img', t('exportImg'));
+    updateMenuText('btn-export-pdf', t('exportPDF'));
+    updateMenuText('btn-shortcuts', t('shortcuts'));
+    updateMenuText('btn-settings', t('settings'));
+    updateMenuText('btn-user-guide', t('userGuide'));
+    updateMenuText('btn-about', t('about'));
+
+    // View mode tabs
+    updateMenuText('btn-view-preview', t('preview'));
+    updateMenuText('btn-view-edit', t('edit'));
+
+    // Theme button
+    setText('theme-text', this.isDark ? t('themeDark') : t('themeLight'));
+
+    // Window controls
+    setTitle('btn-minimize', t('minimize'));
+    setTitle('btn-maximize', t('maximize'));
+    setTitle('btn-close', t('close'));
+
+    // Status bar
+    setText('status-text', t('ready'));
+    document.getElementById('word-count').textContent = t('words') + ': 0';
+    document.getElementById('char-count').textContent = t('chars') + ': 0';
+    document.getElementById('line-count').textContent = t('lines') + ': 0';
+    if (this.cm) {
+      const cur = this.cm.getCursor();
+      document.getElementById('cursor-position').textContent = this.t('cursorPos', { line: cur.line + 1, col: cur.ch + 1 });
+    }
+
+    // Drag overlay
+    setText('drag-overlay', t('dropFileHere'));
+
+    // ARIA labels
+    const tabBar = document.getElementById('tab-bar');
+    if (tabBar) tabBar.setAttribute('aria-label', t('tablistLabel'));
+    document.querySelectorAll('.dialog-close').forEach(btn => {
+      btn.setAttribute('aria-label', t('closeAria'));
+    });
+
+    // Pane headers & outline
+    document.querySelector('#editor-pane .pane-header span').textContent = t('paneEdit');
+    document.querySelector('#preview-pane .pane-header span').textContent = t('panePreview');
+
+    // Settings dialog — use form element IDs as stable anchors
+    document.querySelector('#settings-dialog .dialog-header h2').textContent = t('settings');
+    const setSectionTitle = (anchorId, text) => {
+      const el = document.getElementById(anchorId);
+      if (el) { const h3 = el.closest('.settings-section').querySelector('h3'); if (h3) h3.textContent = text; }
+    };
+    const setRowLabel = (formId, text) => {
+      const el = document.getElementById(formId);
+      if (el) { const label = el.closest('.settings-row').querySelector(':scope > label:not(.toggle)'); if (label) label.textContent = text; }
+    };
+    setSectionTitle('set-language', t('basic'));
+    setRowLabel('set-language', t('language'));
+    setRowLabel('set-theme-mode', t('themeMode'));
+    setRowLabel('set-color-scheme', t('colorScheme'));
+    setRowLabel('set-font-scheme', t('fontScheme'));
+    setSectionTitle('set-font-size', t('editor'));
+    setRowLabel('set-font-size', t('fontSize'));
+    setRowLabel('set-tab-size', t('tabSize'));
+    setRowLabel('set-line-wrap', t('lineWrap'));
+    setRowLabel('set-line-numbers', t('lineNumbers'));
+    setSectionTitle('set-preview-font-size', t('previewSection'));
+    setRowLabel('set-preview-font-size', t('previewFontSize'));
+    setRowLabel('set-line-height', t('lineHeight'));
+    setRowLabel('set-max-width', t('maxWidth'));
+    setSectionTitle('set-default-view', t('behavior'));
+    setRowLabel('set-default-view', t('defaultView'));
+    setRowLabel('set-scroll-sync', t('scrollSync'));
+    setRowLabel('set-soft-breaks', t('softBreaks'));
+    const softBreaksHint = document.querySelector('#setting-soft-breaks-hint .hint-text');
+    if (softBreaksHint) softBreaksHint.textContent = t('softBreaksHint');
+    const tabSizeHint = document.querySelector('#setting-tab-size-hint .hint-text');
+    if (tabSizeHint) tabSizeHint.textContent = t('tabSizeHint');
+    setText('setting-image-store-assets', t('imageSettingAssets'));
+    setText('setting-image-store-base64', t('imageSettingBase64'));
+    document.querySelector('#setting-image-store-hint .hint-text').textContent = t('imageSettingHint');
+    document.getElementById('settings-reset').textContent = t('resetDefault');
+    document.getElementById('settings-cancel-btn').textContent = t('cancel');
+    document.getElementById('settings-save-btn').textContent = t('save');
+    document.getElementById('settings-close-x').setAttribute('aria-label', t('cancel'));
+    document.getElementById('confirm-dialog-confirm').textContent = t('confirm');
+    document.getElementById('confirm-dialog-cancel').textContent = t('cancel');
+    // Update color scheme options text
+    const csSelect = document.getElementById('set-color-scheme');
+    if (csSelect) {
+      csSelect.options[0].text = t('schemeDefault');
+      csSelect.options[1].text = t('schemeSunset');
+      csSelect.options[2].text = t('schemeForest');
+      csSelect.options[3].text = t('schemeNord');
+      csSelect.options[4].text = t('schemeDusk');
+    }
+    // Update font scheme options text
+    const fsSelect = document.getElementById('set-font-scheme');
+    if (fsSelect) {
+      fsSelect.options[0].text = t('fontSchemeSystemSans');
+      fsSelect.options[1].text = t('fontSchemeClassicSerif');
+    }
+    // Refresh shortcut scheme dropdown text
+    const schemeLabel = document.getElementById('shortcuts-scheme-label');
+    if (schemeLabel) schemeLabel.textContent = t('shortcutScheme');
+    const listTitle = document.getElementById('shortcuts-list-title');
+    if (listTitle) listTitle.textContent = t('shortcutList');
+    this.populateSchemeSelect();
+
+    // 跨文件搜索弹框文案
+    const csText = (id, key) => { const el = document.getElementById(id); if (el) el.textContent = t(key); };
+    csText('cs-title', 'crossSearchTitle');
+    csText('cs-label-open', 'scopeOpenFiles');
+    csText('cs-label-dir', 'scopeDir');
+    csText('cs-label-case', 'caseSensitive');
+    csText('cs-label-regex', 'regex');
+    csText('cs-label-loop', 'loopSearch');
+    csText('cs-browse', 'csBrowse');
+    csText('cs-run', 'csRun');
+    const csQuery = document.getElementById('cs-query');
+    if (csQuery) csQuery.placeholder = t('csQueryPlaceholder');
+
+    // Update tab bar
+    this.updateTabBar();
+    this.updateWordCount();
+
+    // Side buttons
+    this.applyViewMode();
+
+    // About dialog
+    document.querySelector('#about-dialog .dialog-header h2').textContent = t('aboutTitle');
+    const aboutSections = document.querySelectorAll('#about-dialog .about-section');
+    if (aboutSections.length >= 1) {
+      aboutSections[0].querySelector('h3').textContent = t('version');
+      aboutSections[0].querySelector('p:nth-child(2)').textContent = t('versionInfo');
+      aboutSections[0].querySelector('p:nth-child(3)').textContent = t('versionDesc');
+      aboutSections[0].querySelector('p:nth-child(4)').textContent = t('buildInfo');
+    }
+    if (aboutSections.length >= 2) {
+      aboutSections[1].querySelector('h3').textContent = t('contact');
+      const contactDesc = aboutSections[1].querySelector('.contact-desc');
+      const qqLabel = aboutSections[1].querySelector('.qq-label');
+      const qqJoinText = aboutSections[1].querySelector('.qq-join-text');
+      const qqBadge = document.getElementById('qq-group-badge');
+      if (contactDesc) contactDesc.textContent = t('contactDesc');
+      if (qqLabel) qqLabel.textContent = t('qqGroupName');
+      if (qqJoinText) qqJoinText.textContent = t('joinGroup');
+      if (qqBadge) qqBadge.title = t('qqTitle');
+      const giteeAction = aboutSections[1].querySelector('.gitee-action');
+      const giteeBadge = document.getElementById('gitee-badge');
+      if (giteeAction) giteeAction.textContent = t('giteeAction');
+      if (giteeBadge) giteeBadge.title = t('giteeTitle');
+      const githubAction = aboutSections[1].querySelector('.github-action');
+      const githubBadge = document.getElementById('github-badge');
+      if (githubAction) githubAction.textContent = t('githubAction');
+      if (githubBadge) githubBadge.title = t('githubTitle');
+    }
+    if (aboutSections.length >= 3) {
+      aboutSections[2].querySelector('h3').textContent = t('license');
+      aboutSections[2].querySelector('p:nth-child(2)').textContent = t('copyrightLine');
+      aboutSections[2].querySelector('p:nth-child(3)').textContent = t('proprietary');
+      aboutSections[2].querySelector('p:nth-child(4)').textContent = t('noUnauthorized');
+    }
+    if (aboutSections.length >= 4) {
+      const summary = aboutSections[3].querySelector('summary');
+      if (summary) summary.textContent = t('thirdParty');
+      const depDescs = aboutSections[3].querySelectorAll('.dependency-item p');
+      const depKeys = ['depCodeMirror', 'depHighlight', 'depCmark', 'depKatex', 'depMermaid', 'depHtml2canvas', 'depTauri'];
+      depDescs.forEach((p, i) => {
+        if (i < depKeys.length) p.textContent = t(depKeys[i]);
+      });
+    }
+
+    // Save dialog
+    document.getElementById('save-dialog-title').textContent = t('saveChanges');
+    document.getElementById('save-dialog-save').textContent = t('save');
+    document.getElementById('save-dialog-discard').textContent = t('dontSave');
+    document.getElementById('save-dialog-cancel').textContent = t('cancel');
+
+    // Find panels
+    setPlaceholder('find-input', t('find') + '...');
+    setPlaceholder('replace-input', t('replace') + '...');
+    document.querySelector('#find-panel .find-option:nth-child(2)') && (document.querySelector('#find-panel .find-option:nth-child(2)').childNodes[1] && (document.querySelector('#find-panel .find-option:nth-child(2)').childNodes[1].textContent = ' ' + t('caseSensitive')));
+    document.querySelector('#find-panel .find-option:nth-child(3)') && (document.querySelector('#find-panel .find-option:nth-child(3)').childNodes[1] && (document.querySelector('#find-panel .find-option:nth-child(3)').childNodes[1].textContent = ' ' + t('regex')));
+    document.querySelector('#find-panel .find-option:nth-child(4)') && (document.querySelector('#find-panel .find-option:nth-child(4)').childNodes[1] && (document.querySelector('#find-panel .find-option:nth-child(4)').childNodes[1].textContent = ' ' + t('loop')));
+    document.getElementById('find-next').textContent = t('findNext');
+    document.getElementById('find-prev').textContent = t('findPrev');
+    document.getElementById('replace-one').textContent = t('replace');
+    document.getElementById('replace-all').textContent = t('replaceAll');
+    setPlaceholder('preview-find-input', t('findInPreview') + '...');
+    document.querySelector('#preview-find-panel .find-option:nth-child(2)') && (document.querySelector('#preview-find-panel .find-option:nth-child(2)').childNodes[1] && (document.querySelector('#preview-find-panel .find-option:nth-child(2)').childNodes[1].textContent = ' ' + t('caseSensitive')));
+    document.querySelector('#preview-find-panel .find-option:nth-child(3)') && (document.querySelector('#preview-find-panel .find-option:nth-child(3)').childNodes[1] && (document.querySelector('#preview-find-panel .find-option:nth-child(3)').childNodes[1].textContent = ' ' + t('regex')));
+    document.querySelector('#preview-find-panel .find-option:nth-child(4)') && (document.querySelector('#preview-find-panel .find-option:nth-child(4)').childNodes[1] && (document.querySelector('#preview-find-panel .find-option:nth-child(4)').childNodes[1].textContent = ' ' + t('loop')));
+    document.getElementById('preview-find-next').textContent = t('findNext');
+    document.getElementById('preview-find-prev').textContent = t('findPrev');
+
+    // Save dialog message
+    setText('save-dialog-message', t('saveDialogMessage'));
+
+    // Confirm dialog title & message
+    setText('confirm-dialog-title', t('confirm'));
+    setText('confirm-dialog-message', t('confirmResetSettings'));
+
+    // Shortcuts dialog
+    setText('shortcuts-title', t('shortcuts'));
+    document.getElementById('shortcuts-reset').textContent = t('resetDefault');
+    document.getElementById('shortcuts-save-btn').textContent = t('done');
+
+    // Loading overlay
+    setText('loading-text', t('loading'));
+
+    // Scroll-top button
+    setText('scroll-top-label', t('scrollTop'));
+    setTitle('scroll-top-btn', t('backToTop'));
+
+    // Tab bar tooltips
+    setTitle('btn-add-tab', t('newTab'));
+    setTitle('tab-scroll-left', t('scrollLeft'));
+    setTitle('tab-scroll-right', t('scrollRight'));
+
+    // Toolbar button titles
+    setTitle('btn-file', t('file'));
+    setTitle('btn-view', t('view'));
+    setTitle('btn-help', t('help'));
+    setTitle('btn-view-preview', t('previewMode'));
+    setTitle('btn-view-edit', t('editMode'));
+
+    // View menu sidebar toggle
+    const sidebarToggle = document.getElementById('btn-sidebar-toggle');
+    if (sidebarToggle) {
+      const labelSpan = sidebarToggle.querySelector('span:last-of-type');
+      if (labelSpan) labelSpan.textContent = t('sidebar');
+    }
+
+    // Items with data-action (format toolbar + context menus)
+    const insActionKeys = {
+      'insert-code-block': 'codeBlock',
+      'insert-table': 'table',
+      'insert-quote': 'quoteBlock',
+      'insert-math-block': 'mathBlock',
+      'insert-mermaid': 'mermaidChart',
+      'insert-hr': 'hr',
+      'insert-toc': 'toc',
+      'insert-h1': 'heading1',
+      'insert-h2': 'heading2',
+      'insert-h3': 'heading3',
+      'insert-h4': 'heading4',
+      'insert-h5': 'heading5',
+      'insert-h6': 'heading6',
+      'insert-bold': 'bold',
+      'insert-italic': 'italic',
+      'insert-strikethrough': 'strikethrough',
+      'insert-inline-code': 'inlineCode',
+      'insert-highlight': 'highlight',
+      'insert-superscript': 'superscript',
+      'insert-subscript': 'subscript',
+      'insert-ul': 'ul',
+      'insert-ol': 'ol',
+      'insert-task': 'taskList',
+      'insert-link': 'link',
+      'insert-image': 'image',
+      'insert-callout-note': 'noteHint',
+      'insert-callout-tip': 'tipHint',
+      'insert-callout-warning': 'warningHint',
+      'insert-callout-caution': 'cautionHint',
+      'insert-callout-important': 'importantHint',
+    };
+    document.querySelectorAll(
+      '#format-toolbar .dropdown-item[data-action],' +
+      // Also cover context menu submenus
+      '#ctx-structure .context-menu-item[data-action],' +
+      '#ctx-heading .context-menu-item[data-action],' +
+      '#ctx-callout .context-menu-item[data-action],' +
+      '#ctx-text-format .context-menu-item[data-action],' +
+      '#ctx-list .context-menu-item[data-action],' +
+      '#ctx-link-media .context-menu-item[data-action]'
+    ).forEach(el => {
+      const key = insActionKeys[el.dataset.action];
+      if (key) {
+        const span = el.querySelector('span:first-of-type');
+        if (span) span.textContent = t(key);
+      }
+    });
+
+    // ====== data-i18n (category labels without actions, e.g. toolbar dropdowns) ======
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.dataset.i18n;
+      if (key) {
+        const lbl = el.querySelector('.lbl');
+        if (lbl) lbl.textContent = t(key);
+      }
+    });
+
+    // 折叠切换按钮文案随展开/收起状态变化
+    const fmtLabel = document.querySelector('#fmt-collapse .fmt-toggle-label');
+    if (fmtLabel) {
+      fmtLabel.textContent = this.settings.toolbarCollapsed ? t('expandToolbar') : t('collapseToolbar');
+    }
+
+    // ====== CONTEXT MENUS ======
+    // Submenu triggers
+    const ctxSubKeys = {
+      'ctx-structure': 'structure',
+      'ctx-text-format': 'textFormat',
+      'ctx-list': 'list',
+      'ctx-link-media': 'linkMedia',
+      'ctx-heading': 'heading',
+      'ctx-callout': 'callout',
+    };
+    document.querySelectorAll('.context-submenu-trigger').forEach(el => {
+      const key = ctxSubKeys[el.dataset.submenu];
+      if (key) {
+        const span = el.querySelector('span:first-of-type');
+        if (span) span.textContent = t(key);
+      }
+    });
+
+    // Items with data-action
+    const ctxActionKeys = {
+      cut: 'cut',
+      copy: 'copy',
+      paste: 'paste',
+      'find-replace': 'findReplace',
+      'select-all': 'selectAll',
+      'preview-copy': 'copy',
+      'preview-select-all': 'selectAll',
+      'preview-copy-html': 'copyAsHTML',
+      'preview-find': 'findInPreview',
+      'tab-close': 'closeTab',
+      'tab-close-others': 'closeOther',
+      'tab-close-all': 'closeAll',
+      'tab-copy-path': 'copyFilePath',
+    };
+    document.querySelectorAll('.context-menu-item[data-action]').forEach(el => {
+      const key = ctxActionKeys[el.dataset.action];
+      if (key) {
+        const span = el.querySelector('span:first-of-type');
+        if (span) span.textContent = t(key);
+      }
+    });
+
+    // ====== SETTINGS DROPDOWN OPTIONS ======
+    // Theme mode
+    const themeSel = document.getElementById('set-theme-mode');
+    if (themeSel) {
+      themeSel.options[0].text = t('themeLight');
+      themeSel.options[1].text = t('themeDark');
+      themeSel.options[2].text = t('followSystem');
+    }
+    // Default view
+    const viewSel = document.getElementById('set-default-view');
+    if (viewSel) {
+      viewSel.options[0].text = t('preview');
+      viewSel.options[1].text = t('edit');
+    }
+    // Tab size
+    const tabSizeSel = document.getElementById('set-tab-size');
+    if (tabSizeSel) {
+      tabSizeSel.options[0].text = '2 ' + t('spaces');
+      tabSizeSel.options[1].text = '4 ' + t('spaces');
+      tabSizeSel.options[2].text = '8 ' + t('spaces');
+    }
+    // Max width (unlimited)
+    const maxWSel = document.getElementById('set-max-width');
+    if (maxWSel && maxWSel.options.length > 0) {
+      maxWSel.options[0].text = t('unlimited');
+    }
+    // Language selector — keep option text fixed (中文 / English)
+  }
+
+  defaultSettings() {
+    return {
+      fontSize: 14,
+      tabSize: 4,
+      lineWrap: true,
+      lineNumbers: true,
+      previewFontSize: 16,
+      lineHeight: 1.7,
+      maxWidth: 0,
+      themeMode: 'light',
+      colorScheme: 'default',
+      fontScheme: 'system-sans',
+      defaultView: 'preview',
+      scrollSync: true,
+      language: 'zh',
+      imageInsertMode: 'assets',
+      imageAssetPath: 'assets',
+      imageAssetPathMode: 'relative',
+      outlineWidth: 240,
+      codeLineNumbers: false,
+      codeWrap: false,
+      softBreaks: true,
+      showTrayIcon: true,
+      closeAction: 'ask',
+      toolbarCollapsed: false,
+      sidebarHidden: false,
+      customFonts: [],
+      editorFont: '',
+      previewFont: '',
+    };
+  }
+
+  loadSettings() {
+    const defaults = this.defaultSettings();
+    try {
+      const saved = this._validConfigObject(JSON.parse(localStorage.getItem('tizumark-settings')));
+      // 向后兼容：旧版本没有 fontScheme 时，从配色方案推断
+      if (saved && saved.fontScheme === undefined) {
+        const colorSchemeFontMap = {
+          default: 'system-sans',
+          forest: 'system-sans',
+          nord: 'system-sans',
+          dusk: 'system-sans',
+          sunset: 'system-sans',
+        };
+        saved.fontScheme = colorSchemeFontMap[saved.colorScheme] || 'system-sans';
+      }
+      // 类型校验：丢弃与默认值类型不符的字段，避免字符串/布尔错位污染 UI 与回写
+      const merged = { ...defaults, ...saved };
+      for (const k of Object.keys(merged)) {
+        if (typeof merged[k] !== typeof defaults[k]) {
+          merged[k] = defaults[k];
+        }
+      }
+      return merged;
+    } catch {
+      return defaults;
+    }
+  }
+
+  // 读取文件并归一化换行符为 \n：处理 CRLF 与单独 CR（混合/老 Mac 换行），避免保存时把单 CR 当作换行制造多余空行
+  async readFileNormalized(path) {
+    let raw;
+    try {
+      raw = await TauriApi.readFile({ path });
+    } catch (e) {
+      // Rust 返回结构化错误 JSON，映射为带错误码（E_NOT_FOUND/E_PERMISSION/...）的 Error 抛出
+      throw this._mapReadFileError(e, path);
+    }
+    if (raw == null) {
+      const err = new Error('读取返回空，可能是编码无法识别');
+      err.code = 'E_EMPTY';
+      err.path = path;
+      throw err;
+    }
+    return raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  }
+
+  // 校验从 localStorage 读取的配置为纯对象，避免畸形 JSON（数组/字符串/null）污染设置并原样回写
+  _validConfigObject(raw) {
+    if (raw === null || raw === undefined) return null;
+    if (typeof raw !== 'object' || Array.isArray(raw)) return null;
+    return raw;
+  }
+
+  saveSettings() {
+    try { localStorage.setItem('tizumark-settings', JSON.stringify(this.settings)); } catch {}
+  }
+
+  async initSettings() {
+    document.getElementById('btn-settings').addEventListener('click', () => this.showSettings());
+    document.getElementById('settings-close-x').addEventListener('click', () => this.hideSettings());
+    document.getElementById('settings-save-btn').addEventListener('click', () => this.hideSettings());
+    document.getElementById('settings-cancel-btn').addEventListener('click', () => this.hideSettings());
+    document.getElementById('settings-dialog').addEventListener('click', (e) => {
+      if (e.target.id === 'settings-dialog') this.hideSettings();
+    });
+    document.getElementById('settings-reset').addEventListener('click', () => this.resetSettings());
+
+    const s = this.settings;
+    document.getElementById('set-font-size').value = s.fontSize;
+    document.getElementById('font-size-label').textContent = s.fontSize + 'px';
+    document.getElementById('set-tab-size').value = s.tabSize;
+    document.getElementById('set-line-wrap').checked = s.lineWrap;
+    document.getElementById('set-line-numbers').checked = s.lineNumbers;
+    document.getElementById('set-preview-font-size').value = s.previewFontSize;
+    document.getElementById('preview-font-size-label').textContent = s.previewFontSize + 'px';
+    document.getElementById('set-line-height').value = s.lineHeight;
+    document.getElementById('set-max-width').value = s.maxWidth;
+    document.getElementById('set-theme-mode').value = s.themeMode;
+    document.getElementById('set-color-scheme').value = s.colorScheme || 'default';
+    document.getElementById('set-font-scheme').value = s.fontScheme || 'system-sans';
+    document.getElementById('set-default-view').value = s.defaultView;
+    document.getElementById('set-scroll-sync').checked = s.scrollSync;
+    document.getElementById('set-code-line-numbers').checked = s.codeLineNumbers;
+    document.getElementById('set-code-wrap').checked = s.codeWrap;
+    document.getElementById('set-language').value = s.language || 'zh';
+    const modeRadio = document.querySelector(`#settings-image-store-mode input[value="${s.imageInsertMode || 'assets'}"]`);
+    if (modeRadio) modeRadio.checked = true;
+
+    document.getElementById('set-font-size').addEventListener('input', (e) => {
+      const v = Number(e.target.value);
+      if (this.activeTab) this.activeTab.fontSize = v;
+      this.cm.getWrapperElement().style.fontSize = v + 'px';
+      document.getElementById('font-size-label').textContent = v + 'px';
+      this.cm.refresh();
+    });
+    document.getElementById('set-font-size').addEventListener('change', (e) => {
+      this.settings.fontSize = Number(e.target.value);
+      this.saveSettings();
+    });
+    document.getElementById('set-tab-size').addEventListener('change', (e) => {
+      this.settings.tabSize = Number(e.target.value);
+      this.cm.setOption('tabSize', this.settings.tabSize);
+      this.cm.setOption('indentUnit', this.settings.tabSize);
+      this.saveSettings();
+    });
+    document.getElementById('set-line-wrap').addEventListener('change', (e) => {
+      this.settings.lineWrap = e.target.checked;
+      this.cm.setOption('lineWrapping', this.settings.lineWrap);
+      this.saveSettings();
+    });
+    document.getElementById('set-line-numbers').addEventListener('change', (e) => {
+      this.settings.lineNumbers = e.target.checked;
+      this.cm.setOption('lineNumbers', this.settings.lineNumbers);
+      this.saveSettings();
+    });
+    document.getElementById('set-preview-font-size').addEventListener('input', (e) => {
+      const v = Number(e.target.value);
+      this.preview.style.fontSize = v + 'px';
+      document.getElementById('preview-font-size-label').textContent = v + 'px';
+    });
+    document.getElementById('set-preview-font-size').addEventListener('change', (e) => {
+      this.settings.previewFontSize = Number(e.target.value);
+      this.saveSettings();
+    });
+    document.getElementById('set-line-height').addEventListener('change', (e) => {
+      this.settings.lineHeight = Number(e.target.value);
+      this.preview.style.lineHeight = String(e.target.value);
+      this.saveSettings();
+    });
+    document.getElementById('set-max-width').addEventListener('change', (e) => {
+      this.settings.maxWidth = Number(e.target.value);
+      if (this.settings.maxWidth) {
+        this.preview.style.maxWidth = this.settings.maxWidth + 'px';
+        this.preview.style.margin = '0 auto';
+        this.preview.classList.add('max-width-active');
+      } else {
+        this.preview.style.maxWidth = '';
+        this.preview.style.margin = '';
+        this.preview.classList.remove('max-width-active');
+      }
+      this.saveSettings();
+    });
+    document.getElementById('set-theme-mode').addEventListener('change', async (e) => {
+      this.settings.themeMode = e.target.value;
+      await this.applyThemeMode();
+      this.saveSettings();
+    });
+    document.getElementById('set-color-scheme').addEventListener('change', async (e) => {
+      this.settings.colorScheme = e.target.value;
+      await this.applyThemeMode();
+      this.saveSettings();
+    });
+    document.getElementById('set-font-scheme').addEventListener('change', (e) => {
+      this.settings.fontScheme = e.target.value;
+      this.applyFontScheme();
+      this.saveSettings();
+    });
+    document.getElementById('set-default-view').addEventListener('change', (e) => {
+      this.settings.defaultView = e.target.value;
+      this.saveSettings();
+    });
+    document.getElementById('set-scroll-sync').addEventListener('change', (e) => {
+      this.settings.scrollSync = e.target.checked;
+      this.saveSettings();
+    });
+    document.getElementById('set-soft-breaks').checked = s.softBreaks !== false;
+    document.getElementById('set-soft-breaks').addEventListener('change', (e) => {
+      this.settings.softBreaks = e.target.checked;
+      this.saveSettings();
+      this.updatePreview();
+    });
+    document.getElementById('set-show-tray-icon').checked = s.showTrayIcon !== false;
+    document.getElementById('set-show-tray-icon').addEventListener('change', (e) => {
+      this.settings.showTrayIcon = e.target.checked;
+      this.saveSettings();
+      this.applyWindowBehavior();
+    });
+    document.getElementById('set-close-action').value = s.closeAction || 'ask';
+    document.getElementById('set-close-action').addEventListener('change', (e) => {
+      this.settings.closeAction = e.target.value;
+      this.saveSettings();
+    });
+    document.getElementById('set-code-line-numbers').addEventListener('change', (e) => {
+      this.settings.codeLineNumbers = e.target.checked;
+      this.preview.classList.toggle('code-line-numbers', e.target.checked);
+      if (this._hljsCache) this._hljsCache.clear();
+      this.saveSettings();
+      this.updatePreview();
+    });
+    document.getElementById('set-code-wrap').addEventListener('change', (e) => {
+      this.settings.codeWrap = e.target.checked;
+      this.preview.classList.toggle('code-wrap', e.target.checked);
+      this.saveSettings();
+      this.updatePreview();
+    });
+    document.getElementById('set-language').addEventListener('change', (e) => {
+      this.settings.language = e.target.value;
+      this.saveSettings();
+      this.applyLanguage();
+    });
+    document.querySelectorAll('#settings-image-store-mode input[name="settings-image-store"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        this.settings.imageInsertMode = e.target.value;
+        this.saveSettings();
+      });
+    });
+
+    document.getElementById('settings-image-asset-path').value = s.imageAssetPath || 'assets';
+    document.getElementById('settings-image-asset-path').addEventListener('change', (e) => {
+      this.settings.imageAssetPath = e.target.value.trim() || 'assets';
+      this.saveSettings();
+    });
+
+    const pathModeRadio = document.querySelector(`#settings-image-asset-path-mode input[value="${s.imageAssetPathMode || 'relative'}"]`);
+    if (pathModeRadio) pathModeRadio.checked = true;
+    document.querySelectorAll('#settings-image-asset-path-mode input[name="settings-image-asset-path"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        this.settings.imageAssetPathMode = e.target.value;
+        this.settings.imageAssetPath = e.target.value === 'absolute' ? 'D:/images' : 'assets';
+        document.getElementById('settings-image-asset-path').value = this.settings.imageAssetPath;
+        this.saveSettings();
+        this.updateImageAssetPathHint();
+      });
+    });
+    this.updateImageAssetPathHint();
+
+    // ====== 自定义字体 ======
+    const addFontBtn = document.getElementById('btn-add-font');
+    if (addFontBtn) addFontBtn.addEventListener('click', () => this.addFontFiles());
+    const edFont = document.getElementById('set-editor-font');
+    if (edFont) edFont.addEventListener('change', (e) => {
+      this.settings.editorFont = e.target.value;
+      this.saveSettings();
+      this.applyCustomFonts();
+      this.refreshFontSelectors();
+    });
+    const pvFont = document.getElementById('set-preview-font');
+    if (pvFont) pvFont.addEventListener('change', (e) => {
+      this.settings.previewFont = e.target.value;
+      this.saveSettings();
+      this.applyCustomFonts();
+      this.refreshFontSelectors();
+    });
+
+    await this.registerCustomFonts();
+    this.renderCustomFontSettings();
+
+    this.applySettings();
+  }
+
+  initOutline() {
+    const outlineSidebar = document.getElementById('outline-sidebar');
+    const outlineClose = document.getElementById('outline-close');
+
+    outlineClose.addEventListener('click', () => {
+      this.settings.outlineWidth = outlineSidebar.offsetWidth;
+      this.saveSettings();
+      outlineSidebar.style.width = '';
+      outlineSidebar.classList.add('hidden');
+      this.settings.sidebarHidden = true;
+      this.saveSettings();
+      this.updateOutlineCheck();
+      this.updateSideButtons();
+    });
+  }
+
+  updateSideButtons() {
+    const outlineSidebar = document.getElementById('outline-sidebar');
+    const sideLeft = document.getElementById('btn-side-left');
+    const sideRight = document.getElementById('btn-side-right');
+    const outlineWidth = outlineSidebar.classList.contains('hidden') ? 0 : outlineSidebar.offsetWidth;
+    sideLeft.style.left = outlineWidth + 'px';
+    sideRight.style.left = '';
+  }
+
+    toggleSidebar() {
+      const sidebar = document.getElementById('outline-sidebar');
+      const wasHidden = sidebar.classList.contains('hidden');
+      if (wasHidden) {
+        sidebar.style.width = (this.settings.outlineWidth ?? 240) + 'px';
+        sidebar.classList.remove('hidden');
+      } else {
+        this.settings.outlineWidth = sidebar.offsetWidth;
+        sidebar.style.width = '';
+        sidebar.classList.add('hidden');
+      }
+      this.settings.sidebarHidden = sidebar.classList.contains('hidden');
+      this.saveSettings();
+      this.updateSidebarChecks();
+      if (!sidebar.classList.contains('hidden')) {
+        this.updateOutline();
+      }
+      this.updateSideButtons();
+    }
+
+    setSidebarTab(tab) {
+      const sidebar = document.getElementById('outline-sidebar');
+      const isOutline = tab === 'outline';
+      document.getElementById('tab-outline').classList.toggle('active', isOutline);
+      document.getElementById('tab-files').classList.toggle('active', !isOutline);
+      document.getElementById('outline-content').classList.toggle('hidden', !isOutline);
+      document.getElementById('folder-content').classList.toggle('hidden', isOutline);
+      this.updateSidebarChecks();
+      if (!sidebar.classList.contains('hidden')) this.updateOutline();
+      this.updateSideButtons();
+      if (tab === 'files' && !this.workspaceFolder) this.renderFolderTree();
+    }
+
+    showSidebarTab(tab) {
+      const sidebar = document.getElementById('outline-sidebar');
+      if (sidebar.classList.contains('hidden')) {
+        sidebar.style.width = (this.settings.outlineWidth ?? 240) + 'px';
+        sidebar.classList.remove('hidden');
+        this.settings.sidebarHidden = false;
+        this.saveSettings();
+      }
+      this.setSidebarTab(tab);
+    }
+
+    applySidebarState() {
+      const sidebar = document.getElementById('outline-sidebar');
+      if (this.settings.sidebarHidden) {
+        sidebar.style.width = '';
+        sidebar.classList.add('hidden');
+      } else {
+        sidebar.style.width = (this.settings.outlineWidth ?? 240) + 'px';
+        sidebar.classList.remove('hidden');
+      }
+      this.updateSidebarChecks();
+      this.updateSideButtons();
+    }
+
+  updateSidebarChecks() {
+    const sidebar = document.getElementById('outline-sidebar');
+    const visible = !sidebar.classList.contains('hidden');
+    const sidebarToggle = document.getElementById('btn-sidebar-toggle');
+    if (sidebarToggle) sidebarToggle.classList.toggle('checked', visible);
+  }
+
+  initOutlineResizer() {
+    const resizer = document.getElementById('outline-resizer');
+    const sidebar = document.getElementById('outline-sidebar');
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    resizer.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isResizing = true;
+      startX = e.clientX;
+      startWidth = sidebar.offsetWidth;
+      document.body.classList.add('is-resizing');
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      const delta = e.clientX - startX;
+      let newWidth = startWidth + delta;
+      newWidth = Math.max(80, Math.min(500, newWidth));
+      sidebar.style.width = newWidth + 'px';
+      this.cm.refresh();
+      this.updateSideButtons();
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!isResizing) return;
+      isResizing = false;
+      document.body.classList.remove('is-resizing');
+      this.settings.outlineWidth = sidebar.offsetWidth;
+      this.saveSettings();
+    });
+  }
+
+  updateOutlineCheck() {
+    this.updateSidebarChecks();
+  }
+
+  updateOutline() {
+    const content = this.cm.getValue();
+    const outlineContent = document.getElementById('outline-content');
+    const headings = Outline.extractHeadings(content, { headingToId: (t) => this.headingToId(t) });
+
+    if (headings.length === 0) {
+      outlineContent.innerHTML = `<div class="outline-empty">${this.t('noHeadings')}</div>`;
+      return;
+    }
+
+    const tree = Outline.buildOutlineTree(headings);
+    outlineContent.innerHTML = Outline.renderOutlineHtml(tree, { escapeHtml: (t) => this.escapeHtml(t) });
+
+    // Event delegation on outline-content
+    outlineContent.onclick = (e) => {
+      const toggle = e.target.closest('.outline-toggle');
+      const item = e.target.closest('.outline-item');
+      if (!item) return;
+
+      if (toggle) {
+        e.stopPropagation();
+        const wrapper = item.closest('.outline-item-wrapper');
+        const children = wrapper?.querySelector('.outline-children');
+        if (children) {
+          const isCollapsed = children.classList.toggle('collapsed');
+          toggle.textContent = isCollapsed ? '▶' : '▼';
+        }
+        return;
+      }
+
+      // Label click → jump
+      const id = item.dataset.id;
+      const line = parseInt(item.dataset.line, 10);
+      // 编辑区始终跳转到该标题行（与文档大小无关，大文件预览只渲染头部时也能跳）
+      if (!isNaN(line)) {
+        this.cm.setCursor({ line, ch: 0 });
+        this.cm.scrollIntoView({ line, ch: 0 }, 80);
+      }
+      // 预览区跳转（仅当该标题已渲染在预览中时）
+      const target = this.preview.querySelector(`#${CSS.escape(id)}`);
+      if (target) {
+        const previewHeight = this.preview.clientHeight;
+        const targetRect = target.getBoundingClientRect();
+        const previewRect = this.preview.getBoundingClientRect();
+        const top = targetRect.top - previewRect.top + this.preview.scrollTop
+                  - (previewHeight / 2) + (targetRect.height / 2);
+        this.preview.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+      } else if (this.previewWindow) {
+        // 大文档窗口模式：目标标题尚未渲染在预览中，以该行为焦点重渲染预览窗口，使其落点
+        this._previewScrollDriven = false;
+        if (Number.isFinite(line)) this._previewFocusLine = line;
+        this.updatePreview();
+      }
+      outlineContent.querySelectorAll('.outline-item').forEach(el => el.classList.remove('active'));
+      item.classList.add('active');
+    };
+  }
+
+  headingToId(text) {
+    let id = '';
+    for (const ch of text) {
+      if (/[\p{L}\p{N}]/u.test(ch)) {
+        id += ch.toLowerCase();
+      } else if (ch === ' ' || ch === '-' || ch === '_') {
+        id += '-';
+      }
+    }
+    return id.replace(/-+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // 转义双引号 HTML 属性值（img alt、a title 等），防止属性提前闭合
+  escapeAttr(text) {
+    return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // 转义 Markdown 链接/图片 alt 文本中破坏语法的字符（] 与 \）
+  escapeMdText(text) {
+    return String(text).replace(/\\/g, '\\\\').replace(/\]/g, '\\]');
+  }
+
+  applyFontScheme() {
+    document.documentElement.setAttribute('data-font-scheme', this.settings.fontScheme || 'system-sans');
+    // 更新 mermaid 字体
+    if (typeof mermaid !== 'undefined') {
+      this.rerenderMermaid();
+    }
+  }
+
+  // 同步托盘显隐状态到 Rust 后端
+  async applyWindowBehavior() {
+    const showTray = this.settings.showTrayIcon !== false;
+    try {
+      await TauriApi.setWindowBehavior({ showTray });
+    } catch (err) {
+      console.warn('applyWindowBehavior failed', err);
+    }
+  }
+
+  async applySettings() {
+    const s = this.settings;
+    if (this.activeTab) this.activeTab.fontSize = s.fontSize;
+    this.cm.getWrapperElement().style.fontSize = s.fontSize + 'px';
+    this.cm.setOption('tabSize', s.tabSize);
+    this.cm.setOption('indentUnit', s.tabSize);
+    this.cm.setOption('lineWrapping', s.lineWrap);
+    this.cm.setOption('lineNumbers', s.lineNumbers);
+    this.preview.style.fontSize = s.previewFontSize + 'px';
+    this.preview.style.lineHeight = String(s.lineHeight);
+    if (s.maxWidth) {
+      this.preview.style.maxWidth = s.maxWidth + 'px';
+      this.preview.style.margin = '0 auto';
+      this.preview.classList.add('max-width-active');
+    } else {
+      this.preview.style.maxWidth = '';
+      this.preview.style.margin = '';
+      this.preview.classList.remove('max-width-active');
+    }
+    this.preview.classList.toggle('code-line-numbers', s.codeLineNumbers);
+    this.preview.classList.toggle('code-wrap', s.codeWrap);
+    if (this._hljsCache) this._hljsCache.clear();
+    await this.applyThemeMode();
+    this.applyFontScheme();
+    this.applyCustomFonts();
+  }
+
+  // ====== 自定义字体 ======
+  async addFontFiles() {
+    const btn = document.getElementById('btn-add-font');
+    const originalHTML = btn ? btn.innerHTML : '';
+    const setLoading = (n, total) => {
+      if (!btn) return;
+      btn.classList.add('is-loading');
+      btn.innerHTML = `<span class="btn-spinner"></span>` + this.t('importingFonts', { n, total });
+    };
+    try {
+      const selected = await dialogOpen({
+        multiple: true,
+        filters: [{ name: '字体', extensions: ['ttf', 'otf', 'woff', 'woff2'] }],
+      });
+      if (!selected) return;
+      const paths = Array.isArray(selected) ? selected : [selected];
+      const imported = [];
+      const success = [];
+      const skipped = [];
+      const failed = [];
+      setLoading(0, paths.length);
+      // 先让 spinner 绘制出来，再做大字体解码等阻塞主线程的工作，避免看起来卡死
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const appDir = await TauriApi.appDataDir();
+      const fontsDir = appDir.replace(/[\\\/]$/, '') + '/tizu-mark/fonts';
+      await TauriApi.ensureDir({ path: fontsDir });
+      for (let i = 0; i < paths.length; i++) {
+        const p = paths[i];
+        const name = p.split(/[\\\/]/).pop();
+        setLoading(i + 1, paths.length);
+        try {
+          const b64 = await TauriApi.fetchImageAsBase64({ url: p });
+          const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+          let hash = '';
+          if (crypto && crypto.subtle && crypto.subtle.digest) {
+            const buf = await crypto.subtle.digest('SHA-256', bytes);
+            hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+          }
+          const fonts = this.settings.customFonts || [];
+          const existing = hash ? fonts.find(f => f.hash === hash) : fonts.find(f => f.name === name);
+          if (existing) {
+            skipped.push(name);
+            imported.push(existing.id);
+            continue;
+          }
+          const ext = (p.split('.').pop() || 'ttf').toLowerCase();
+          const id = 'cf' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+          const fileName = id + '.' + ext;
+          await TauriApi.writeBinaryFile({ path: fontsDir + '/' + fileName, contents: Array.from(bytes) });
+          this.settings.customFonts.push({ id, name, fileName, hash });
+          success.push(name);
+          imported.push(id);
+        } catch (err) {
+          failed.push({ name, reason: String(err && err.message ? err.message : err) });
+        }
+      }
+      if (imported.length) {
+        const last = imported[imported.length - 1];
+        this.settings.editorFont = last;
+        this.settings.previewFont = last;
+      }
+      this.saveSettings();
+      await this.registerCustomFonts();
+      this.applyCustomFonts();
+      this.renderCustomFontSettings();
+      if (success.length) {
+        this.showToast(this.t('importSuccess', { n: success.length }), 'success');
+      }
+      const totalFail = skipped.length + failed.length;
+      if (totalFail) {
+        const parts = [];
+        if (skipped.length) parts.push(skipped.join('、') + ' ' + this.t('fontAlreadyExists'));
+        failed.forEach(f => parts.push(`${f.name}（${f.reason}）`));
+        this.showToast(this.t('importFailed', { n: totalFail, detail: parts.join('；') }), 'danger');
+      }
+    } catch (e) {
+      this.showToast(this.t('addFont') + ' ' + this.t('failed') + ': ' + e, 'danger');
+    } finally {
+      if (btn) {
+        btn.classList.remove('is-loading');
+        btn.innerHTML = originalHTML;
+      }
+    }
+  }
+
+  async registerCustomFonts() {
+    let style = document.getElementById('custom-fonts-style');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'custom-fonts-style';
+      document.head.appendChild(style);
+    }
+    const fonts = this.settings.customFonts || [];
+    if (fonts.length === 0) {
+      style.textContent = '';
+      return;
+    }
+    const appDir = await TauriApi.appDataDir();
+    const fontsDir = appDir.replace(/[\\\/]$/, '') + '/tizu-mark/fonts';
+    const mimeMap = { ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2' };
+    const fmtMap = { ttf: 'truetype', otf: 'opentype', woff: 'woff', woff2: 'woff2' };
+    let css = '';
+    for (const f of fonts) {
+      const ext = (f.fileName.split('.').pop() || 'ttf').toLowerCase();
+      const mime = mimeMap[ext] || 'font/ttf';
+      const fmt = fmtMap[ext] || 'truetype';
+      const b64 = await TauriApi.fetchImageAsBase64({ url: fontsDir + '/' + f.fileName });
+      css += `@font-face{font-family:'tizumark-custom-${f.id}';src:url(data:${mime};base64,${b64}) format('${fmt}');font-display:swap;}\n`;
+    }
+    style.textContent = css;
+  }
+
+  applyCustomFonts() {
+    const fam = (id) => id ? `'tizumark-custom-${id}'` : '';
+    const ef = fam(this.settings.editorFont);
+    this.cm.getWrapperElement().style.fontFamily = ef;
+    const pf = fam(this.settings.previewFont);
+    this.preview.style.fontFamily = pf;
+  }
+
+  async removeCustomFont(id) {
+    const font = (this.settings.customFonts || []).find(f => f.id === id);
+    const name = font ? font.name : '';
+    await this.showConfirmDialog(
+      this.t('deleteFont'),
+      this.t('confirmDeleteFont', { name: `<b>${this.escapeHtml(name)}</b>` }),
+      async () => {
+        this.settings.customFonts = (this.settings.customFonts || []).filter(f => f.id !== id);
+        if (this.settings.editorFont === id) this.settings.editorFont = '';
+        if (this.settings.previewFont === id) this.settings.previewFont = '';
+        this.saveSettings();
+        await this.registerCustomFonts();
+        this.applyCustomFonts();
+        this.renderCustomFontSettings();
+      }
+    );
+  }
+
+  renderCustomFontSettings() {
+    const list = document.getElementById('custom-font-list');
+    if (list) {
+      list.innerHTML = '';
+      const fonts = this.settings.customFonts || [];
+      if (fonts.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'custom-font-empty';
+        empty.textContent = this.t('noCustomFont');
+        list.appendChild(empty);
+      } else {
+        fonts.forEach(f => {
+          const row = document.createElement('div');
+          row.className = 'custom-font-item';
+          const name = document.createElement('span');
+          name.className = 'custom-font-name';
+          name.textContent = f.name;
+          const del = document.createElement('button');
+          del.className = 'custom-font-del dialog-btn';
+          del.type = 'button';
+          del.textContent = this.t('deleteFont');
+          del.addEventListener('click', () => this.removeCustomFont(f.id));
+          row.appendChild(name);
+          row.appendChild(del);
+          list.appendChild(row);
+        });
+      }
+    }
+    this.refreshFontSelectors();
+  }
+
+  refreshFontSelectors() {
+    ['editor', 'preview'].forEach(k => {
+      const sel = document.getElementById('set-' + k + '-font');
+      if (!sel) return;
+      const cur = this.settings[k + 'Font'] || '';
+      sel.innerHTML = '';
+      const opt0 = document.createElement('option');
+      opt0.value = '';
+      opt0.textContent = this.t('followScheme');
+      sel.appendChild(opt0);
+      (this.settings.customFonts || []).forEach(f => {
+        const o = document.createElement('option');
+        o.value = f.id;
+        o.textContent = f.name;
+        sel.appendChild(o);
+      });
+      sel.value = cur;
+    });
+    const sample = document.getElementById('font-preview-sample');
+    if (sample) {
+      const pf = this.settings.previewFont;
+      sample.style.fontFamily = pf ? `'tizumark-custom-${pf}'` : '';
+    }
+  }
+
+  async applyThemeMode() {
+    const mode = this.settings.themeMode;
+    if (mode === 'light') {
+      this.isDark = false;
+    } else if (mode === 'dark') {
+      this.isDark = true;
+    } else {
+      this.isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    document.documentElement.setAttribute('data-theme', this.isDark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-color-scheme', this.settings.colorScheme || 'default');
+    this.cm.setOption('theme', this.isDark ? 'material-darker' : 'default');
+    this.updateThemeIcon();
+    const highlightTheme = document.getElementById('highlight-theme');
+    if (highlightTheme) {
+      highlightTheme.href = this.isDark
+        ? 'lib/highlight.js/github-dark.min.css'
+        : 'lib/highlight.js/github.min.css';
+    }
+    await this.rerenderMermaid();
+  }
+
+  async rerenderMermaid() {
+    if (typeof mermaid === 'undefined') return;
+    // 主题切换：旧主题的 SVG 缓存失效，清空后让下次 updatePreview / 本函数按新主题重渲染
+    this._mermaidCache.clear();
+    const gen = ++this._mermaidGeneration;
+    const containers = this.preview.querySelectorAll('.mermaid-container');
+    if (containers.length === 0) return;
+
+    // 保存代码并创建全新容器（避免复用旧容器的渲染状态）
+    const containerData = [];
+    containers.forEach(container => {
+      const code = container.getAttribute('data-code') || container.textContent;
+      const sourceLine = container.getAttribute('data-source-line');
+      containerData.push({
+        code,
+        sourceLine,
+        nextSibling: container.nextSibling,
+        parent: container.parentNode,
+      });
+    });
+
+    // 重建容器
+    containerData.forEach((data, i) => {
+      const newContainer = document.createElement('div');
+      newContainer.className = 'mermaid-container';
+      newContainer.id = 'mermaid-' + Date.now() + '-' + i;
+      newContainer.setAttribute('data-code', data.code);
+      if (data.sourceLine) newContainer.setAttribute('data-source-line', data.sourceLine);
+      newContainer.textContent = data.code;
+      if (data.nextSibling) {
+        data.parent.insertBefore(newContainer, data.nextSibling);
+      } else {
+        data.parent.appendChild(newContainer);
+      }
+    });
+
+    // 移除旧容器
+    containers.forEach(c => c.remove());
+
+    if (this._mermaidGeneration !== gen) return;
+
+    try {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: this.isDark ? 'dark' : 'default',
+        securityLevel: 'loose',
+        fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-preview').trim() || '-apple-system, sans-serif',
+      });
+      await mermaid.run({ nodes: Array.from(this.preview.querySelectorAll('.mermaid-container')) });
+    } catch (e) {
+      console.error('Mermaid re-render error:', e);
+    }
+  }
+
+  showSettings() {
+    document.getElementById('settings-dialog').classList.remove('hidden');
+  }
+
+  hideSettings() {
+    document.getElementById('settings-dialog').classList.add('hidden');
+  }
+
+  async resetSettings() {
+    const confirmed = await this.showConfirmDialog(
+      this.t('settings'),
+      this.t('confirmResetSettings')
+    );
+    if (!confirmed) return;
+
+    const defaults = this.defaultSettings();
+    // 恢复默认：保留已导入的自定义字体，仅把编辑器/预览字体选择重置为「跟随方案」
+    const savedCustomFonts = this.settings.customFonts || [];
+    this.settings = { ...defaults, customFonts: savedCustomFonts };
+    this.saveSettings();
+
+    document.getElementById('set-font-size').value = defaults.fontSize;
+    document.getElementById('font-size-label').textContent = defaults.fontSize + 'px';
+    document.getElementById('set-tab-size').value = defaults.tabSize;
+    document.getElementById('set-line-wrap').checked = defaults.lineWrap;
+    document.getElementById('set-line-numbers').checked = defaults.lineNumbers;
+    document.getElementById('set-preview-font-size').value = defaults.previewFontSize;
+    document.getElementById('preview-font-size-label').textContent = defaults.previewFontSize + 'px';
+    document.getElementById('set-line-height').value = defaults.lineHeight;
+    document.getElementById('set-max-width').value = defaults.maxWidth;
+    document.getElementById('set-theme-mode').value = defaults.themeMode;
+    document.getElementById('set-color-scheme').value = defaults.colorScheme;
+    document.getElementById('set-font-scheme').value = defaults.fontScheme;
+    document.getElementById('set-default-view').value = defaults.defaultView;
+    document.getElementById('set-scroll-sync').checked = defaults.scrollSync;
+    document.getElementById('set-soft-breaks').checked = defaults.softBreaks !== false;
+    document.getElementById('set-language').value = defaults.language;
+    const defaultRadio = document.querySelector(`#settings-image-store-mode input[value="${defaults.imageInsertMode}"]`);
+    if (defaultRadio) defaultRadio.checked = true;
+    document.getElementById('settings-image-asset-path').value = defaults.imageAssetPath;
+    const defaultPathRadio = document.querySelector(`#settings-image-asset-path-mode input[value="${defaults.imageAssetPathMode}"]`);
+    if (defaultPathRadio) defaultPathRadio.checked = true;
+    this.updateImageAssetPathHint();
+
+    await this.applySettings();
+    this.renderCustomFontSettings();
+    this.setStatus(this.t('settingsReset'));
+  }
+
+  updateImageAssetPathHint() {
+    const mode = this.settings.imageAssetPathMode || 'relative';
+    const hintEl = document.getElementById('setting-image-asset-path-hint-text');
+    if (hintEl) {
+      hintEl.textContent = mode === 'relative'
+        ? this.t('imageAssetPathRelativeHint')
+        : this.t('imageAssetPathAbsoluteHint');
+    }
+  }
+
+  getImageAssetPath() {
+    const mode = this.settings.imageAssetPathMode || 'relative';
+    const path = this.settings.imageAssetPath || 'assets';
+    if (mode === 'absolute') {
+      return { assetsDir: path, refPrefix: path };
+    }
+    const tab = this.activeTab;
+    const sep = tab && tab.filePath ? (tab.filePath.includes('/') ? '/' : '\\') : '/';
+    const dir = tab && tab.filePath ? tab.filePath.substring(0, tab.filePath.lastIndexOf(sep)) : '';
+    const assetsDir = dir ? dir + sep + path : path;
+    return { assetsDir, refPrefix: path };
+  }
+
+  getDefaultShortcuts() {
+    return {
+      newFile: { key: 'Ctrl+N', label: '新建' },
+      openFile: { key: 'Ctrl+O', label: '打开' },
+      saveFile: { key: 'Ctrl+S', label: '保存' },
+      closeTab: { key: 'Ctrl+W', label: '关闭标签页' },
+      find: { key: 'Ctrl+F', label: '查找替换' },
+      nextTab: { key: 'Ctrl+Tab', label: '下一个标签页' },
+      prevTab: { key: 'Ctrl+Shift+Tab', label: '上一个标签页' },
+      bold: { key: 'Ctrl+B', label: '加粗' },
+      italic: { key: 'Ctrl+I', label: '斜体' },
+      insertLink: { key: 'Ctrl+K', label: '插入链接' },
+      exportPDF: { key: 'Ctrl+P', label: '导出 PDF' },
+      inlineCode: { key: 'Ctrl+`', label: '行内代码' },
+      strikethrough: { key: 'Ctrl+Shift+S', label: '删除线' },
+      codeBlock: { key: 'Ctrl+Shift+C', label: '代码块' },
+      blockquote: { key: 'Ctrl+Shift+Q', label: '引用块' },
+      toggleView: { key: '', label: '切换视图' },
+      toggleTheme: { key: 'Ctrl+Shift+T', label: '切换主题' },
+      saveAs: { key: '', label: '另存为' },
+      crossSearch: { key: 'Ctrl+H', label: '跨文件搜索' },
+      insertTable: { key: '', label: '插入表格' },
+      insertImage: { key: '', label: '插入图片' },
+      insertUl: { key: '', label: '无序列表' },
+      insertOl: { key: '', label: '有序列表' },
+      insertTask: { key: '', label: '任务列表' },
+      insertHr: { key: '', label: '水平线' },
+      highlight: { key: '', label: '高亮标记' },
+      insertSuperscript: { key: '', label: '上标' },
+      insertSubscript: { key: '', label: '下标' },
+      insertH1: { key: '', label: '标题1' },
+      insertH2: { key: '', label: '标题2' },
+      insertH3: { key: '', label: '标题3' },
+      insertH4: { key: '', label: '标题4' },
+      insertH5: { key: '', label: '标题5' },
+      insertH6: { key: '', label: '标题6' },
+      insertMathBlock: { key: '', label: '数学公式' },
+      insertMermaid: { key: '', label: 'Mermaid 图表' },
+      insertToc: { key: '', label: '目录' },
+      insertCalloutNote: { key: '', label: 'Note 提示' },
+      insertCalloutTip: { key: '', label: 'Tip 建议' },
+      insertCalloutWarning: { key: '', label: 'Warning 警告' },
+      insertCalloutCaution: { key: '', label: 'Caution 注意' },
+      insertCalloutImportant: { key: '', label: 'Important 重要' },
+    };
+  }
+
+  getShortcutPresets() {
+    // 每个方案仅列出“有键”的 actionId；缺失项在 applyShortcutScheme 中回落为空串。
+    // 方案内部键位已保证互不重复；空值用省略表示。
+    return {
+      vscode: {
+        newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', saveAs:'Ctrl+Shift+S',
+        closeTab:'Ctrl+W', find:'Ctrl+F', crossSearch:'Ctrl+H',
+        nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
+        bold:'Ctrl+B', italic:'Ctrl+I', inlineCode:'Ctrl+`', insertLink:'Ctrl+K',
+        insertMathBlock:'Ctrl+Shift+M', toggleTheme:'Ctrl+Shift+T', exportPDF:'Ctrl+P',
+      },
+      typora: {
+        newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', closeTab:'Ctrl+W',
+        find:'Ctrl+F', crossSearch:'Ctrl+H',
+        nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
+        bold:'Ctrl+B', italic:'Ctrl+I', insertLink:'Ctrl+K', exportPDF:'Ctrl+P',
+        inlineCode:'Ctrl+Shift+`', strikethrough:'Ctrl+Shift+5', codeBlock:'Ctrl+Shift+K',
+        blockquote:'Ctrl+Shift+Q', toggleTheme:'Ctrl+Shift+T',
+        insertImage:'Ctrl+Shift+I', insertMathBlock:'Ctrl+Shift+M',
+        insertH1:'Ctrl+1', insertH2:'Ctrl+2', insertH3:'Ctrl+3', insertH4:'Ctrl+4',
+        insertH5:'Ctrl+5', insertH6:'Ctrl+6',
+      },
+      sublime: {
+        newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', saveAs:'Ctrl+Shift+S',
+        closeTab:'Ctrl+W', find:'Ctrl+F', crossSearch:'Ctrl+H',
+        nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
+        exportPDF:'Ctrl+P', toggleTheme:'Ctrl+Shift+T',
+      },
+    };
+  }
+
+  applyShortcutScheme(name) {
+    if (name === 'custom') {
+      this.shortcutScheme = 'custom';
+      this.saveShortcutScheme('custom');
+      return;
+    }
+    const defaults = this.getDefaultShortcuts();
+    let next;
+    if (name === 'default') {
+      next = JSON.parse(JSON.stringify(defaults)); // 整体恢复默认键位
+    } else {
+      const preset = this.getShortcutPresets()[name];
+      if (!preset) return;
+      next = {};
+      for (const [aid, def] of Object.entries(defaults)) {
+        const k = preset[aid];
+        next[aid] = { key: (k != null ? k : ''), label: def.label };
+      }
+    }
+    this.shortcuts = next;
+    this.shortcutScheme = name;
+    this.saveShortcuts();
+    this.saveShortcutScheme(name);
+    this.renderShortcutsList();
+    this.applyShortcuts();
+  }
+
+  loadShortcuts() {
+    const defaults = this.getDefaultShortcuts();
+    try {
+      const saved = this._validConfigObject(JSON.parse(localStorage.getItem('tizumark-shortcuts')));
+      const merged = { ...defaults, ...saved };
+      // 迁移：Ctrl+Shift+F 被中文输入法拦截，迁移到 Ctrl+H（不受输入法拦截）。
+      // 此前中间版本用过 Ctrl+Shift+L，也一并迁移到 Ctrl+H。
+      if (merged.crossSearch && (merged.crossSearch.key === 'Ctrl+Shift+F' || merged.crossSearch.key === 'Ctrl+Shift+L')) {
+        merged.crossSearch = { ...merged.crossSearch, key: 'Ctrl+H' };
+      }
+      // 迁移：findReplace / previewFind 不再作为独立快捷键项（与 find 是同一功能），
+      // 若用户有保存的键位则清理。
+      if (merged.findReplace) delete merged.findReplace;
+      if (merged.previewFind) delete merged.previewFind;
+      return merged;
+    } catch {
+      return defaults;
+    }
+  }
+
+  saveShortcuts() {
+    try { localStorage.setItem('tizumark-shortcuts', JSON.stringify(this.shortcuts)); } catch {}
+  }
+
+  loadShortcutScheme() {
+    const VALID = ['default', 'vscode', 'typora', 'sublime', 'custom'];
+    const stored = localStorage.getItem('tizumark-shortcut-scheme');
+    if (stored && VALID.includes(stored)) return stored; // 白名单校验，防脏数据
+    // 旧数据无 scheme：与默认逐项比对，有差异视为自定义（保留用户旧自定义数据）
+    const def = this.getDefaultShortcuts();
+    const cur = this.shortcuts || def;
+    for (const [aid, d] of Object.entries(def)) {
+      if ((cur[aid] && cur[aid].key || '') !== (d.key || '')) return 'custom';
+    }
+    return 'default';
+  }
+
+  saveShortcutScheme(name) {
+    try { localStorage.setItem('tizumark-shortcut-scheme', name); } catch {}
+  }
+
+  _markShortcutCustom() {
+    if (this.shortcutScheme !== 'custom') {
+      this.shortcutScheme = 'custom';
+      this.saveShortcutScheme('custom');
+    }
+  }
+
+  resetShortcuts() {
+    this.shortcuts = this.getDefaultShortcuts();
+    localStorage.removeItem('tizumark-shortcuts');
+    this.shortcutScheme = 'default';
+    this.saveShortcutScheme('default');
+    this.renderShortcutsList();
+    this.applyShortcuts();
+    this.setStatus(this.t('shortcutsReset'));
+  }
+
+  formatShortcutDisplay(key) {
+    if (!key) return this.t('none');
+    return key.split('+').map(k => `<kbd>${k}</kbd>`).join('<span class="key-separator">+</span>');
+  }
+
+  updateShortcutHints() {
+    const s = this.shortcuts;
+    const map = {
+      'insert-bold': 'bold',
+      'insert-italic': 'italic',
+      'insert-strikethrough': 'strikethrough',
+      'insert-inline-code': 'inlineCode',
+      'insert-highlight': 'highlight',
+      'insert-code-block': 'codeBlock',
+      'insert-table': 'insertTable',
+      'insert-quote': 'blockquote',
+      'insert-hr': 'insertHr',
+      'insert-ul': 'insertUl',
+      'insert-ol': 'insertOl',
+      'insert-task': 'insertTask',
+      'insert-link': 'insertLink',
+      'insert-image': 'insertImage',
+      // find-replace / preview-find 菜单项与 find 是同一功能（toggleFindPanel），
+      // 提示统一显示 find 的键位
+      'find-replace': 'find',
+      'preview-find': 'find',
+      'insert-superscript': 'insertSuperscript',
+      'insert-subscript': 'insertSubscript',
+      'insert-h1': 'insertH1',
+      'insert-h2': 'insertH2',
+      'insert-h3': 'insertH3',
+      'insert-h4': 'insertH4',
+      'insert-h5': 'insertH5',
+      'insert-h6': 'insertH6',
+      'insert-math-block': 'insertMathBlock',
+      'insert-mermaid': 'insertMermaid',
+      'insert-toc': 'insertToc',
+      'insert-callout-note': 'insertCalloutNote',
+      'insert-callout-tip': 'insertCalloutTip',
+      'insert-callout-warning': 'insertCalloutWarning',
+      'insert-callout-caution': 'insertCalloutCaution',
+      'insert-callout-important': 'insertCalloutImportant',
+    };
+    const idMap = {
+      'btn-new': 'newFile',
+      'btn-open': 'openFile',
+      'btn-save': 'saveFile',
+      'btn-save-as': 'saveAs',
+      'btn-export-pdf': 'exportPDF',
+    };
+    for (const [action, id] of Object.entries(map)) {
+      const els = document.querySelectorAll(`[data-action="${action}"] .shortcut`);
+      const key = s[id]?.key;
+      for (const el of els) {
+        el.textContent = key || '';
+      }
+    }
+    for (const [elId, id] of Object.entries(idMap)) {
+      const el = document.getElementById(elId);
+      if (!el) continue;
+      const span = el.querySelector('.shortcut');
+      if (!span) continue;
+      span.textContent = s[id]?.key || '';
+    }
+  }
+
+  renderShortcutsList() {
+    const container = document.getElementById('shortcuts-list');
+    const labels = this.t('shortcutLabel');
+    const groupLabels = this.t('shortcutGroup') || {};
+    // 按功能分组展示，便于在长列表中查找
+    const groups = [
+      { key: 'file', ids: ['newFile', 'openFile', 'saveFile', 'saveAs', 'closeTab', 'exportPDF'] },
+      { key: 'search', ids: ['find', 'crossSearch'] },
+      { key: 'tabView', ids: ['nextTab', 'prevTab', 'toggleView', 'toggleTheme'] },
+      { key: 'format', ids: ['bold', 'italic', 'strikethrough', 'inlineCode', 'highlight', 'insertSuperscript', 'insertSubscript'] },
+      { key: 'insert', ids: ['insertLink', 'insertImage', 'insertTable', 'insertUl', 'insertOl', 'insertTask', 'insertHr', 'codeBlock', 'blockquote', 'insertMathBlock', 'insertMermaid', 'insertToc'] },
+      { key: 'heading', ids: ['insertH1', 'insertH2', 'insertH3', 'insertH4', 'insertH5', 'insertH6'] },
+      { key: 'callout', ids: ['insertCalloutNote', 'insertCalloutTip', 'insertCalloutWarning', 'insertCalloutCaution', 'insertCalloutImportant'] },
+    ];
+
+    container.innerHTML = groups.map(group => {
+      const rows = group.ids
+        .filter(id => this.shortcuts[id])
+        .map(id => {
+          const shortcut = this.shortcuts[id];
+          const isRecording = this.recordingAction === id;
+          const label = labels[id] || shortcut.label || id;
+          return `
+        <div class="shortcut-row" data-action="${id}">
+          <span class="shortcut-label">${label}</span>
+          <div class="shortcut-actions">
+            <div class="shortcut-key">${this.formatShortcutDisplay(shortcut.key)}</div>
+            <button class="shortcut-record-btn${isRecording ? ' recording' : ''}" data-action="${id}">${isRecording ? this.t('pressKeys') : this.t('modify')}</button>
+            <button class="shortcut-clear-btn" data-action="${id}">${this.t('clear')}</button>
+          </div>
+        </div>`;
+        }).join('');
+      if (!rows) return '';
+      return `
+        <div class="shortcut-group">
+          <div class="shortcut-group-title">${groupLabels[group.key] || group.key}</div>
+          ${rows}
+        </div>`;
+    }).join('');
+
+    const schemeSel = document.getElementById('shortcuts-scheme');
+    if (schemeSel) schemeSel.value = this.shortcutScheme || 'default';
+
+    container.querySelectorAll('.shortcut-record-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        this.startRecording(action);
+      });
+    });
+
+    container.querySelectorAll('.shortcut-clear-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        this.shortcuts[action].key = '';
+        this._markShortcutCustom();
+        this.saveShortcuts();
+        this.renderShortcutsList();
+        this.applyShortcuts();
+      });
+    });
+  }
+
+  startRecording(action) {
+    this.recordingAction = action;
+    this.renderShortcutsList();
+  }
+
+  handleShortcutRecording(e) {
+    if (!this.recordingAction) return false;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.key === 'Escape') {
+      this.recordingAction = null;
+      this.renderShortcutsList();
+      return true;
+    }
+
+    if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return true;
+
+    const parts = [];
+    if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
+    if (e.shiftKey) parts.push('Shift');
+    if (e.altKey) parts.push('Alt');
+    parts.push(e.key.length === 1 ? e.key.toUpperCase() : e.key);
+
+    const keyStr = parts.join('+');
+    const dup = this.findDuplicateShortcut(keyStr, this.recordingAction);
+    if (dup) {
+      this.showToast(`快捷键 "${keyStr}" 已被「${this.t('shortcutLabel')[dup] || dup}」占用`);
+      this.recordingAction = null;
+      this.renderShortcutsList();
+      return true;
+    }
+    this.shortcuts[this.recordingAction].key = keyStr;
+    this.recordingAction = null;
+    this._markShortcutCustom();
+    this.saveShortcuts();
+    this.renderShortcutsList();
+    this.applyShortcuts();
+    return true;
+  }
+
+  findDuplicateShortcut(key, excludeAction) {
+    if (!key) return null;
+    for (const [action, config] of Object.entries(this.shortcuts)) {
+      if (action === excludeAction) continue;
+      if (config.key === key) return action;
+    }
+    return null;
+  }
+
+  initShortcutsDialog() {
+    document.getElementById('btn-shortcuts').addEventListener('click', () => {
+      document.getElementById('file-menu').classList.add('hidden');
+      this.showShortcutsDialog();
+    });
+    document.getElementById('shortcuts-close').addEventListener('click', () => this.hideShortcutsDialog());
+    document.getElementById('shortcuts-dialog').addEventListener('click', (e) => {
+      if (e.target.id === 'shortcuts-dialog') this.hideShortcutsDialog();
+    });
+    document.getElementById('shortcuts-reset').addEventListener('click', () => this.resetShortcuts());
+    document.getElementById('shortcuts-save-btn').addEventListener('click', () => {
+      this.saveShortcuts();
+      this.applyShortcuts();
+      this.hideShortcutsDialog();
+    });
+
+    // 快捷键方案下拉
+    const schemeSel = document.getElementById('shortcuts-scheme');
+    if (schemeSel) {
+      schemeSel.addEventListener('change', (e) => {
+        const name = e.target.value;
+        if (name === 'custom') {
+          this.shortcutScheme = 'custom';
+          this.saveShortcutScheme('custom');
+          return;
+        }
+        // 预置方案（含默认）：均为整体覆盖，一律先确认
+        if (window.confirm(this.t('schemeOverrideConfirm'))) {
+          this.applyShortcutScheme(name);
+          e.target.value = this.shortcutScheme;
+        } else {
+          e.target.value = this.shortcutScheme; // 取消则回退
+        }
+      });
+    }
+    this.populateSchemeSelect();
+  }
+
+  showShortcutsDialog() {
+    this.recordingAction = null;
+    this.renderShortcutsList();
+    this.populateSchemeSelect();
+    document.getElementById('shortcuts-dialog').classList.remove('hidden');
+  }
+
+  populateSchemeSelect() {
+    const sel = document.getElementById('shortcuts-scheme');
+    if (!sel) return;
+    const opts = [
+      ['default', this.t('schemeDefault')],
+      ['vscode', this.t('schemeVSCode')],
+      ['typora', this.t('schemeTypora')],
+      ['sublime', this.t('schemeSublime')],
+      ['custom', this.t('schemeCustom')],
+    ];
+    sel.innerHTML = opts.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+    sel.value = this.shortcutScheme || 'default';
+  }
+
+  hideShortcutsDialog() {
+    this.recordingAction = null;
+    document.getElementById('shortcuts-dialog').classList.add('hidden');
+  }
+
+  applyShortcuts() {
+    const s = this.shortcuts;
+    const LIST_LINE_RE = /^(\s*)(?:>[> ]*|[*+-]\s\[[xX ]\]\s|[*+-]\s|\d+[.)]\s)/;
+    this.cm.setOption('extraKeys', {
+      'Enter': (cm) => this._handleTableEnter(cm),
+      'Tab': (cm) => {
+        if (cm.somethingSelected()) {
+          cm.indentSelection('add');
+          return;
+        }
+        // 列表/引用行无选区：缩进整行形成子级（支持多级列表层级调整）
+        const lineText = cm.getLine(cm.getCursor().line);
+        if (LIST_LINE_RE.test(lineText)) {
+          cm.indentSelection('add');
+          return;
+        }
+        cm.replaceSelection(' '.repeat(this.settings.tabSize), 'end');
+      },
+      'Shift-Tab': (cm) => cm.indentSelection('subtract'),
+    });
+
+    const toCmKey = (k) => {
+      const parts = k.split('+');
+      const key = parts.pop();
+      const order = { Shift: 0, Ctrl: 1, Alt: 2, Cmd: 3, Meta: 3 };
+      parts.sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99));
+      return parts.concat([key]).join('-');
+    };
+
+    // Editor-only actions (work in CodeMirror extraKeys when editor is focused)
+    const editorMap = {
+      bold: () => this.wrapSelection('**', '**'),
+      italic: () => this.wrapSelection('*', '*'),
+      strikethrough: () => this.wrapSelection('~~', '~~'),
+      inlineCode: () => this.wrapSelection('`', '`'),
+      highlight: () => this.wrapSelection('==', '=='),
+      codeBlock: () => this.insertBlock('```javascript\n// code here\n```', 14),
+      blockquote: () => this.insertLinePrefix('> '),
+      insertTable: () => this.insertBlock('| 列1 | 列2 | 列3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |', 2),
+      insertUl: () => this.insertLinePrefix('- '),
+      insertOl: () => this.insertLinePrefix('1. ', true),
+      insertTask: () => this.insertLinePrefix('- [ ] '),
+      insertHr: () => this.insertBlock('---'),
+      insertLink: () => this.showInsertLinkDialog(),
+      insertImage: () => this.showInsertImageDialog(),
+      insertSuperscript: () => this.executeMenuAction('insert-superscript'),
+      insertSubscript: () => this.executeMenuAction('insert-subscript'),
+      insertH1: () => this.executeMenuAction('insert-h1'),
+      insertH2: () => this.executeMenuAction('insert-h2'),
+      insertH3: () => this.executeMenuAction('insert-h3'),
+      insertH4: () => this.executeMenuAction('insert-h4'),
+      insertH5: () => this.executeMenuAction('insert-h5'),
+      insertH6: () => this.executeMenuAction('insert-h6'),
+      insertMathBlock: () => this.executeMenuAction('insert-math-block'),
+      insertMermaid: () => this.executeMenuAction('insert-mermaid'),
+      insertToc: () => this.executeMenuAction('insert-toc'),
+      insertCalloutNote: () => this.executeMenuAction('insert-callout-note'),
+      insertCalloutTip: () => this.executeMenuAction('insert-callout-tip'),
+      insertCalloutWarning: () => this.executeMenuAction('insert-callout-warning'),
+      insertCalloutCaution: () => this.executeMenuAction('insert-callout-caution'),
+      insertCalloutImportant: () => this.executeMenuAction('insert-callout-important'),
+    };
+
+    // Global actions (work anywhere via document keydown handler)
+    const globalMap = {
+      saveFile: () => this.saveFile(),
+      openFile: () => this.openFile(),
+      newFile: () => this.newFile(),
+      closeTab: () => this.closeTab(this.activeTabIndex),
+      exportPDF: () => this.exportPDF(),
+      saveAs: () => this.saveAsFile(),
+      toggleView: () => this.toggleViewMode(),
+      toggleTheme: () => this.toggleTheme(),
+      find: () => this.toggleFindPanel(),
+      crossSearch: () => this.openCrossSearchDialog(),
+      nextTab: () => {
+        const next = (this.activeTabIndex + 1) % this.tabs.length;
+        this.switchTab(next);
+      },
+      prevTab: () => {
+        const prev = this.activeTabIndex > 0 ? this.activeTabIndex - 1 : this.tabs.length - 1;
+        this.switchTab(prev);
+      },
+    };
+
+    // Editor-local actions (bold/italic/insert-*, need the CM instance) are
+    // registered as real handlers in extraKeys — they only apply when the
+    // editor is focused, which is exactly what we want.
+    const extraKeys = this.cm.getOption('extraKeys');
+    for (const [action, fn] of Object.entries(editorMap)) {
+      const key = s[action]?.key;
+      if (key) extraKeys[toCmKey(key)] = fn;
+    }
+    // Global actions (save/find/crossSearch/nextTab/... ) are dispatched
+    // centrally by the document-level keydown handler (works in ALL focus
+    // states). Here we neutralize them in CM with `false` so CM's own default
+    // keymap (e.g. search.js binds Shift-Ctrl-F→"replace", Ctrl-F→"find") can't
+    // fire and there is no double-dispatch. CodeMirror does not stop propagation
+    // for handled keys, so the event still reaches the document handler.
+    for (const [action, fn] of Object.entries(globalMap)) {
+      const key = s[action]?.key;
+      if (key) extraKeys[toCmKey(key)] = false;
+    }
+    this.cm.setOption('extraKeys', extraKeys);
+
+    // Build global shortcut lookup for document-level handling
+    this.globalShortcutLookup = {};
+    for (const [action, fn] of Object.entries(globalMap)) {
+      const key = s[action]?.key;
+      if (key) this.globalShortcutLookup[key] = fn;
+    }
+
+    this.updateShortcutHints();
+  }
+
+  get activeTab() {
+    return this.tabs[this.activeTabIndex];
+  }
+
+  initEditor() {
+    const LIST_LINE_RE = /^(\s*)(?:>[> ]*|[*+-]\s\[[xX ]\]\s|[*+-]\s|\d+[.)]\s)/;
+    this.cm = CodeMirror(document.getElementById('editor-wrapper'), {
+      value: '',
+      mode: 'gfm',
+      theme: 'default',
+      inputStyle: 'contenteditable',
+      lineNumbers: true,
+      lineWrapping: true,
+      styleActiveLine: true,
+      matchBrackets: true,
+      autoCloseBrackets: true,
+      indentUnit: this.settings.tabSize,
+      extraKeys: {
+        'Enter': (cm) => this._handleTableEnter(cm),
+        'Tab': (cm) => {
+          if (cm.somethingSelected()) {
+            cm.indentSelection('add');
+            return;
+          }
+          // 列表/引用行无选区：缩进整行形成子级（支持多级列表层级调整）
+          const lineText = cm.getLine(cm.getCursor().line);
+          if (LIST_LINE_RE.test(lineText)) {
+            cm.indentSelection('add');
+            return;
+          }
+          cm.replaceSelection(' '.repeat(this.settings.tabSize), 'end');
+        },
+        'Shift-Tab': (cm) => cm.indentSelection('subtract'),
+      }
+    });
+
+    // Ctrl + 鼠标滚轮缩放编辑器字体（仅当前标签，不持久化到 settings）
+    const _zoomWrapper = this.cm.getWrapperElement();
+
+    // 顶部缩放提示（与 .lightbox-hint 视觉一致）
+    this.zoomHint = document.createElement('div');
+    this.zoomHint.className = 'zoom-hint';
+    this.zoomHint.innerHTML = '<span class="zoom-hint-text"></span><span class="zoom-hint-reset hidden" role="button" title="Reset font size"></span>';
+    this.zoomHint.querySelector('.zoom-hint-reset').addEventListener('click', () => this.resetEditorFontSize());
+    this._zoomHintHovering = false;
+    this.zoomHint.addEventListener('mouseenter', () => {
+      this._zoomHintHovering = true;
+      clearTimeout(this._zoomHintTimer);
+    });
+    this.zoomHint.addEventListener('mouseleave', () => {
+      this._zoomHintHovering = false;
+      this._zoomHintTimer = setTimeout(() => this.zoomHint.classList.remove('show'), 3000);
+    });
+    document.body.appendChild(this.zoomHint);
+
+    this.showZoomHint = () => {
+      if (!this.activeTab || !this.zoomHint) return;
+      const cur = this.activeTab.fontSize ?? this.settings.fontSize;
+      const base = this.settings.fontSize;
+      const textEl = this.zoomHint.querySelector('.zoom-hint-text');
+      const resetEl = this.zoomHint.querySelector('.zoom-hint-reset');
+      // 左侧始终显示当前字号
+      textEl.textContent = this.t('fontSizeHint', { size: cur });
+      if (cur !== base) {
+        // 右侧显示「还原 Npx」按钮（与设置字号一致）
+        resetEl.textContent = this.t('fontSizeReset', { base });
+        resetEl.classList.remove('hidden');
+      } else {
+        resetEl.classList.add('hidden');
+      }
+      this.zoomHint.classList.add('show');
+      clearTimeout(this._zoomHintTimer);
+      // hover 期间保持显示；离开后才按 3 秒倒计时消失
+      if (!this._zoomHintHovering) {
+        this._zoomHintTimer = setTimeout(() => this.zoomHint.classList.remove('show'), 3000);
+      }
+    };
+
+    this.hideZoomHint = () => {
+      if (!this.zoomHint) return;
+      this.zoomHint.classList.remove('show');
+      clearTimeout(this._zoomHintTimer);
+    };
+
+    this.resetEditorFontSize = () => {
+      const tab = this.activeTab;
+      if (!tab) return;
+      tab.fontSize = this.settings.fontSize;
+      this.cm.getWrapperElement().style.fontSize = tab.fontSize + 'px';
+      this.cm.refresh();
+      this.showZoomHint();
+    };
+
+    _zoomWrapper.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey) return;            // 非 Ctrl：放行，CM 正常滚动
+      e.preventDefault();               // 阻止 CM 滚动 + 浏览器整页/页面缩放
+      e.stopPropagation();
+      const tab = this.activeTab;
+      if (!tab) return;
+      const cur = tab.fontSize ?? this.settings.fontSize;
+      const next = Math.max(8, Math.min(72, cur + (e.deltaY < 0 ? 1 : -1)));
+      if (next === cur) return;
+      tab.fontSize = next;
+      _zoomWrapper.style.fontSize = next + 'px';
+      this.cm.refresh();
+      this.showZoomHint();
+    }, true);  // capture：先于 CM 内部 mousewheel 监听拦截
+
+    this.cm.on('change', () => {
+      this.activeTab.content = this.cm.getValue();
+      this.updateTabDisplay();
+      // 大文档滑动窗口模式：打字时把窗口焦点同步到光标当前行（0-based），
+      // 否则 updatePreview 仍按旧 _previewFocusLine 渲染切片，导致光标处新输入不显示、且预览跳到旧焦点。
+      // 滚动驱动的虚拟重渲染走各自的焦点计算，这里只在窗口模式下跟随光标。
+      if (this.previewWindow) {
+        this._previewFocusLine = this.cm.getCursor().line;
+      }
+      this.debounceUpdatePreview();
+    });
+
+    this.cm.on('renderLine', (cm, line, el) => {
+      if (line.text.length > 500 && line.text.includes('data:image/')) {
+        el.classList.add('cm-base64-line');
+      } else {
+        el.classList.remove('cm-base64-line');
+      }
+    });
+
+    this.cm.on('cursorActivity', () => {
+      const cursor = this.cm.getCursor();
+      this.activeTab.cursorPos = cursor;
+      this.cursorPosition.textContent = this.t('cursorPos', { line: cursor.line + 1, col: cursor.ch + 1 });
+    });
+
+    // 双标志锁机制（demo 风格：canScroll.editor / canScroll.showDom）
+    this._canScroll = { editor: true, preview: true };
+    this._scrollThrottlePending = null;
+    this._scrollThrottleTimer = null;
+    this._scrollDebounceTimer = null;
+
+    // 编辑器滚动 → 同步预览（demo 的 onScroll 思路）
+    this.cm.on('scroll', () => {
+      const container = document.querySelector('.editor-container');
+      // 编辑器被隐藏（纯预览模式 / 编辑器折叠）时 getScrollInfo().top 恒为 0，
+      // 若写回 scrollPos 会把已保存位置清零，导致切回编辑跳顶部。仅当编辑器可见才更新快照。
+      if (container.classList.contains('preview-mode') || container.classList.contains('editor-collapsed')) return;
+      const info = this.cm.getScrollInfo();
+      this.activeTab.scrollPos = { top: info.top, left: info.left };
+
+      if (!this.settings.scrollSync || !this._canScroll.editor) return;
+      if (container.classList.contains('preview-collapsed') || container.classList.contains('preview-mode')) return;
+
+      this._canScroll.preview = false;
+      this._throttleScroll(() => this._syncEditorToPreview(), 50);
+      this._debounceScroll(() => this._resumeScroll(), 100);
+    });
+
+    // 预览滚动 → 同步编辑器（demo 的 onScroll 思路，方向相反）
+    this.preview.addEventListener('scroll', () => {
+      const container = document.querySelector('.editor-container');
+      // 持续记录预览滚动位置（预览可见时）。edit/preview 切换恢复以及滚动同步都依赖它；
+      // 预览折叠时其 scrollTop 不可靠，跳过以免覆盖有效值。
+      if (this.activeTab && !container.classList.contains('preview-collapsed')) {
+        this.activeTab.previewScrollTop = this.preview.scrollTop;
+      }
+      // 纯预览模式 + 大文档虚拟滚动：驱动预览自身懒加载（拖到任意位置查看全文）
+      if (container.classList.contains('preview-mode') && this._previewVirtual && this.previewWindow) {
+        this._syncPreviewVirtualScroll();
+        return;
+      }
+      if (!this.settings.scrollSync || !this._canScroll.preview) return;
+      if (container.classList.contains('preview-collapsed')) return;
+
+      this._canScroll.editor = false;
+      this._throttleScroll(() => this._syncPreviewToEditor(), 50);
+      this._debounceScroll(() => this._resumeScroll(), 100);
+    });
+
+    // ---- 行号点击选行 + 拖动连选 ----
+    this._gutterDrag = null;
+    this._gutterAnchor = null;
+    this.cm.on('gutterClick', (cm, line, gutter, ev) => this.onGutterClick(cm, line, gutter, ev));
+    this._gutterMouseMove = (e) => this.onGutterMouseMove(e);
+    this._gutterMouseUp = (e) => this.onGutterMouseUp(e);
+    document.addEventListener('mousemove', this._gutterMouseMove);
+    document.addEventListener('mouseup', this._gutterMouseUp);
+
+    // IME 适配说明：已切换到 inputStyle:'contenteditable'，IME 候选框由
+    // WebView2 原生锚定在光标行下方（与浏览器行为一致），不再需要
+    // compositionstart 滚动补偿。之前的滚动处理器在视口边缘行上会打断
+    // composition（输入不了）+ 触发滚动反馈循环（页面乱滚），已移除。
+  }
+
+  _selectLineRange(cm, fromLine, toLine) {
+    const a = Math.min(fromLine, toLine), b = Math.max(fromLine, toLine);
+    const last = cm.lastLine();
+    const end = b < last ? { line: b + 1, ch: 0 } : { line: b, ch: cm.getLine(b).length };
+    cm.setSelection({ line: a, ch: 0 }, end);
+  }
+
+  onGutterClick(cm, line, gutter, ev) {
+    if (ev.button !== 0) return;        // 仅左键
+    ev.preventDefault();                // 阻止 CM 原生行选区/拖拽干扰
+    if (ev.shiftKey) {
+      const anchor = this._gutterAnchor == null ? cm.getCursor().line : this._gutterAnchor;
+      this._gutterAnchor = anchor;
+      this._gutterDrag = { anchor, startLine: anchor };
+      this._selectLineRange(cm, anchor, line);
+    } else {
+      this._gutterAnchor = line;
+      this._gutterDrag = { anchor: line, startLine: line };
+      this._selectLineRange(cm, line, line);
+    }
+  }
+
+  onGutterMouseMove(e) {
+    const ds = this._gutterDrag;
+    if (!ds) return;
+    const pos = this.cm.coordsChar({ left: e.clientX, top: e.clientY }, 'window');
+    const line = Math.max(0, Math.min(this.cm.lastLine(), pos.line));
+    this._selectLineRange(this.cm, ds.anchor, line);
+  }
+
+  onGutterMouseUp() {
+    if (this._gutterDrag) {
+      this._gutterAnchor = this._gutterDrag.anchor;
+      this._gutterDrag = null;
+    }
+  }
+
+  async ensureTabLoaded(tab) {
+    if (!tab) return;
+    if (tab._loaded || !tab.filePath) { tab._loaded = true; return; }
+    try {
+      const content = await this.readFileNormalized(tab.filePath);
+      tab.content = content;
+      tab.savedContent = content;
+      await this.refreshFileMeta(tab);
+    } catch (e) {
+      // 懒加载失败（文件被删/锁定/无权限）：标记错误并提示，避免静默空白
+      tab._loadError = true;
+      tab.content = '';
+      tab.savedContent = '';
+      this.reportError(e.code || 'E_IO', { context: { path: tab.filePath }, error: e, params: e.params, detail: e.detail });
+    }
+    tab._loaded = true;
+  }
+
+  // 切换/打开/重载文档后，恢复该 tab 记忆的滚动位置（编辑器 + 预览）。
+  // 统一临时关闭滚动同步，避免恢复过程中的程序化滚动事件互相重定位，导致
+  // 「切换标签页后预览/页面跳到别处」。下一帧再恢复滚动同步，交还给用户。
+  _restoreSwitchScroll(restoreScroll, restorePreviewTop) {
+    this._canScroll.editor = false;
+    this._canScroll.preview = false;
+    this.cm.scrollTo(restoreScroll.left || 0, restoreScroll.top || 0);
+    const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
+    this.preview.scrollTop = Math.min(restorePreviewTop || 0, maxScroll);
+    setTimeout(() => this._resumeScroll(), 0);
+  }
+
+  async switchTab(index) {
+    if (index === this.activeTabIndex || index < 0 || index >= this.tabs.length) return;
+
+    this._largeFileNoticeDismissed = false;
+    this._previewFocusLine = 0;
+    this.previewWindow = null;
+    this._beginPaneLoad();
+    try {
+      const oldTab = this.activeTab;
+      oldTab.content = this.cm.getValue();
+      oldTab.cursorPos = this.cm.getCursor();
+      oldTab.scrollPos = { top: this.cm.getScrollInfo().top, left: this.cm.getScrollInfo().left };
+      oldTab.previewScrollTop = this.preview.scrollTop;
+      oldTab.fontSize = parseInt(this.cm.getWrapperElement().style.fontSize, 10) || this.settings.fontSize;
+
+      this.activeTabIndex = index;
+      const newTab = this.activeTab;
+      // 每标签独立字号：未初始化时按设置字号
+      if (newTab.fontSize == null) newTab.fontSize = this.settings.fontSize;
+      this.cm.getWrapperElement().style.fontSize = newTab.fontSize + 'px';
+      this.hideZoomHint();
+
+      if (!newTab._loaded && newTab.filePath) {
+        await this.ensureTabLoaded(newTab);
+      }
+
+      // 关键：先把恢复值读到局部变量。setValue 会同步触发 scroll / cursorActivity 事件，
+      // 此刻 this.activeTab 已是 newTab，事件处理器会把 newTab.scrollPos / cursorPos 覆盖为 0，
+      // 所以恢复必须用这里的快照副本，不能再回头读 newTab.*（否则会读到被污染的 0 → 回到顶部）。
+      const restoreCursor = newTab.cursorPos || { line: 0, ch: 0 };
+      const restoreScroll = newTab.scrollPos || { top: 0, left: 0 };
+      const restorePreviewTop = newTab.previewScrollTop || 0;
+
+      this.cm.setValue(newTab.content || '');
+      clearTimeout(this.debounceTimer);
+      this.cm.setCursor(restoreCursor);
+      this.cm.clearHistory();
+
+      this.updateTabDisplay();
+      await this.updatePreview();
+      // 统一恢复该 tab 记忆的编辑器/预览滚动位置。临时关闭滚动同步，避免恢复过程中
+      // 程序化滚动事件互相重定位（分屏 + 滚动同步开启时预览会被编辑器同步覆盖，
+      // 表现为「切换后预览/页面跳到别处」）。
+      this._restoreSwitchScroll(restoreScroll, restorePreviewTop);
+      this.updateWordCount();
+      this.updateOutline();
+      this.updateExternalChangeBanner();
+      this.highlightTreeActiveFile();
+    } finally {
+      this._endPaneLoad();
+    }
+  }
+
+  async addTab(name = '', content = '', filePath = null) {
+    const defaultName = this.t('untitled');
+    if (!name || name === defaultName) {
+      name = `${defaultName}${this.untitledCounter++}`;
+    }
+    content = content.replace(/\r\n/g, '\n');
+    const tab = new Tab(name, content, filePath);
+    this.tabs.push(tab);
+    this.refreshFileMeta(tab);
+    await this.switchTab(this.tabs.length - 1);
+    this.updateTabBar();
+    try {
+      if (filePath) this.addRecentFile(filePath);
+    } catch (e) {
+      console.error('[TizuMark] addRecentFile failed:', e);
+    }
+    this.saveSession();
+  }
+
+  async closeTab(index) {
+    if (index < 0 || index >= this.tabs.length) return;
+
+    const tab = this.tabs[index];
+    if (tab.isModified) {
+      const result = await this.showSaveDialog(this.t('saveChanges'), `${tab.name} ${this.t('fileModified')}`);
+      if (result === 'cancel') return;
+      if (result === 'save') {
+        const savedIndex = this.tabs.indexOf(tab);
+        if (savedIndex === -1) return;
+        try {
+          if (!tab.filePath) {
+            const path = await dialogSave({
+              filters: [
+                { name: 'Markdown', extensions: ['md'] },
+                { name: this.t('allFiles'), extensions: ['*'] }
+              ]
+            });
+            if (!path) return;
+            tab.filePath = path;
+            tab.name = path.split(/[/\\]/).pop();
+          }
+          await TauriApi.writeFile({ path: tab.filePath, content: tab.content });
+          tab.savedContent = tab.content;
+          await this.refreshFileMeta(tab);
+          this.setStatus(`${this.t('saved')}: ${tab.filePath}`);
+        } catch (error) {
+          this.setStatus(`${this.t('saveFailed')}: ${error}`);
+          return;
+        }
+      }
+    }
+
+    const removeIndex = this.tabs.indexOf(tab);
+    if (removeIndex === -1) return;
+
+    if (this._externalQueue) this._externalQueue = this._externalQueue.filter(t => t !== tab);
+    this.tabs.splice(removeIndex, 1);
+    if (this.tabs.length === 0) {
+      this.tabs.push(new Tab(`${this.t('untitled')}${this.untitledCounter++}`));
+      this.activeTabIndex = 0;
+      this.cm.setValue('');
+    } else {
+      if (removeIndex < this.activeTabIndex) {
+        this.activeTabIndex--;
+      } else if (this.activeTabIndex >= this.tabs.length) {
+        this.activeTabIndex = this.tabs.length - 1;
+      }
+    }
+    this.updateTabBar();
+    if (this.tabs.length > 0) {
+      await this.ensureTabLoaded(this.activeTab);
+      this.cm.setValue(this.activeTab.content || '');
+      this.cm.setCursor(this.activeTab.cursorPos || { line: 0, ch: 0 });
+      this.updatePreview();
+    }
+    this.saveSession();
+  }
+
+  // ---- 标签页拖拽排序 ----
+  reorderTab(from, to) {
+    if (from === to || from < 0 || from >= this.tabs.length || to < 0 || to >= this.tabs.length) return;
+    const [moved] = this.tabs.splice(from, 1);
+    this.tabs.splice(to, 0, moved);
+    // 跟踪 activeTab 跟随移动
+    if (this.activeTabIndex === from) {
+      this.activeTabIndex = to;
+    } else if (from < this.activeTabIndex && to >= this.activeTabIndex) {
+      this.activeTabIndex--;
+    } else if (from > this.activeTabIndex && to <= this.activeTabIndex) {
+      this.activeTabIndex++;
+    }
+    this.updateTabBar();
+    this.saveSession();
+  }
+
+  // 拖拽排序辅助（基于指针事件，不依赖原生 HTML5 DnD）
+  _tabElAt(index) {
+    return document.querySelector(`.tab[data-index="${index}"]`);
+  }
+
+  _tabIndexAtPoint(x, y) {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    const tab = el.closest('.tab');
+    if (!tab || tab.dataset.index == null) return null;
+    return parseInt(tab.dataset.index, 10);
+  }
+
+  _startTabDrag(from) {
+    const tab = this._tabElAt(from);
+    if (tab) tab.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+  }
+
+  _updateTabDragTarget(x, y) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('drag-over'));
+    const idx = this._tabIndexAtPoint(x, y);
+    if (idx != null) {
+      const t = this._tabElAt(idx);
+      if (t) t.classList.add('drag-over');
+    }
+  }
+
+  _endTabDrag() {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('drag-over', 'dragging'));
+    document.body.style.userSelect = '';
+  }
+
+  // ---- 最近文件 ----
+  loadRecentFiles() {
+    try {
+      const raw = localStorage.getItem('tizumark-recent-files');
+      const arr = raw ? JSON.parse(raw) : [];
+      this._recentFiles = Array.isArray(arr) ? arr.filter(p => typeof p === 'string') : [];
+    } catch {
+      this._recentFiles = [];
+    }
+  }
+
+  saveRecentFiles() {
+    try {
+      localStorage.setItem('tizumark-recent-files', JSON.stringify(this._recentFiles || []));
+    } catch {}
+  }
+
+  addRecentFile(filePath) {
+    if (!filePath) return;
+    const list = this._recentFiles || (this._recentFiles = []);
+    const idx = list.indexOf(filePath);
+    if (idx !== -1) list.splice(idx, 1);
+    list.unshift(filePath);
+    if (list.length > 10) list.length = 10;
+    this.saveRecentFiles();
+    if (this._recentSubmenuVisible) this.renderRecentFilesSubmenu();
+  }
+
+  clearRecentFiles() {
+    this._recentFiles = [];
+    this.saveRecentFiles();
+    if (this._recentSubmenuVisible) this.renderRecentFilesSubmenu();
+  }
+
+  async refreshRecentFiles() {
+    if (!this._recentFiles || this._recentFiles.length === 0) return;
+    const fileMenu = document.getElementById('file-menu');
+    if (!fileMenu || fileMenu.classList.contains('hidden')) return;
+    let changed = false;
+    const survivors = [];
+    for (const p of this._recentFiles) {
+      let exists = true;
+      try {
+        const meta = await TauriApi.fileMeta({ path: p });
+        exists = meta !== null && meta !== undefined;
+      } catch {
+        exists = true; // 查询失败保守保留，避免误删
+      }
+      if (exists) survivors.push(p); else changed = true;
+    }
+    if (changed) {
+      this._recentFiles = survivors;
+      this.saveRecentFiles();
+      this.renderRecentFilesSubmenu();
+    }
+  }
+
+  hideRecentSubmenu() {
+    const sm = document.getElementById('recent-files-submenu');
+    if (sm) sm.classList.add('hidden');
+    this._recentSubmenuVisible = false;
+  }
+
+  showRecentSubmenu() {
+    const trigger = document.getElementById('btn-recent');
+    const submenu = document.getElementById('recent-files-submenu');
+    if (!trigger || !submenu) return;
+    this.renderRecentFilesSubmenu();
+    submenu.classList.remove('hidden');
+    this._recentSubmenuVisible = true;
+    const rect = trigger.getBoundingClientRect();
+    submenu.style.left = (rect.right - 1) + 'px';
+    submenu.style.top = rect.top + 'px';
+    requestAnimationFrame(() => {
+      const sr = submenu.getBoundingClientRect();
+      if (sr.right > window.innerWidth) submenu.style.left = (rect.left - sr.width + 1) + 'px';
+      if (sr.bottom > window.innerHeight) submenu.style.top = (window.innerHeight - sr.height - 4) + 'px';
+    });
+  }
+
+  renderRecentFilesSubmenu() {
+    const submenu = document.getElementById('recent-files-submenu');
+    if (!submenu) return;
+    const list = this._recentFiles || [];
+    submenu.innerHTML = '';
+    if (list.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'dropdown-item disabled';
+      empty.textContent = this.t('noRecentFiles');
+      submenu.appendChild(empty);
+      return;
+    }
+    list.forEach(p => {
+      const item = document.createElement('div');
+      item.className = 'dropdown-item recent-file-item';
+      item.dataset.path = p;
+      const name = p.split(/[/\\]/).pop() || p;
+      const dir = p.slice(0, Math.max(0, p.length - name.length)).replace(/[/\\]$/, '');
+      const nameEl = document.createElement('span');
+      nameEl.className = 'recent-file-name';
+      nameEl.textContent = name;
+      const dirEl = document.createElement('span');
+      dirEl.className = 'recent-file-dir';
+      dirEl.textContent = dir;
+      item.appendChild(nameEl);
+      item.appendChild(dirEl);
+      item.title = p;
+      submenu.appendChild(item);
+    });
+    const sep = document.createElement('div');
+    sep.className = 'dropdown-separator';
+    submenu.appendChild(sep);
+    const clear = document.createElement('div');
+    clear.className = 'dropdown-item recent-clear';
+    clear.dataset.action = 'clear';
+    clear.textContent = this.t('clearRecentFiles');
+    submenu.appendChild(clear);
+  }
+
+  updateTabBar() {
+    const tabBar = document.getElementById('tab-bar');
+    const addBtn = document.getElementById('btn-add-tab');
+
+    const fragment = document.createDocumentFragment();
+
+    this.tabs.forEach((tab, i) => {
+      const tabEl = document.createElement('div');
+      tabEl.className = `tab${i === this.activeTabIndex ? ' active' : ''}${tab.isModified ? ' modified' : ''}`;
+      tabEl.dataset.index = i;
+      tabEl.setAttribute('role', 'tab');
+      tabEl.setAttribute('aria-selected', i === this.activeTabIndex ? 'true' : 'false');
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'tab-name';
+      nameSpan.textContent = tab.name;
+      tabEl.appendChild(nameSpan);
+
+      if (this.tabs.length > 1) {
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'tab-close';
+        closeBtn.textContent = '\u00d7';
+        closeBtn.setAttribute('role', 'button');
+        closeBtn.setAttribute('aria-label', this.t('closeAria'));
+        closeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.closeTab(i);
+        });
+        tabEl.appendChild(closeBtn);
+      }
+
+      tabEl.addEventListener('click', () => {
+        if (this._suppressClick) { this._suppressClick = false; return; }
+        this.switchTab(i);
+      });
+      // 中键点击关闭标签页；左键按下准备拖拽排序（用指针事件实现，绕过 Tauri 默认 dragDropEnabled 接管原生 DnD 导致拖不动的问题）
+      tabEl.addEventListener('mousedown', (e) => {
+        this._suppressClick = false;
+        if (e.button === 1) { e.preventDefault(); this.closeTab(i); return; }
+        if (e.button === 0) {
+          this._dragState = { from: i, startX: e.clientX, startY: e.clientY, active: false };
+        }
+      });
+      fragment.appendChild(tabEl);
+    });
+
+    tabBar.replaceChildren(fragment);
+    if (addBtn) tabBar.appendChild(addBtn);
+    // Refresh scroll arrows after tabs change
+    if (this.updateTabScrollArrows) this.updateTabScrollArrows();
+  }
+
+  updateTabDisplay() {
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach((tab, i) => {
+      if (i >= this.tabs.length) return;
+      tab.className = `tab${i === this.activeTabIndex ? ' active' : ''}${this.tabs[i].isModified ? ' modified' : ''}${this.tabs[i].pendingExternalChange ? ' external-change' : ''}`;
+      tab.querySelector('.tab-name').textContent = this.tabs[i].name;
+    });
+  }
+
+  initEventListeners() {
+    const toolbarDropdowns = [
+      { btn: 'btn-file', menu: 'file-menu' },
+      { btn: 'btn-view', menu: 'view-menu' },
+      { btn: 'btn-help', menu: 'help-menu' },
+    ];
+
+    let toolbarHideTimer = null;
+    let anyToolbarOpen = false;
+
+    toolbarDropdowns.forEach(({ btn, menu }) => {
+      const btnEl = document.getElementById(btn);
+      const menuEl = document.getElementById(menu);
+      const dropdown = btnEl.closest('.dropdown');
+
+      const closeMenu = () => {
+        toolbarHideTimer = setTimeout(() => {
+          if (!dropdown.matches(':hover') && !document.querySelector('.dropdown:hover')) {
+            menuEl.classList.add('hidden');
+            anyToolbarOpen = false;
+          }
+        }, 150);
+      };
+
+      const cancelClose = () => {
+        clearTimeout(toolbarHideTimer);
+      };
+
+      btnEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cancelClose();
+        toolbarDropdowns.forEach(d => {
+          const m = document.getElementById(d.menu);
+          if (d.menu !== menu) m.classList.add('hidden');
+        });
+        const isOpening = menuEl.classList.contains('hidden');
+        menuEl.classList.toggle('hidden');
+        anyToolbarOpen = isOpening;
+        if (menu === 'file-menu' && !menuEl.classList.contains('hidden')) this.refreshRecentFiles();
+      });
+
+      dropdown.addEventListener('mouseenter', () => {
+        cancelClose();
+        if (anyToolbarOpen && menuEl.classList.contains('hidden')) {
+          toolbarDropdowns.forEach(d => {
+            document.getElementById(d.menu).classList.add('hidden');
+          });
+          menuEl.classList.remove('hidden');
+          if (menu === 'file-menu') this.refreshRecentFiles();
+        }
+      });
+
+      dropdown.addEventListener('mouseleave', closeMenu);
+    });
+
+    document.addEventListener('click', () => {
+      toolbarDropdowns.forEach(d => document.getElementById(d.menu).classList.add('hidden'));
+      this.hideAllContextMenus();
+    });
+    // 标签页拖拽排序：用指针事件实现，避免 Tauri 默认开启 dragDropEnabled 接管原生 DnD 导致拖不动
+    document.addEventListener('mousemove', (e) => {
+      const ds = this._dragState;
+      if (!ds) return;
+      if (!ds.active) {
+        const dx = e.clientX - ds.startX;
+        const dy = e.clientY - ds.startY;
+        if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+        ds.active = true;
+        this._startTabDrag(ds.from);
+      }
+      this._updateTabDragTarget(e.clientX, e.clientY);
+    });
+    document.addEventListener('mouseup', (e) => {
+      const ds = this._dragState;
+      if (!ds) return;
+      if (ds.active) {
+        const to = this._tabIndexAtPoint(e.clientX, e.clientY);
+        if (to != null && to !== ds.from) this.reorderTab(ds.from, to);
+        this._endTabDrag();
+        this._suppressClick = true;
+      }
+      this._dragState = null;
+    });
+    document.getElementById('btn-sidebar-toggle').addEventListener('click', () => {
+      this.toggleSidebar();
+    });
+    document.getElementById('btn-new').addEventListener('click', () => {
+      document.getElementById('file-menu').classList.add('hidden');
+      this.newFile();
+    });
+    document.getElementById('btn-add-tab').addEventListener('click', () => {
+      this.newFile();
+    });
+    document.getElementById('btn-open').addEventListener('click', () => {
+      document.getElementById('file-menu').classList.add('hidden');
+      this.openFile();
+    });
+    document.getElementById('btn-open-folder').addEventListener('click', () => {
+      document.getElementById('file-menu').classList.add('hidden');
+      this.openFolder();
+    });
+    // 最近文件子菜单交互
+    document.getElementById('btn-recent').addEventListener('mouseenter', () => {
+      this.showRecentSubmenu();
+    });
+    document.getElementById('btn-recent').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.showRecentSubmenu();
+    });
+    document.getElementById('file-menu').addEventListener('mouseover', (e) => {
+      if (e.target.closest('#recent-files-submenu')) return;
+      if (e.target.closest('#btn-recent')) return;
+      this.hideRecentSubmenu();
+    });
+    const recentSubmenu = document.getElementById('recent-files-submenu');
+    recentSubmenu.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const clearItem = e.target.closest('[data-action="clear"]');
+      if (clearItem) {
+        this.clearRecentFiles();
+        this.hideRecentSubmenu();
+        return;
+      }
+      const item = e.target.closest('.recent-file-item');
+      if (item && item.dataset.path) {
+        const path = item.dataset.path;
+        document.getElementById('file-menu').classList.add('hidden');
+        this.hideRecentSubmenu();
+        this.openFilePath(path);
+      }
+    });
+    document.getElementById('folder-close').addEventListener('click', () => {
+      this.closeFolder();
+    });
+    document.getElementById('tab-outline').addEventListener('click', () => {
+      this.showSidebarTab('outline');
+    });
+    document.getElementById('tab-files').addEventListener('click', () => {
+      this.showSidebarTab('files');
+    });
+    document.getElementById('btn-save').addEventListener('click', () => {
+      document.getElementById('file-menu').classList.add('hidden');
+      this.saveFile();
+    });
+    document.getElementById('btn-save-as').addEventListener('click', () => {
+      document.getElementById('file-menu').classList.add('hidden');
+      this.saveAsFile();
+    });
+    document.getElementById('btn-reload').addEventListener('click', () => this.reloadFile());
+    document.getElementById('btn-reload-menu').addEventListener('click', () => {
+      document.getElementById('file-menu').classList.add('hidden');
+      this.reloadFile();
+    });
+    document.getElementById('btn-export-html').addEventListener('click', () => {
+      document.getElementById('file-menu').classList.add('hidden');
+      this.exportHTML();
+    });
+    document.getElementById('btn-export-img').addEventListener('click', () => {
+      document.getElementById('file-menu').classList.add('hidden');
+      this.exportImage();
+    });
+    document.getElementById('btn-export-pdf').addEventListener('click', () => {
+      document.getElementById('file-menu').classList.add('hidden');
+      this.exportPDF();
+    });
+    document.getElementById('btn-settings').addEventListener('click', () => {
+      document.getElementById('file-menu').classList.add('hidden');
+      this.showSettings();
+    });
+    document.getElementById('btn-theme').addEventListener('click', () => this.toggleTheme());
+    document.getElementById('btn-user-guide').addEventListener('click', () => {
+      document.getElementById('help-menu').classList.add('hidden');
+      this.openUserGuide();
+    });
+    document.getElementById('btn-about').addEventListener('click', () => {
+      document.getElementById('help-menu').classList.add('hidden');
+      this.showAbout();
+    });
+    document.getElementById('btn-check-update').addEventListener('click', () => {
+      document.getElementById('help-menu').classList.add('hidden');
+      this.checkUpdate(true);
+    });
+    document.getElementById('btn-devtools').addEventListener('click', () => {
+      document.getElementById('help-menu').classList.add('hidden');
+      try {
+        TauriApi.toggleDevtools();
+      } catch (e) {
+        this.reportError('devtools');
+      }
+    });
+    document.querySelector('.tab-bar-wrapper').addEventListener('dblclick', (e) => {
+      if (!e.target.closest('.tab') && !e.target.closest('.tab-add')) {
+        this.newFile();
+      }
+    });
+    document.getElementById('btn-view-preview').addEventListener('click', () => this.setViewMode('preview'));
+    document.getElementById('btn-view-edit').addEventListener('click', () => this.setViewMode('edit'));
+    document.getElementById('btn-side-left').addEventListener('click', () => this.toggleCollapse('editor'));
+    document.getElementById('btn-side-right').addEventListener('click', () => this.toggleCollapse('preview'));
+    document.getElementById('large-file-banner-close').addEventListener('click', () => {
+      this.hideLargeFileNotice();
+      this._largeFileNoticeDismissed = true;
+    });
+    document.getElementById('about-close').addEventListener('click', () => this.hideAbout());
+    document.getElementById('about-dialog').addEventListener('click', (e) => {
+      if (e.target.id === 'about-dialog') this.hideAbout();
+    });
+    document.getElementById('update-close').addEventListener('click', () => this.hideUpdateDialog());
+    document.getElementById('update-dialog').addEventListener('click', (e) => {
+      if (e.target.id === 'update-dialog') this.hideUpdateDialog();
+    });
+    document.getElementById('update-action').addEventListener('click', () => this.handleUpdateAction());
+    document.getElementById('update-skip').addEventListener('click', () => this.hideUpdateDialog());
+    document.getElementById('gitee-badge').addEventListener('click', () => {
+      const url = document.getElementById('gitee-badge').dataset.url;
+      if (url) this.openExternal(url);
+    });
+    document.getElementById('qq-group-badge').addEventListener('click', () => {
+      const badge = document.getElementById('qq-group-badge');
+      const url = badge.dataset.joinUrl;
+      if (url && !url.includes('YOUR_JOIN_KEY')) {
+        this.openExternal(url);
+      }
+    });
+    document.getElementById('github-badge').addEventListener('click', () => {
+      const url = document.getElementById('github-badge').dataset.url;
+      if (url) this.openExternal(url);
+    });
+
+    document.getElementById('btn-minimize').addEventListener('click', () => this.minimizeWindow());
+    document.getElementById('btn-maximize').addEventListener('click', () => this.toggleMaximize());
+    document.getElementById('btn-close').addEventListener('click', () => this.closeWindow());
+
+    window.addEventListener('resize', () => {
+      this.updateMaximizeIcon();
+      this.updateSideButtons();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (this.handleShortcutRecording(e)) return;
+
+      if (/^F(1[0-2]|[1-9])$/.test(e.key)) {
+        e.preventDefault();
+        return;
+      }
+
+      // Block WebView history navigation (back/forward)
+      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        const aboutDialog = document.getElementById('about-dialog');
+        if (!aboutDialog.classList.contains('hidden')) {
+          this.hideAbout();
+          return;
+        }
+        const shortcutsDialog = document.getElementById('shortcuts-dialog');
+        if (!shortcutsDialog.classList.contains('hidden')) {
+          this.hideShortcutsDialog();
+          return;
+        }
+      }
+
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl) {
+        const key = e.key.toLowerCase();
+
+        // Essential browser editing shortcuts — always let through
+        if (['a', 'c', 'v', 'x', 'z', 'y'].includes(key)) {
+          if (!e.shiftKey) return;
+          if (key === 'z') return; // Ctrl+Shift+Z for redo
+          e.preventDefault(); // Block Ctrl+Shift+C (DevTools) etc.
+          return;
+        }
+
+        // Block ALL other Ctrl shortcuts from triggering browser defaults
+        e.preventDefault();
+
+        // Handle TizuMark's global shortcuts (work even when editor is not focused)
+        // 主键用 e.code（物理键位）推导，规避某些浏览器/环境下 Ctrl+Shift+字母的
+        // e.key 取值异常（如被当成其它字符），保证 keyStr 与 globalShortcutLookup
+        // 中存储的 'Ctrl+Shift+F' 等稳定匹配。
+        let baseKey;
+        if (e.code && /^Key[A-Za-z]$/.test(e.code)) baseKey = e.code.slice(3).toUpperCase();
+        else if (e.code && /^Digit[0-9]$/.test(e.code)) baseKey = e.code.slice(5);
+        else baseKey = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+        const gParts = [];
+        if (e.ctrlKey || e.metaKey) gParts.push('Ctrl');
+        if (e.shiftKey) gParts.push('Shift');
+        if (e.altKey) gParts.push('Alt');
+        gParts.push(baseKey);
+        const keyStr = gParts.join('+');
+        const gHandler = this.globalShortcutLookup?.[keyStr];
+        // 全局快捷键在【捕获阶段】统一派发：命中即 stopPropagation，阻断事件继续
+        // 冒泡到 CodeMirror（及其默认键位 search.js 的 Shift-Ctrl-F→replace）或
+        // Tauri WebView 的原生处理，确保编辑器有焦点时也能且仅由本处触发一次。
+        // （CM 的 extraKeys 仍对相关键置 false 作为兜底。）
+        if (gHandler) {
+          e.stopPropagation();
+          gHandler();
+        }
+      }
+    }, true);
+  }
+
+  initResizer() {
+    const resizer = document.getElementById('resizer');
+    const container = document.querySelector('.editor-container');
+    const editorPane = document.getElementById('editor-pane');
+    const previewPane = document.getElementById('preview-pane');
+    const outlineSidebar = document.getElementById('outline-sidebar');
+    let isResizing = false;
+    let startX = 0;
+    let startEditorWidth = 0;
+
+    const onMouseMove = (e) => {
+      if (!isResizing) return;
+      const delta = e.clientX - startX;
+      const newEditorWidth = startEditorWidth + delta;
+      const outlineWidth = outlineSidebar.classList.contains('hidden') ? 0 : outlineSidebar.offsetWidth;
+      const resizerWidth = resizer.offsetWidth;
+      const totalContentWidth = container.offsetWidth - outlineWidth - resizerWidth;
+      const editorPercent = (newEditorWidth / totalContentWidth) * 100;
+      if (editorPercent > 20 && editorPercent < 80) {
+        const editorRatio = editorPercent / 100;
+        const previewRatio = 1 - editorRatio;
+        editorPane.style.flex = editorRatio.toFixed(4) + ' 0 0px';
+        previewPane.style.flex = previewRatio.toFixed(4) + ' 0 0px';
+        editorPane.style.width = '';
+        previewPane.style.width = '';
+        this._editorPercent = editorPercent;
+        this.cm.refresh();
+        this.updateSideButtons();
+      }
+    };
+
+    const onMouseUp = () => {
+      if (!isResizing) return;
+      isResizing = false;
+      document.body.classList.remove('is-resizing');
+    };
+
+    resizer.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isResizing = true;
+      startX = e.clientX;
+      startEditorWidth = editorPane.getBoundingClientRect().width;
+      document.body.classList.add('is-resizing');
+    });
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }
+
+  initFindReplace() {
+    const findPanel = document.getElementById('find-panel');
+    const findInput = document.getElementById('find-input');
+    const replaceInput = document.getElementById('replace-input');
+    const findCount = document.getElementById('find-count');
+    let lastQuery = '';
+    this.findMarks = this.findMarks || []; // 全部高亮的 markText 句柄
+
+    const isSafeRegex = FindReplace.isSafeRegex;
+
+    // 带步数上限的安全匹配计数：避免灾难性回溯卡死主线程
+    const safeMatchCount = (text, re, limit = 200000) => {
+      if (!re.global) re = new RegExp(re.source, re.flags + 'g');
+      let count = 0, steps = 0;
+      let m;
+      re.lastIndex = 0;
+      while ((m = re.exec(text)) !== null) {
+        count++;
+        steps += m.index + 1;
+        if (steps > limit || count > 100000) return -1; // 超限：疑似 ReDoS
+        if (re.lastIndex === m.index) re.lastIndex++;
+      }
+      return count;
+    };
+
+    const makeRegex = (q, flags) => {
+      try { return new RegExp(q, flags); } catch { return null; }
+    };
+
+    const getSearchCursor = () => {
+      const query = findInput.value;
+      if (!query) return null;
+      const caseSensitive = document.getElementById('find-case').checked;
+      const useRegex = document.getElementById('find-regex').checked;
+      if (useRegex) {
+        if (!isSafeRegex(query)) { this.setStatus(this.t('unsafeRegex')); return null; }
+        try { new RegExp(query); } catch { return null; }
+      }
+      const cursor = this.cm.getSearchCursor(
+        useRegex ? new RegExp(query, caseSensitive ? 'g' : 'gi') : query,
+        this.cm.getCursor(),
+        { caseFold: !caseSensitive }
+      );
+      return cursor;
+    };
+
+    let findComposing = false; // 输入法合成中（拼音/手写）：期间不触发搜索，避免主线程被反复全量高亮占满而卡死
+    const debounce = (fn, delay) => {
+      let t = null;
+      return (...args) => { if (t) clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+    };
+    const updateCount = () => {
+      if (findComposing) return; // 拼音合成中跳过；合成结束会立刻搜一次
+      const query = findInput.value;
+      if (!query) { findCount.textContent = ''; return; }
+      const caseSensitive = document.getElementById('find-case').checked;
+      const useRegex = document.getElementById('find-regex').checked;
+      const text = this.cm.getValue();
+      let count = 0;
+      if (useRegex) {
+        if (!isSafeRegex(query)) { findCount.textContent = ''; return; }
+        const re = makeRegex(query, caseSensitive ? 'g' : 'gi');
+        if (re) { const c = safeMatchCount(text, re); count = c < 0 ? '∞' : c; }
+      } else {
+        const lower = caseSensitive ? text : text.toLowerCase();
+        const q = caseSensitive ? query : query.toLowerCase();
+        let pos = 0;
+        while ((pos = lower.indexOf(q, pos)) !== -1) { count++; pos += q.length; }
+      }
+      if (count === '∞') { findCount.textContent = this.t('tooManyMatches') || '∞'; }
+      else findCount.textContent = count > 0 ? count + this.t('matches') : this.t('noMatches');
+      this.highlightAllMatches();
+      // 预览框（编辑模式下与编辑框并排）同样黄色高亮
+      this.highlightPreviewMatches(query, caseSensitive, useRegex);
+    };
+
+    // 输入防抖：避免每敲一个字符就同步全量搜索+高亮（尤其中文拼音边输边搜会卡死）
+    const debouncedFindUpdate = debounce(() => updateCount(), 160);
+    findInput.addEventListener('input', debouncedFindUpdate);
+    findInput.addEventListener('compositionstart', () => { findComposing = true; });
+    findInput.addEventListener('compositionend', () => {
+      findComposing = false;
+      updateCount(); // 合成结束立即搜索一次，即时反馈
+    });
+    document.getElementById('find-case').addEventListener('change', updateCount);
+    document.getElementById('find-regex').addEventListener('change', updateCount);
+
+    document.getElementById('find-next').addEventListener('click', () => {
+      const loop = document.getElementById('find-loop').checked;
+      const cursor = getSearchCursor();
+      if (cursor && cursor.findNext()) {
+        this.cm.setSelection(cursor.from(), cursor.to());
+        this.cm.scrollIntoView({ from: cursor.from(), to: cursor.to() }, 100);
+      } else if (cursor && loop) {
+        const q = findInput.value;
+        const useRegex = document.getElementById('find-regex').checked;
+        if (useRegex && !isSafeRegex(q)) return;
+        const cursor2 = this.cm.getSearchCursor(
+          useRegex ? new RegExp(q, document.getElementById('find-case').checked ? 'g' : 'gi') : q,
+          { line: 0, ch: 0 },
+          { caseFold: !document.getElementById('find-case').checked }
+        );
+        if (cursor2.findNext()) {
+          this.cm.setSelection(cursor2.from(), cursor2.to());
+          this.cm.scrollIntoView({ from: cursor2.from(), to: cursor2.to() }, 100);
+        }
+      }
+    });
+
+    document.getElementById('find-prev').addEventListener('click', () => {
+      const query = findInput.value;
+      if (!query) return;
+      const caseSensitive = document.getElementById('find-case').checked;
+      const useRegex = document.getElementById('find-regex').checked;
+      const cursor = this.cm.getCursor();
+      const text = this.cm.getValue();
+      
+      const posToOffset = (pos) => {
+        const lines = text.split('\n');
+        let offset = 0;
+        for (let i = 0; i < pos.line; i++) offset += lines[i].length + 1;
+        return offset + pos.ch;
+      };
+      
+      const offsetToPos = (offset) => {
+        const lines = text.split('\n');
+        let remaining = offset;
+        for (let i = 0; i < lines.length; i++) {
+          if (remaining <= lines[i].length) {
+            return { line: i, ch: remaining };
+          }
+          remaining -= lines[i].length + 1;
+        }
+        return { line: lines.length - 1, ch: 0 };
+      };
+      
+      const currentOffset = posToOffset(cursor);
+      const flags = caseSensitive ? 'g' : 'gi';
+      if (useRegex && !isSafeRegex(query)) return;
+      const regex = useRegex
+        ? new RegExp(query, flags)
+        : new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+      
+      let lastMatch = null;
+      let lastOverall = null;
+      let m;
+      while ((m = regex.exec(text)) !== null) {
+        const cand = { from: offsetToPos(m.index), to: offsetToPos(m.index + m[0].length) };
+        lastOverall = cand;
+        if (m.index + m[0].length < currentOffset) {
+          lastMatch = cand;
+        }
+        if (regex.lastIndex === m.index) { regex.lastIndex++; }
+      }
+
+      const loop = document.getElementById('find-loop').checked;
+      if (lastMatch) {
+        this.cm.setSelection(lastMatch.from, lastMatch.to);
+        this.cm.scrollIntoView({ from: lastMatch.from, to: lastMatch.to }, 100);
+      } else if (loop && lastOverall) {
+        this.cm.setSelection(lastOverall.from, lastOverall.to);
+        this.cm.scrollIntoView({ from: lastOverall.from, to: lastOverall.to }, 100);
+      }
+    });
+
+    document.getElementById('replace-one').addEventListener('click', () => {
+      if (this.cm.somethingSelected()) {
+        this.cm.replaceSelection(replaceInput.value);
+      }
+      document.getElementById('find-next').click();
+    });
+
+    document.getElementById('replace-all').addEventListener('click', () => {
+      const query = findInput.value;
+      const replacement = replaceInput.value;
+      if (!query) return;
+      const caseSensitive = document.getElementById('find-case').checked;
+      const useRegex = document.getElementById('find-regex').checked;
+
+      if (useRegex && !isSafeRegex(query)) return;
+      // 使用 CodeMirror 的 searchCursor.replace，原生支持 $1/$& 反向引用（正则替换不被退化为文本替换）
+      const search = useRegex ? new RegExp(query, caseSensitive ? 'g' : 'gi') : query;
+      const cursor = this.cm.getSearchCursor(search, { line: 0, ch: 0 }, { caseFold: !caseSensitive });
+      let count = 0;
+      let steps = 0;
+      this.cm.operation(() => {
+        while (cursor.findNext()) {
+          count++;
+          steps++;
+          if (steps > 100000) break; // 防御性上限，避免极端情况卡死
+          cursor.replace(replacement);
+        }
+      });
+      if (count > 0) this.setStatus(this.t('replaceAllDone', { n: count }));
+    });
+
+    document.getElementById('find-close').addEventListener('click', () => this.closeFindPanel());
+
+    findInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('find-next').click();
+      }
+      if (e.key === 'Escape') this.closeFindPanel();
+    });
+
+    replaceInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('replace-one').click();
+      }
+      if (e.key === 'Escape') this.closeFindPanel();
+    });
+
+    this.initPreviewFind();
+  }
+
+  initPreviewFind() {
+    const previewFindInput = document.getElementById('preview-find-input');
+    const previewFindCount = document.getElementById('preview-find-count');
+    this.previewSelections = [];
+    this.previewSelectionIndex = -1;
+
+    let previewComposing = false; // 输入法合成中：期间不触发预览搜索，避免卡顿
+    const debouncePreview = (fn, delay) => { let t = null; return (...args) => { if (t) clearTimeout(t); t = setTimeout(() => fn(...args), delay); }; };
+    const updatePreviewCount = () => {
+      if (previewComposing) return;
+      const query = previewFindInput.value;
+      if (!query) { previewFindCount.textContent = ''; this.clearPreviewHighlight(); return; }
+      const caseSensitive = document.getElementById('preview-find-case').checked;
+      const useRegex = document.getElementById('preview-find-regex').checked;
+      const text = this.preview.textContent;
+      let count = 0;
+      if (useRegex) {
+        if (!isSafeRegex(query)) { previewFindCount.textContent = ''; return; }
+        const re = makeRegex(query, caseSensitive ? 'g' : 'gi');
+        if (re) { const c = safeMatchCount(text, re); count = c < 0 ? '∞' : c; }
+      } else {
+        const lower = caseSensitive ? text : text.toLowerCase();
+        const q = caseSensitive ? query : query.toLowerCase();
+        let pos = 0;
+        while ((pos = lower.indexOf(q, pos)) !== -1) { count++; pos += q.length; }
+      }
+      if (count === '∞') { previewFindCount.textContent = this.t('tooManyMatches') || '∞'; }
+      else previewFindCount.textContent = count > 0 ? count + this.t('matches') : this.t('noMatches');
+      if (query && count !== '∞' && count > 0) {
+        this.highlightPreviewMatches(query, caseSensitive, useRegex);
+      } else {
+        this.clearPreviewHighlights();
+      }
+    };
+
+    const doPreviewFind = (reverse = false) => {
+      const query = previewFindInput.value;
+      if (!query) return;
+      const caseSensitive = document.getElementById('preview-find-case').checked;
+      const useRegex = document.getElementById('preview-find-regex').checked;
+
+      const text = this.preview.textContent;
+      let matches = [];
+      
+      if (useRegex) {
+        if (!isSafeRegex(query)) return;
+        const regex = makeRegex(query, caseSensitive ? 'g' : 'gi');
+        if (regex) {
+          let m;
+          while ((m = regex.exec(text)) !== null) {
+            matches.push({ start: m.index, end: m.index + m[0].length });
+            if (matches.length > 10000) break;
+          }
+        }
+      } else {
+        const flags = caseSensitive ? 'g' : 'gi';
+        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(escapedQuery, flags);
+        let m;
+        while ((m = regex.exec(text)) !== null) {
+          matches.push({ start: m.index, end: m.index + m[0].length });
+          if (matches.length > 10000) break;
+        }
+      }
+
+      if (matches.length === 0) return;
+
+      let currentPos = 0;
+      const selection = window.getSelection();
+      if (selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const preRange = document.createRange();
+        preRange.selectNodeContents(this.preview);
+        preRange.setEnd(range.endContainer, range.endOffset);
+        currentPos = preRange.toString().length;
+      }
+
+      const loop = document.getElementById('preview-find-loop').checked;
+      let targetMatch = null;
+      if (reverse) {
+        let found = false;
+        for (let i = matches.length - 1; i >= 0; i--) {
+          if (matches[i].end < currentPos) { targetMatch = matches[i]; found = true; break; }
+        }
+        if (!found && loop) targetMatch = matches[matches.length - 1];
+      } else {
+        let found = false;
+        for (let i = 0; i < matches.length; i++) {
+          if (matches[i].start >= currentPos) { targetMatch = matches[i]; found = true; break; }
+        }
+        if (!found && loop) targetMatch = matches[0];
+      }
+
+      if (targetMatch) this.highlightPreviewMatch(targetMatch);
+    };
+
+    this.highlightPreviewMatch = (target) => {
+      const walker = document.createTreeWalker(this.preview, NodeFilter.SHOW_TEXT, null, false);
+      let node;
+      let charCount = 0;
+      while (node = walker.nextNode()) {
+        const nodeLen = node.nodeValue.length;
+        if (charCount + nodeLen > target.start) {
+          const startOffset = target.start - charCount;
+          const endOffset = target.end - charCount;
+          const range = document.createRange();
+          range.setStart(node, startOffset);
+          range.setEnd(node, endOffset);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          range.startContainer.parentElement.scrollIntoView({ behavior: 'auto', block: 'center' });
+          return;
+        }
+        charCount += nodeLen;
+      }
+    };
+
+    this.clearPreviewHighlight = () => {
+      this.clearPreviewHighlights();
+    };
+
+    // 输入防抖 + 输入法合成守卫：避免预览框边输边搜卡死
+    const debouncedPreviewUpdate = debouncePreview(() => updatePreviewCount(), 160);
+    previewFindInput.addEventListener('input', debouncedPreviewUpdate);
+    previewFindInput.addEventListener('compositionstart', () => { previewComposing = true; });
+    previewFindInput.addEventListener('compositionend', () => {
+      previewComposing = false;
+      updatePreviewCount(); // 合成结束立即搜索一次
+    });
+    document.getElementById('preview-find-case').addEventListener('change', updatePreviewCount);
+    document.getElementById('preview-find-regex').addEventListener('change', updatePreviewCount);
+
+    document.getElementById('preview-find-next').addEventListener('click', () => doPreviewFind(false));
+    document.getElementById('preview-find-prev').addEventListener('click', () => doPreviewFind(true));
+    document.getElementById('preview-find-close').addEventListener('click', () => {
+      document.getElementById('preview-find-panel').classList.add('hidden');
+      this.clearPreviewHighlight();
+    });
+
+    previewFindInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        doPreviewFind(e.shiftKey);
+      }
+      if (e.key === 'Escape') {
+        document.getElementById('preview-find-panel').classList.add('hidden');
+        this.clearPreviewHighlight();
+      }
+    });
+  }
+
+  toggleFindPanel(replaceMode = false) {
+    // 互斥：打开页面内查找时关闭跨文件搜索弹框
+    const csDlg = document.getElementById('cross-search-dialog');
+    if (csDlg) csDlg.classList.add('hidden');
+    if (this.viewMode === 'preview') {
+      const panel = document.getElementById('preview-find-panel');
+      const isHidden = panel.classList.contains('hidden');
+      document.getElementById('find-panel').classList.add('hidden');
+      panel.classList.toggle('hidden');
+      if (isHidden) {
+        const input = document.getElementById('preview-find-input');
+        const selection = window.getSelection();
+        if (selection.toString()) {
+          input.value = selection.toString();
+        }
+        input.focus();
+        input.select();
+        if (input.value) this.highlightPreviewMatches(input.value, document.getElementById('preview-find-case').checked, document.getElementById('preview-find-regex').checked);
+      } else {
+        this.clearPreviewHighlights();
+      }
+    } else {
+      const panel = document.getElementById('find-panel');
+      const isHidden = panel.classList.contains('hidden');
+      document.getElementById('preview-find-panel').classList.add('hidden');
+      panel.classList.toggle('hidden');
+      if (isHidden) {
+        const input = document.getElementById('find-input');
+        if (this.cm.somethingSelected()) {
+          input.value = this.cm.getSelection();
+        }
+        input.focus();
+        input.select();
+        this.highlightAllMatches();
+        // 预览框（编辑模式下与编辑框并排）同样黄色高亮
+        this.highlightPreviewMatches(input.value, document.getElementById('find-case').checked, document.getElementById('find-regex').checked);
+      } else {
+        this.clearFindHighlights();
+      }
+    }
+  }
+
+  closeFindPanel() {
+    document.getElementById('find-panel').classList.add('hidden');
+    document.getElementById('preview-find-panel').classList.add('hidden');
+    this.clearPreviewHighlight();
+    this.clearFindHighlights();
+    if (this.viewMode === 'edit') {
+      this.cm.focus();
+    }
+  }
+
+  highlightAllMatches() {
+    // 全部高亮：用 getSearchCursor 遍历所有匹配，markText 加 .search-match 类。
+    // 上限 2000 防止超大文档卡顿；超限仅高亮前 2000 个（计数仍由 updateCount 准确显示）。
+    this.clearFindHighlights();
+    const findInput = document.getElementById('find-input');
+    if (!findInput) return;
+    const query = findInput.value;
+    if (!query) return;
+    const caseSensitive = document.getElementById('find-case').checked;
+    const useRegex = document.getElementById('find-regex').checked;
+    let re;
+    try {
+      if (useRegex) {
+        if (!FindReplace.isSafeRegex(query)) return;
+        re = new RegExp(query, caseSensitive ? 'g' : 'gi');
+      } else {
+        re = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), caseSensitive ? 'g' : 'gi');
+      }
+    } catch { return; }
+    const LIMIT = 2000;
+    this.cm.operation(() => {
+      const cursor = this.cm.getSearchCursor(re, { line: 0, ch: 0 }, { caseFold: !caseSensitive });
+      let count = 0;
+      while (cursor.findNext()) {
+        if (count >= LIMIT) break;
+        try {
+          const mark = this.cm.markText(cursor.from(), cursor.to(), { className: 'search-match' });
+          this.findMarks.push(mark);
+        } catch (_) {}
+        count++;
+      }
+    });
+  }
+
+  clearFindHighlights() {
+    if (this.findMarks && this.findMarks.length) {
+      this.findMarks.forEach(m => { try { m.clear(); } catch (_) {} });
+    }
+    this.findMarks = [];
+  }
+
+  // 跨文件搜索高亮：独立于文件内查找（findMarks），便于两种查找互斥时各自清理互不干扰
+  clearCrossSearchHighlights() {
+    if (!this.crossSearchMarks) { this.crossSearchMarks = []; return; }
+    this.crossSearchMarks.forEach(m => { try { m.clear(); } catch (_) {} });
+    this.crossSearchMarks = [];
+  }
+
+  // 预览高亮：在 #preview 的文本节点中把匹配片段包裹为 <mark class="search-match">，
+  // 与编辑器高亮共用同一配色（醒目黄色）。从后往前包裹，避免节点切分影响更早偏移。
+  clearPreviewHighlights() {
+    const pv = this.preview;
+    if (!pv) { window.getSelection().removeAllRanges(); return; }
+    const marks = pv.querySelectorAll('mark.preview-search-hl');
+    marks.forEach(mk => {
+      const parent = mk.parentNode;
+      while (mk.firstChild) parent.insertBefore(mk.firstChild, mk);
+      parent.removeChild(mk);
+    });
+    pv.normalize();
+    window.getSelection().removeAllRanges();
+  }
+
+  highlightPreviewMatches(query, caseSensitive, useRegex) {
+    const pv = this.preview;
+    if (!pv) return;
+    this.clearPreviewHighlights();
+    if (!query) return;
+    const text = pv.textContent;
+    if (!text) return;
+    const matches = [];
+    const LIMIT = 2000;
+    if (useRegex) {
+      if (!FindReplace.isSafeRegex(query)) return;
+      let re;
+      try { re = new RegExp(query, caseSensitive ? 'g' : 'gi'); } catch { return; }
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        matches.push([m.index, m.index + m[0].length]);
+        if (matches.length >= LIMIT) break;
+        if (re.lastIndex === m.index) re.lastIndex++;
+      }
+    } else {
+      const hay = caseSensitive ? text : text.toLowerCase();
+      const q = caseSensitive ? query : query.toLowerCase();
+      let pos = 0;
+      while ((pos = hay.indexOf(q, pos)) !== -1) {
+        matches.push([pos, pos + q.length]);
+        pos += q.length;
+        if (matches.length >= LIMIT) break;
+      }
+    }
+    if (!matches.length) return;
+    const walker = document.createTreeWalker(pv, NodeFilter.SHOW_TEXT, null, false);
+    const nodes = [];
+    let node;
+    while ((node = walker.nextNode())) { if (node.nodeValue) nodes.push(node); }
+    let mi = 0;
+    let charCount = 0;
+    for (const n of nodes) {
+      const len = n.nodeValue.length;
+      const nodeMatches = [];
+      while (mi < matches.length && matches[mi][0] >= charCount && matches[mi][1] <= charCount + len) {
+        nodeMatches.push([matches[mi][0] - charCount, matches[mi][1] - charCount]);
+        mi++;
+      }
+      while (mi < matches.length && matches[mi][0] >= charCount && matches[mi][0] < charCount + len && matches[mi][1] > charCount + len) mi++;
+      for (let k = nodeMatches.length - 1; k >= 0; k--) {
+        const s = nodeMatches[k][0], e = nodeMatches[k][1];
+        const range = document.createRange();
+        range.setStart(n, s);
+        range.setEnd(n, e);
+        const mark = document.createElement('mark');
+        mark.className = 'search-match preview-search-hl';
+        try { range.surroundContents(mark); } catch (_) {}
+      }
+      charCount += len;
+    }
+  }
+
+  openCrossSearchDialog() {
+    const dlg = document.getElementById('cross-search-dialog');
+    if (!dlg) return;
+    dlg.classList.remove('hidden');
+    // 互斥：打开跨文件搜索时关闭页面内查找并清除高亮，避免两种查找同时干扰编辑器/预览
+    document.getElementById('find-panel').classList.add('hidden');
+    document.getElementById('preview-find-panel').classList.add('hidden');
+    this.clearFindHighlights();
+    this.clearPreviewHighlights();
+    this.clearCrossSearchHighlights();
+    // 浮动面板定位：首次显示在右上角避免遮挡正文；已拖动过则保持上次位置并夹取在视口内
+    const panel = document.getElementById('cs-panel');
+    if (panel) {
+      const w = panel.offsetWidth || 560;
+      const vw = window.innerWidth || 1200;
+      const vh = window.innerHeight || 800;
+      let left = panel.style.left ? parseInt(panel.style.left, 10) : Math.max(12, vw - w - 24);
+      let top = panel.style.top ? parseInt(panel.style.top, 10) : Math.max(12, Math.round(vh * 0.08));
+      left = Math.max(0, Math.min(left, vw - 80));
+      top = Math.max(0, Math.min(top, vh - 40));
+      panel.style.left = left + 'px';
+      panel.style.top = top + 'px';
+    }
+    // 默认目录：当前文件所在目录
+    const dirInput = document.getElementById('cs-dir');
+    if (this.activeTab && this.activeTab.filePath) {
+      const fp = this.activeTab.filePath;
+      const m = fp.match(/[/\\][^/\\]*$/);
+      dirInput.value = m ? fp.substring(0, m.index) : fp;
+    }
+    const q = document.getElementById('cs-query');
+    if (this.cm && this.cm.somethingSelected()) q.value = this.cm.getSelection();
+    q.focus();
+    q.select();
+  }
+
+  initCrossSearch() {
+    const dlg = document.getElementById('cross-search-dialog');
+    if (!dlg) return;
+    const panel = document.getElementById('cs-panel');
+    const handle = document.getElementById('cs-drag-handle');
+
+    // 拖动：从标题栏拖动浮动面板到其他位置（避开正文）。关闭按钮不触发拖动。
+    if (handle && panel) {
+      handle.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.dialog-close')) return;
+        e.preventDefault();
+        const startX = e.clientX, startY = e.clientY;
+        const startLeft = panel.offsetLeft, startTop = panel.offsetTop;
+        const onMove = (ev) => {
+          let nl = startLeft + (ev.clientX - startX);
+          let nt = startTop + (ev.clientY - startY);
+          nl = Math.max(0, Math.min(nl, (window.innerWidth || 1200) - 80));
+          nt = Math.max(0, Math.min(nt, (window.innerHeight || 800) - 40));
+          panel.style.left = nl + 'px';
+          panel.style.top = nt + 'px';
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          document.body.style.userSelect = '';
+        };
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    }
+
+    document.getElementById('cs-close').addEventListener('click', () => {
+      dlg.classList.add('hidden');
+      this.clearCrossSearchHighlights();
+      this.clearPreviewHighlights();
+    });
+    const updateDirRow = () => {
+      const isDir = document.querySelector('input[name="cs-scope"]:checked')?.value === 'dir';
+      document.getElementById('cs-dir-row').classList.toggle('hidden', !isDir);
+    };
+    document.querySelectorAll('input[name="cs-scope"]').forEach(r => r.addEventListener('change', updateDirRow));
+    document.getElementById('cs-browse').addEventListener('click', async () => {
+      const sel = await dialogOpen({ directory: true });
+      if (sel) document.getElementById('cs-dir').value = Array.isArray(sel) ? sel[0] : sel;
+    });
+    document.getElementById('cs-run').addEventListener('click', () => this.runCrossSearch());
+    document.getElementById('cs-query').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // 已有结果且 query 未变 → 跳到下一个匹配（循环查找可选）；否则重新搜索
+        if (this.crossSearchFlat && this.crossSearchFlat.length && this.csLastQuery === e.target.value) {
+          this.csNextMatch();
+        } else {
+          this.runCrossSearch();
+        }
+      }
+      if (e.key === 'Escape') dlg.classList.add('hidden');
+    });
+  }
+
+  // 跨文件搜索 - 打开文件范围：遍历 this.tabs，ensureTabLoaded 后对 content 按行搜索。
+  async searchOpenFiles(query, caseSensitive, useRegex) {
+    const results = [];
+    let re = null;
+    if (useRegex) {
+      if (!FindReplace.isSafeRegex(query)) return results;
+      try { re = new RegExp(query, caseSensitive ? 'g' : 'gi'); } catch { return results; }
+    }
+    const qLower = query.toLowerCase();
+    for (let i = 0; i < this.tabs.length; i++) {
+      const tab = this.tabs[i];
+      await this.ensureTabLoaded(tab);
+      const content = tab.content || '';
+      const lines = content.split('\n');
+      const matches = [];
+      const LIMIT = 500;
+      for (let j = 0; j < lines.length && matches.length < LIMIT; j++) {
+        const line = lines[j];
+        let col = -1, len = 0;
+        if (re) {
+          re.lastIndex = 0;
+          const m = re.exec(line);
+          if (m) { col = m.index; len = m[0].length; }
+        } else {
+          const hay = caseSensitive ? line : line.toLowerCase();
+          const idx = hay.indexOf(caseSensitive ? query : qLower);
+          if (idx >= 0) { col = idx; len = query.length; }
+        }
+        if (col >= 0) {
+          matches.push({ line: j + 1, col: col + 1, len, line_text: line.substring(0, 300) });
+        }
+      }
+      if (matches.length) {
+        results.push({ tabIndex: i, filePath: tab.filePath || '', name: tab.name || '', path: tab.filePath || tab.name || '', matches });
+      }
+    }
+    return results;
+  }
+
+  async runCrossSearch() {
+    const query = document.getElementById('cs-query').value;
+    if (!query) return;
+    const caseSensitive = document.getElementById('cs-case').checked;
+    const useRegex = document.getElementById('cs-regex').checked;
+    const scope = document.querySelector('input[name="cs-scope"]:checked')?.value || 'open';
+    const progress = document.getElementById('cs-progress');
+    const totalEl = document.getElementById('cs-total');
+    const resultsEl = document.getElementById('cs-results');
+    progress.classList.remove('hidden');
+    progress.textContent = this.t('searchRunning');
+    totalEl.textContent = '';
+    resultsEl.innerHTML = '';
+    this.csLastQuery = query;
+    this.clearCrossSearchHighlights();
+    this.crossSearchFlat = [];
+    this.crossSearchPos = -1;
+    try {
+      let results;
+      if (scope === 'open') {
+        results = await this.searchOpenFiles(query, caseSensitive, useRegex);
+      } else {
+        const dir = document.getElementById('cs-dir').value;
+        if (!dir) { totalEl.textContent = this.t('noResults'); progress.classList.add('hidden'); return; }
+        const raw = await TauriApi.searchInFiles({ dir, pattern: query, caseSensitive, useRegex, extensions: [] });
+        results = raw.map(r => ({ path: r.path, matches: r.matches.map(m => ({ line: m.line, col: m.col, len: 0, line_text: m.line_text })) }));
+      }
+      // 扁平化匹配列表，供“下一个 / 循环查找”导航
+      for (const f of results) {
+        for (const m of f.matches) {
+          this.crossSearchFlat.push({ filePath: f.path, line: m.line, col: m.col, len: m.len || 0 });
+        }
+      }
+      this.renderCrossSearchResults(results, query);
+    } catch (e) {
+      this.reportError('E_IO', { context: { query }, error: e });
+    } finally {
+      progress.classList.add('hidden');
+    }
+  }
+
+  // 跳到下一个匹配：勾选“循环查找”时在末尾回到第一个，否则停在最后一条
+  csNextMatch() {
+    const flat = this.crossSearchFlat;
+    if (!flat || !flat.length) return;
+    const loop = document.getElementById('cs-loop') ? document.getElementById('cs-loop').checked : false;
+    let next = this.crossSearchPos + 1;
+    if (next >= flat.length) {
+      if (!loop) return; // 不循环则停在最后
+      next = 0;
+    }
+    this.crossSearchPos = next;
+    const m = flat[next];
+    this.csHighlightCurrent();
+    this.jumpToMatch(m.filePath, m.line, m.col, m.len);
+  }
+
+  csHighlightCurrent() {
+    const items = document.querySelectorAll('#cs-results .cs-match');
+    items.forEach((el, i) => el.classList.toggle('current', i === this.crossSearchPos));
+    const cur = items[this.crossSearchPos];
+    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
+  }
+
+  renderCrossSearchResults(results, query) {
+    const totalEl = document.getElementById('cs-total');
+    const resultsEl = document.getElementById('cs-results');
+    const total = results.reduce((s, r) => s + r.matches.length, 0);
+    if (total === 0) {
+      totalEl.textContent = this.t('noResults');
+      resultsEl.innerHTML = '';
+      return;
+    }
+    totalEl.textContent = this.t('totalMatches', { n: total });
+    resultsEl.innerHTML = '';
+    for (const file of results) {
+      const group = document.createElement('div');
+      group.className = 'cs-file-group';
+      const header = document.createElement('div');
+      header.className = 'cs-file-header';
+      header.textContent = `${file.path || file.name} (${file.matches.length})`;
+      group.appendChild(header);
+      for (const m of file.matches) {
+        const item = document.createElement('div');
+        item.className = 'cs-match';
+        const snippet = (m.line_text || '').trim().substring(0, 120);
+        item.textContent = `${m.line}:${m.col}  ${snippet}`;
+        item.addEventListener('click', () => this.jumpToMatch(file.path, m.line, m.col, m.len || 0));
+        group.appendChild(item);
+      }
+      resultsEl.appendChild(group);
+    }
+  }
+
+  async jumpToMatch(filePath, line, col, len) {
+    const prevViewMode = this.viewMode;
+    if (filePath) {
+      await this.openFilePath(filePath);
+      // openFilePath 打开新文件时会切到 preview，这里恢复原视图模式，避免每次跳转改变用户视图
+      if (this.viewMode !== prevViewMode) {
+        this.viewMode = prevViewMode;
+        this.applyViewMode();
+      }
+    }
+    const pos = { line: Math.max(0, line - 1), ch: Math.max(0, col - 1) };
+    // 编辑区跳转目标行；大文档滑动窗口需先以该行为焦点重渲染，否则匹配行不在窗口片段内无法定位
+    this._previewFocusLine = pos.line;
+    this._previewScrollDriven = false;
+    await this.ensureTabLoaded(this.activeTab);
+    // 确保预览已用新文件内容渲染完（异步），便于后续预览高亮准确定位
+    await this.updatePreview();
+    this.cm.focus();
+    // 计算高亮区间：优先用后端返回的 len；目录搜索 len=0 时按查询在行内定位
+    let from = pos, to = pos;
+    const query = this.csLastQuery || '';
+    const cs = document.getElementById('cs-case').checked;
+    const ur = document.getElementById('cs-regex').checked;
+    if (len > 0) {
+      to = { line: pos.line, ch: pos.ch + len };
+    } else if (query) {
+      const lineText = this.cm.getLine(pos.line) || '';
+      let matchLen = 0;
+      if (ur) {
+        try {
+          const re = new RegExp(query, cs ? '' : 'i');
+          const m = lineText.slice(pos.ch).match(re);
+          if (m) matchLen = m[0].length;
+        } catch (_) { /* 非法正则忽略 */ }
+      } else {
+        const hay = cs ? lineText : lineText.toLowerCase();
+        const q = cs ? query : query.toLowerCase();
+        const idx = hay.indexOf(q, pos.ch);
+        if (idx !== -1) matchLen = q.length;
+      }
+      if (matchLen > 0) to = { line: pos.line, ch: pos.ch + matchLen };
+    }
+    // 编辑框黄色高亮：清除上一次跨文件高亮，标记当前匹配
+    this.clearCrossSearchHighlights();
+    if (to.ch !== pos.ch || to.line !== pos.line) {
+      this.cm.setSelection(from, to);
+      try {
+        const mark = this.cm.markText(from, to, { className: 'search-match' });
+        this.crossSearchMarks.push(mark);
+      } catch (_) {}
+    } else {
+      this.cm.setCursor(pos);
+    }
+    this.cm.scrollIntoView(pos, 100);
+    // 预览同步滚动到匹配行：预览 / 分屏模式下用户才能直观看到“跳转”
+    try {
+      this._buildWindowLineTops();
+      this._focusPreviewToLine(pos.line);
+    } catch (_) {}
+    // 预览框黄色高亮（编辑与预览两种模式下预览均可见）
+    if (query && (this.viewMode === 'preview' || this.viewMode === 'edit')) {
+      this.highlightPreviewMatches(query, cs, ur);
+    }
+  }
+
+  initScrollTopBtn() {
+    const scrollTopBtn = document.getElementById('scroll-top-btn');
+    this.preview.addEventListener('scroll', () => {
+      if (this.preview.scrollTop > 200) {
+        scrollTopBtn.classList.remove('hidden');
+      } else {
+        scrollTopBtn.classList.add('hidden');
+      }
+    });
+    scrollTopBtn.addEventListener('click', () => {
+      this.preview.scrollTo({ top: 0, behavior: 'auto' });
+    });
+  }
+
+  initExternalLinks() {
+    this.preview.addEventListener('click', async (e) => {
+      const img = e.target.closest('img');
+      if (img && img.src) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.showImageLightbox(img.src);
+        return;
+      }
+
+      const mermaidSvg = e.target.closest('.mermaid-container svg');
+      if (mermaidSvg) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.showLightbox(mermaidSvg, 'svg');
+        return;
+      }
+
+      // 任务列表 checkbox：点击切换 [ ] <-> [x] 并回写源码
+      const checkbox = e.target.closest('input[type="checkbox"]');
+      if (checkbox) {
+        // 注意：这里【不】调用 e.preventDefault()。一旦拦截默认行为，原生复选框不会
+        // 切换，需手动设置 checkbox.checked —— 但 appearance:none 的自定义勾选框在
+        // 真实 WebView 里手动改 checked 不一定重绘 :checked 样式，且我们用
+        // _suppressNextPreviewRerender 抑制了整篇重渲染，结果就是「点了没反应」。
+        // 正确做法：放行原生默认切换（浏览器自己画勾选态，必然有响应），处理器只
+        // 按源码反推目标态写回 [ ]/[x]，不再手动动 checkbox.checked。
+        e.stopPropagation();
+        this.handleTaskCheckboxToggle(checkbox);
+        return;
+      }
+
+      const link = e.target.closest('a');
+      if (!link) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const href = link.getAttribute('href');
+      if (!href) return;
+
+      if (href.startsWith('#')) {
+        // href 经 rehype-stringify 后非 ASCII 会被 URL 编码（如 #数学公式 → #%E6%95%B0...），
+        // 需 decode 才能匹配 heading 的字面 id（id="数学公式"）。
+        const id = decodeURIComponent(href.substring(1));
+        const target = this.preview.querySelector(`#${CSS.escape(id)}`);
+        if (target) {
+          const previewHeight = this.preview.clientHeight;
+          const targetRect = target.getBoundingClientRect();
+          const previewRect = this.preview.getBoundingClientRect();
+          const top = targetRect.top - previewRect.top + this.preview.scrollTop
+                    - (previewHeight / 2) + (targetRect.height / 2);
+          this.preview.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+          target.classList.add('footnote-flash');
+          setTimeout(() => target.classList.remove('footnote-flash'), 1300);
+        }
+        return;
+      }
+
+      // 外部 http(s) 链接：即便以 .md 结尾也是 gitee/github 等网页，
+      // 一律用系统浏览器打开；不要在 app 内 fetch 渲染（webview 跨域 fetch 必失败且无意义）。
+      if (href.startsWith('http://') || href.startsWith('https://')) {
+        this.openExternal(href);
+        return;
+      }
+
+      if (isMarkdownLink(href)) {
+        try {
+          if (href.startsWith('http://') || href.startsWith('https://')) {
+            const resp = await fetch(href);
+            if (resp.ok) {
+              const content = await resp.text();
+              const name = href.split('/').pop();
+              this.addTab(name, content, null);
+              this.activeTab.savedContent = content;
+              this.updateTabDisplay();
+              return;
+            }
+          } else if (TauriApi.isAvailable()) {
+            // 本地相对链接：相对当前文档所在目录解析成绝对路径，
+            // 直接读取文件（不要 fetch webview 源，否则会被 SPA 回退返回 index.html）。
+            const tab = this.activeTab;
+            if (tab && tab.filePath) {
+              const targetPath = resolveDocPath(tab.filePath, this.normalizeLinkHref(href));
+              const existingIndex = this.tabs.findIndex(t => t.filePath === targetPath);
+              if (existingIndex !== -1) {
+                this.switchTab(existingIndex);
+                return;
+              }
+              const content = await this.readFileNormalized(targetPath);
+              const name = targetPath.split(/[/\\]/).pop();
+              this.addTab(name, content, targetPath);
+              this.activeTab.savedContent = content;
+              this.updateTabDisplay();
+              return;
+            }
+            // 无活动文件（如「使用说明」等打包资源 Tab）：
+            // 1) 绝对路径链接（D:\... / D:/... / /...）直接用 Rust read_file 读取，不要走 fetch/URL；
+            // 2) 相对打包资源（如 demo.md）走专用命令 read_bundled_file，dev/prod 都能找到。
+            const normHref = this.normalizeLinkHref(href);
+            if (/^[a-zA-Z]:[\\/]/.test(normHref) || normHref.startsWith('/')) {
+              try {
+                const content = await this.readFileNormalized(normHref);
+                if (content && !content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
+                  await this._openBundledFile(href, content, normHref);
+                  return;
+                }
+              } catch (err) {
+                console.error('Failed to open absolute markdown link:', href, err);
+                this.reportError('openLink', { params: { href }, error: err });
+                return;
+              }
+            }
+            // 相对打包资源（demo.md / screenshots/* 等）：read_bundled_file 在 dev 模式
+            // 回退到项目根读取，prod 模式从资源目录读取，统一入口。
+            try {
+              const result = await TauriApi.readBundledFile({ filename: normHref });
+              // 返回 { content, path }：path 是实际读取到的本地路径，
+              // dev 模式 = 项目根（D:/project/tizu-mark/demo.md），
+              // 生产 = 资源目录（C:/Program Files/.../resources/demo.md）。
+              // 用它设 tab.filePath，让 demo.md 内的相对图片能按真实目录解析。
+              const content = result && typeof result === 'object' ? result.content : result;
+              const realPath = result && typeof result === 'object' ? result.path : normHref;
+              if (content && !content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
+                await this._openBundledFile(href, content, realPath);
+                return;
+              }
+            } catch (err) {
+              console.error('Failed to open bundled markdown link:', href, err);
+              this.reportError('openLink', { params: { href }, error: err });
+            }
+          } else {
+            const resp = await fetch(href);
+            if (resp.ok) {
+              const content = await resp.text();
+              const name = href.split(/[/\\]/).pop();
+              this.addTab(name, content, null);
+              this.activeTab.savedContent = content;
+              this.updateTabDisplay();
+              return;
+            }
+          }
+        } catch (err) {
+          console.error('Failed to open markdown link:', href, err);
+          this.reportError('openLink', { params: { href }, error: err });
+          return;
+        }
+      }
+
+      if (href.startsWith('mailto:') || href.startsWith('tel:')) {
+        window.location.href = href;
+        return;
+      }
+
+      try {
+        if (!await TauriApi.shellOpen(href)) {
+          window.open(href, '_blank', 'noopener,noreferrer');
+        }
+      } catch (err) {
+        window.open(href, '_blank', 'noopener,noreferrer');
+      }
+    }, true);
+  }
+
+  showImageLightbox(src) {
+    this.showLightbox(src, 'image');
+  }
+
+  showLightbox(content, type) {
+    let scale = 1, tx = 0, ty = 0;
+    let naturalW = 0, naturalH = 0;
+    let isDragging = false, startX = 0, startY = 0, startTx = 0, startTy = 0;
+
+    const wasOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'image-lightbox';
+
+    let el;
+    if (type === 'svg') {
+      el = document.createElement('div');
+      el.className = 'lightbox-svg-wrapper';
+      el.appendChild(content.cloneNode(true));
+    } else {
+      el = document.createElement('img');
+      el.src = content;
+    }
+    const hint = document.createElement('div');
+    hint.className = 'lightbox-hint';
+    hint.innerHTML = '<span>🖱 滚轮缩放 · 拖动平移 · 双击重置 · Esc 关闭</span><span class="lightbox-hint-close">&times;</span>';
+    hint.querySelector('.lightbox-hint-close').addEventListener('click', () => hint.remove());
+    overlay.appendChild(hint);
+    overlay.appendChild(el);
+    document.body.appendChild(overlay);
+
+    const updateTransform = () => {
+      el.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    };
+
+    const clampTransform = () => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const maxTx = Math.abs(naturalW * scale - vw) / 2;
+      const maxTy = Math.abs(naturalH * scale - vh) / 2;
+      tx = Math.max(-maxTx, Math.min(maxTx, tx));
+      ty = Math.max(-maxTy, Math.min(maxTy, ty));
+    };
+
+    // Fit to viewport on open
+    const initFit = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        naturalW = rect.width;
+        naturalH = rect.height;
+        const fitScale = Math.min(window.innerWidth / naturalW, window.innerHeight / naturalH, 1);
+        if (fitScale < 1) {
+          scale = fitScale;
+          updateTransform();
+        }
+      } else {
+        requestAnimationFrame(initFit);
+      }
+    };
+    if (type === 'image') {
+      if (el.complete) {
+        requestAnimationFrame(initFit);
+      } else {
+        el.addEventListener('load', () => requestAnimationFrame(initFit));
+      }
+    } else {
+      requestAnimationFrame(initFit);
+    }
+
+    const close = () => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.overflow = wasOverflow;
+    };
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+
+    overlay.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const oldS = scale;
+      scale += e.deltaY < 0 ? 0.15 : -0.15;
+      scale = Math.max(0.2, scale);
+      const ratio = scale / oldS;
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left - rect.width / 2;
+      const my = e.clientY - rect.top - rect.height / 2;
+      tx = mx + (tx - mx) * ratio;
+      ty = my + (ty - my) * ratio;
+      clampTransform();
+      updateTransform();
+    }, { passive: false });
+
+    el.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startTx = tx;
+      startTy = ty;
+      el.style.cursor = 'grabbing';
+    });
+
+    const onMouseMove = (e) => {
+      if (!isDragging) return;
+      tx = startTx + (e.clientX - startX);
+      ty = startTy + (e.clientY - startY);
+      clampTransform();
+      updateTransform();
+    };
+    document.addEventListener('mousemove', onMouseMove);
+
+    const onMouseUp = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      el.style.cursor = '';
+    };
+    document.addEventListener('mouseup', onMouseUp);
+
+    el.addEventListener('dblclick', () => {
+      scale = 1;
+      tx = 0;
+      ty = 0;
+      updateTransform();
+    });
+  }
+
+  initDragDrop() {
+    const app = document.getElementById('app');
+    const dragOverlay = document.getElementById('drag-overlay');
+
+    if (TauriApi.isAvailable()) {
+      TauriApi.onEvent('tauri://drag-enter', (e) => {
+        if (e.payload && e.payload.paths && e.payload.paths.length > 0) {
+          app.classList.add('drag-over');
+          dragOverlay.classList.remove('hidden');
+        }
+      });
+
+      TauriApi.onEvent('tauri://drag-over', (e) => {
+        if (e.payload && e.payload.paths && e.payload.paths.length > 0) {
+          app.classList.add('drag-over');
+          dragOverlay.classList.remove('hidden');
+        }
+      });
+
+      TauriApi.onEvent('tauri://drag-drop', async (event) => {
+        app.classList.remove('drag-over');
+        dragOverlay.classList.add('hidden');
+        // 目录/文件统一分发：目录进工作区（已有不同工作区时弹确认），文件开 tab。
+        // 注意：不要在此先 showLoading——加载遮罩 z-index(10000) 会盖住确认框，
+        // 导致切换工作区确认框点不到而卡在加载页；加载由 openFolderPath 内部负责。
+        await this.openPathsSmart(event.payload.paths || []);
+      });
+
+      TauriApi.onEvent('tauri://drag-leave', () => {
+        app.classList.remove('drag-over');
+        dragOverlay.classList.add('hidden');
+      });
+    } else {
+      app.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer.types.includes('Files')) {
+          app.classList.add('drag-over');
+          dragOverlay.classList.remove('hidden');
+        }
+      });
+
+      app.addEventListener('dragleave', (e) => {
+        if (!app.contains(e.relatedTarget)) {
+          app.classList.remove('drag-over');
+          dragOverlay.classList.add('hidden');
+        }
+      });
+
+      app.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        app.classList.remove('drag-over');
+        dragOverlay.classList.add('hidden');
+        const files = e.dataTransfer.files;
+        if (!files || files.length === 0) return;
+
+        for (const file of files) {
+          try {
+            const content = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result);
+              reader.onerror = () => reject(reader.error);
+              reader.readAsText(file);
+            });
+            this.addTab(file.name, content, null);
+            this.setStatus(`${this.t('opened')}: ${file.name}`);
+          } catch (err) {
+            this.setStatus(`${this.t('openFailed')}: ${err}`);
+          }
+        }
+      });
+    }
+  }
+
+  showSaveDialog(title, message, saveLabel, discardLabel, cancelLabel) {
+    return Dialogs.showSaveDialog({
+      title, message, saveLabel, discardLabel, cancelLabel,
+      t: (k, p) => this.t(k, p),
+      doc: document,
+    });
+  }
+
+  showConfirmDialog(title, message, action = null) {
+    return Dialogs.showConfirmDialog({
+      title, message, action,
+      t: (k, p) => this.t(k, p),
+      showToast: (msg, type) => this.showToast(msg, type),
+      doc: document,
+    });
+  }
+
+  initInsertDialogs() {
+    // Insert Link dialog
+    document.getElementById('insert-link-ok').addEventListener('click', () => {
+      const text = document.getElementById('insert-link-text').value.trim();
+      const url = document.getElementById('insert-link-url').value.trim();
+      if (!url) return;
+      const linkText = this.escapeMdText(text || url);
+      const safeUrl = String(url).replace(/\\/g, '\\\\').replace(/\)/g, '\\)');
+      const sel = this.cm.getSelection();
+      if (sel) {
+        this.cm.replaceSelection(`[${this.escapeMdText(sel)}](${safeUrl})`);
+      } else {
+        this.insertAtCursor(`[${linkText}](${safeUrl})`, linkText.length + 3);
+      }
+      this.hideInsertLinkDialog();
+      this.cm.focus();
+    });
+    document.getElementById('insert-link-cancel').addEventListener('click', () => this.hideInsertLinkDialog());
+    document.getElementById('insert-link-close').addEventListener('click', () => this.hideInsertLinkDialog());
+    document.getElementById('insert-link-dialog').addEventListener('click', (e) => {
+      if (e.target.id === 'insert-link-dialog') this.hideInsertLinkDialog();
+    });
+    document.getElementById('insert-link-url').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('insert-link-ok').click();
+    });
+    document.getElementById('insert-link-text').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('insert-link-ok').click();
+    });
+
+    // Insert Image dialog
+    const sourceSelect = document.getElementById('insert-image-source');
+    sourceSelect.addEventListener('change', () => {
+      const isLocal = sourceSelect.value === 'local';
+      document.getElementById('insert-image-local-field').classList.toggle('hidden', !isLocal);
+      document.getElementById('insert-image-alt-field').classList.toggle('hidden', !isLocal);
+      document.getElementById('insert-image-web-field').classList.toggle('hidden', isLocal);
+    });
+    document.getElementById('insert-image-browse').addEventListener('click', async () => {
+      try {
+        const selected = await dialogOpen({
+          multiple: false,
+          filters: [
+            { name: this.t('imageLocal'), extensions: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'] }
+          ]
+        });
+        if (selected) {
+          document.getElementById('insert-image-file').value = selected;
+        }
+      } catch (_) {}
+    });
+    document.querySelector('#insert-image-alt-hint .hint-text').textContent = this.t('imageAltHint');
+    document.querySelector('#insert-image-store-hint .hint-text').textContent = this.t('imageStoreModeHint');
+    document.getElementById('insert-image-ok').addEventListener('click', () => this.handleInsertImageOk());
+    document.getElementById('insert-image-cancel').addEventListener('click', () => this.hideInsertImageDialog());
+    document.getElementById('insert-image-close').addEventListener('click', () => this.hideInsertImageDialog());
+    document.getElementById('insert-image-dialog').addEventListener('click', (e) => {
+      if (e.target.id === 'insert-image-dialog') this.hideInsertImageDialog();
+    });
+  }
+
+  initImagePaste() {
+    const wrapper = document.getElementById('editor-wrapper');
+    if (!wrapper) return;
+    wrapper.addEventListener('paste', (e) => {
+      const items = Array.from(e.clipboardData.items).filter(i => i.type.startsWith('image/'));
+      if (items.length === 0) return;
+      e.preventDefault();
+      for (const item of items) {
+        const file = item.getAsFile();
+        if (file) {
+          this.handlePasteImage(file).catch(err => {
+            this.setStatus(this.t('imagePasteFailed') + ': ' + err);
+          });
+        } else {
+          this.reportError('clipboardImage');
+        }
+      }
+    });
+  }
+
+  showInsertLinkDialog() {
+    const sel = this.cm.getSelection();
+    document.getElementById('insert-link-text').value = sel || '';
+    document.getElementById('insert-link-url').value = '';
+    // Clipboard URL detection
+    try {
+      navigator.clipboard.readText().then(text => {
+        if (text && (text.startsWith('http://') || text.startsWith('https://'))) {
+          document.getElementById('insert-link-url').value = text;
+          const textInput = document.getElementById('insert-link-text');
+          if (!textInput.value) {
+            textInput.placeholder = this.t('linkAutoDetected');
+          }
+        }
+      }).catch(() => {});
+    } catch (_) {}
+    document.getElementById('insert-link-dialog').classList.remove('hidden');
+    setTimeout(() => document.getElementById('insert-link-text').focus(), 100);
+  }
+
+  hideInsertLinkDialog() {
+    document.getElementById('insert-link-dialog').classList.add('hidden');
+  }
+
+  showInsertImageDialog() {
+    document.getElementById('insert-image-source').value = 'local';
+    document.getElementById('insert-image-local-field').classList.remove('hidden');
+    document.getElementById('insert-image-alt-field').classList.remove('hidden');
+    document.getElementById('insert-image-web-field').classList.add('hidden');
+    document.getElementById('insert-image-file').value = '';
+    document.getElementById('insert-image-url').value = '';
+    document.getElementById('insert-image-alt').value = '';
+    document.querySelector('#insert-image-alt-hint .hint-text').textContent = this.t('imageAltHint');
+    document.querySelector('#insert-image-store-hint .hint-text').textContent = this.t('imageStoreModeHint');
+    document.getElementById('insert-image-dialog').classList.remove('hidden');
+    setTimeout(() => {
+      const browseBtn = document.getElementById('insert-image-browse');
+      if (browseBtn) browseBtn.focus();
+    }, 100);
+  }
+
+  hideInsertImageDialog() {
+    document.getElementById('insert-image-dialog').classList.add('hidden');
+  }
+
+  async handleInsertImageOk() {
+    const alt = document.getElementById('insert-image-alt').value.trim();
+    const localField = document.getElementById('insert-image-local-field');
+    const isLocal = !localField.classList.contains('hidden');
+
+    if (isLocal) {
+      const filePath = document.getElementById('insert-image-file').value.trim();
+      if (!filePath) {
+        this.showToast(this.t('imageFileRequired'));
+        return;
+      }
+      const storeMode = this.settings.imageInsertMode || 'assets';
+
+      if (storeMode === 'assets') {
+        if (!this.activeTab || !this.activeTab.filePath) {
+          this.showToast(this.t('needSaveFirst'));
+          return;
+        }
+        await this.insertLocalImageAssets(filePath, alt);
+      } else {
+        await this.insertLocalImageBase64(filePath, alt);
+      }
+    } else {
+      const url = document.getElementById('insert-image-url').value.trim();
+      if (!url) {
+        this.showToast(this.t('imageUrlRequired'));
+        return;
+      }
+      this.insertImageBlock(`![${this.escapeMdText(alt || 'image')}](${url})`);
+    }
+    this.hideInsertImageDialog();
+    this.cm.focus();
+  }
+
+  async insertLocalImageAssets(filePath, alt) {
+    const tab = this.activeTab;
+    if (!tab.filePath) {
+      this.setStatus(this.t('needSaveFirst'));
+      return;
+    }
+    const { assetsDir, refPrefix } = this.getImageAssetPath();
+    const extMatch = filePath.match(/\.([^.]+)$/);
+    const ext = extMatch ? extMatch[1].toLowerCase() : 'png';
+    try {
+      const content = await TauriApi.fetchImageAsBase64({ url: filePath });
+      const bytes = Uint8Array.from(atob(content), c => c.charCodeAt(0));
+      const info = await TauriApi.saveImageToAssets({ bytes: Array.from(bytes), ext, assetsDir });
+      const src = refPrefix + '/' + info.filename;
+      const w = info.width || '';
+      const h = info.height || '';
+      const dimAttr = w ? ` width="${w}" height="${h}"` : '';
+      const imgTag = `<img src="${src}"${dimAttr} alt="${this.escapeAttr(alt || info.filename)}">`;
+      this.insertImageBlock(imgTag);
+      this.setStatus(this.t('imagePasted'));
+    } catch (err) {
+      this.showToast(this.t('imagePasteFailed') + ': ' + err);
+    }
+  }
+
+  async insertLocalImageBase64(filePath, alt) {
+    try {
+      const base64 = await TauriApi.fetchImageAsBase64({ url: filePath });
+      const extMatch = filePath.match(/\.([^.]+)$/);
+      const ext = extMatch ? extMatch[1].toLowerCase() : 'png';
+      let mime = 'image/png';
+      if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
+      else if (ext === 'gif') mime = 'image/gif';
+      else if (ext === 'svg') mime = 'image/svg+xml';
+      else if (ext === 'webp') mime = 'image/webp';
+      else if (ext === 'bmp') mime = 'image/bmp';
+      else if (ext === 'ico') mime = 'image/x-icon';
+      const dataUrl = `data:${mime};base64,${base64}`;
+      this.insertImageBlock(`![${alt || 'image'}](${dataUrl})`);
+      this.setStatus(this.t('imagePasted'));
+    } catch (err) {
+      this.showToast(this.t('imagePasteFailed') + ': ' + err);
+    }
+  }
+
+  async handlePasteImage(file) {
+    const mode = this.settings.imageInsertMode || 'assets';
+    if (mode === 'assets') {
+      if (!this.activeTab || !this.activeTab.filePath) {
+        this.showToast(this.t('needSaveFirst'));
+        return;
+      }
+      const { assetsDir, refPrefix } = this.getImageAssetPath();
+      const ext = file.type.split('/')[1] || 'png';
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      const info = await TauriApi.saveImageToAssets({ bytes: Array.from(bytes), ext, assetsDir });
+      const alt = 'image';
+      const src = refPrefix + '/' + info.filename;
+      const w = info.width || '';
+      const h = info.height || '';
+      const dimAttr = w ? ` width="${w}" height="${h}"` : '';
+      this.insertImageBlock(`<img src="${src}"${dimAttr} alt="${this.escapeAttr(alt)}">`);
+      this.setStatus(this.t('imagePasted'));
+    } else {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const mime = file.type || 'image/png';
+      const dataUrl = `data:${mime};base64,${base64}`;
+      this.insertImageBlock(`![image](${dataUrl})`);
+      this.setStatus(this.t('imagePasted'));
+    }
+  }
+
+  newFile() {
+    this.setViewMode('edit');
+    this.addTab(this.t('untitled'), '', null);
+    this.setStatus(this.t('newFileCreated'));
+  }
+
+  async reloadFile() {
+    const tab = this.activeTab;
+    if (!tab || !tab.filePath) {
+      this.setStatus(this.t('noFileToReload') || '当前文件无关联路径，无法重新加载');
+      return;
+    }
+    this.showLoading();
+    try {
+      const scrollInfo = this.cm.getScrollInfo();
+      const cursorPos = this.cm.getCursor();
+      const previewScrollTop = this.preview.scrollTop;
+      const content = await TauriApi.readFile({ path: tab.filePath });
+      tab.content = content;
+      tab.savedContent = content;
+      // 重新加载：markdown 和图片都可能在外部被改动，清图片 base64 缓存强制重读
+      this._imageBase64Cache.clear();
+      this.cm.setValue(content);
+      // 取消 change 事件调度的 debounced 预览更新，后续显式调用 updatePreview 替代
+      clearTimeout(this.debounceTimer);
+      this.cm.setCursor(cursorPos);
+      this.cm.clearHistory();
+      await this.updatePreview();
+      // 统一恢复该 tab 记忆的编辑器/预览滚动位置（临时关闭滚动同步避免互相重定位）
+      this._restoreSwitchScroll(scrollInfo, previewScrollTop);
+      this.updateWordCount();
+      this.updateOutline();
+      this.updateTabDisplay();
+      this.setStatus(`${this.t('reloaded') || '已重新加载'}: ${tab.name}`);
+    } catch (err) {
+      this.reportError('E_IO', { context: { path: tab.filePath }, error: err, params: { name: tab.name } });
+    } finally {
+      this.hideLoading();
+    }
+  }
+
+  async openFile() {
+    try {
+      const selected = await dialogOpen({
+        multiple: true,
+        filters: [
+          { name: 'Markdown', extensions: ['md', 'markdown', 'txt'] },
+          { name: this.t('allFiles'), extensions: ['*'] }
+        ]
+      });
+
+      if (!selected) return;
+      this.showLoading();
+      const files = Array.isArray(selected) ? selected : [selected];
+      let openedCount = 0;
+
+      for (const filePath of files) {
+        const existingIndex = this.tabs.findIndex(t => t.filePath === filePath);
+        if (existingIndex !== -1) {
+          this.switchTab(existingIndex);
+          continue;
+        }
+        try {
+          const content = await this.readFileNormalized(filePath);
+          const name = filePath.split(/[/\\]/).pop();
+          this.addTab(name, content, filePath);
+          openedCount++;
+        } catch (e) {
+          console.error('Failed to open file:', filePath, e);
+        }
+      }
+      this.viewMode = 'preview';
+      this.applyViewMode();
+      this.updateWordCount();
+      this.setStatus(openedCount > 0 ? this.t('openedFiles', { n: openedCount }) : this.t('alreadyOpen'));
+    } catch (error) {
+      // 多选打开时单个文件失败：弹 toast 而非仅 console，避免用户无感
+      this.reportError(error.code || 'E_IO', { context: { path: error.path }, error, params: error.params, detail: error.detail });
+    } finally {
+      this.hideLoading();
+    }
+  }
+
+  loadSession() {
+    try {
+      const raw = localStorage.getItem('tizumark-session');
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || data.version !== 2) return null;
+      return data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  saveSession() {
+    try {
+      const tabs = this.tabs
+        .filter(t => t.filePath)
+        .map(t => ({
+          name: t.name,
+          filePath: t.filePath,
+          cursorPos: t.cursorPos || { line: 0, ch: 0 },
+          scrollPos: t.scrollPos || { top: 0, left: 0 },
+          previewScrollTop: t.previewScrollTop || 0,
+          fileMeta: t.fileMeta || null,
+        }));
+      const data = {
+        version: 2,
+        activeFilePath: (this.activeTab && this.activeTab.filePath) ? this.activeTab.filePath : null,
+        tabs,
+        workspaceFolder: this.workspaceFolder || null,
+        expandedFolders: this.expandedFolders ? Array.from(this.expandedFolders) : [],
+      };
+      localStorage.setItem('tizumark-session', JSON.stringify(data));
+    } catch (e) { /* ignore */ }
+  }
+
+  async restoreSession() {
+    const session = this.loadSession();
+    if (!session) return false;
+    const tabs = session.tabs || [];
+    const workspaceFolder = session.workspaceFolder || null;
+    if (tabs.length === 0 && !workspaceFolder) return false;
+
+    const restored = [];
+    for (const st of tabs) {
+      if (!st.filePath) continue;
+      const tab = new Tab(st.name || st.filePath.split(/[/\\]/).pop(), '', st.filePath);
+      tab.cursorPos = st.cursorPos || { line: 0, ch: 0 };
+      tab.scrollPos = st.scrollPos || { top: 0, left: 0 };
+      tab.previewScrollTop = st.previewScrollTop || 0;
+      tab.fileMeta = st.fileMeta || null;
+      tab._loaded = false;
+      restored.push(tab);
+    }
+    if (restored.length === 0 && !workspaceFolder) return false;
+    if (restored.length === 0) {
+      restored.push(new Tab(`${this.t('untitled')}${this.untitledCounter++}`));
+    }
+
+    this.tabs = restored;
+    this.activeTabIndex = 0;
+    if (session.activeFilePath) {
+      const idx = this.tabs.findIndex(t => t.filePath === session.activeFilePath);
+      if (idx !== -1) this.activeTabIndex = idx;
+    }
+
+    const active = this.activeTab;
+    if (active && active.filePath) {
+      try {
+        const content = await this.readFileNormalized(active.filePath);
+        active.content = content;
+        active.savedContent = content;
+      } catch (e) {
+        // 读盘失败（文件被删除/移动/无权限）：保留标签页但标记为加载失败，
+        // 不再静默置空 content/savedContent（避免后续保存用空内容覆盖原文件）
+        active.content = '';
+        active.savedContent = '';
+        active._loadError = true;
+        this.reportError('E_NOT_FOUND', { context: { path: active.filePath }, params: { name: active.name }, error: e });
+      }
+      active._loaded = true;
+    } else if (active) {
+      active._loaded = true;
+    }
+
+    await Promise.all(this.tabs.map(t => this.refreshFileMeta(t)));
+
+    // 同 switchTab：setValue 会同步触发 scroll / cursorActivity 事件，污染 activeTab.scrollPos / cursorPos，先取快照
+    const restoreCursor = (active && active.cursorPos) || { line: 0, ch: 0 };
+    const restoreScroll = (active && active.scrollPos) || { top: 0, left: 0 };
+    const restorePreviewTop = (active && active.previewScrollTop) || 0;
+
+    this.cm.setValue(this.activeTab.content || '');
+    this.cm.setCursor(restoreCursor);
+    this.cm.clearHistory();
+    this.updateTabBar();
+    this.updateTabDisplay();
+    await this.updatePreview();
+    // 统一恢复该 tab 记忆的编辑器/预览滚动位置（临时关闭滚动同步避免互相重定位）
+    this._restoreSwitchScroll(restoreScroll, restorePreviewTop);
+    this.updateOutline();
+    this.updateWordCount();
+    this.highlightTreeActiveFile();
+
+    if (workspaceFolder) {
+      this.workspaceFolder = workspaceFolder;
+      this.expandedFolders = new Set(session.expandedFolders || []);
+      await this.renderFolderTree();
+      this.setSidebarTab('files');
+      this.saveSession();
+      this.startFolderWatch();
+    }
+    return true;
+  }
+
+  async openFilePath(filePath) {
+    this._largeFileNoticeDismissed = false;
+    this._previewFocusLine = 0;
+    this.previewWindow = null;
+    this._beginPaneLoad();
+    try {
+      const existingIndex = this.tabs.findIndex(t => t.filePath === filePath);
+      if (existingIndex !== -1) {
+        await this.switchTab(existingIndex);
+        this.saveSession();
+        return;
+      }
+      const content = await this.readFileNormalized(filePath);
+      const name = filePath.split(/[/\\]/).pop();
+      await this.addTab(name, content, filePath);
+      this.viewMode = 'preview';
+      this.applyViewMode();
+      this.updateWordCount();
+      this.setStatus(this.t('fileOpened', { name }));
+      this.saveSession();
+    } catch (e) {
+      // 打开失败：结构化错误码（E_NOT_FOUND/E_PERMISSION/...）或兜底 E_IO，用户可见 toast + 开发可见 console
+      this.reportError(e.code || 'E_IO', { context: { path: filePath }, error: e, params: e.params, detail: e.detail });
+    } finally {
+      this._endPaneLoad();
+    }
+  }
+
+  async openFolder() {
+    try {
+      const selected = await dialogOpen({ directory: true });
+      if (!selected) return;
+      const folderPath = Array.isArray(selected) ? selected[0] : selected;
+      if (!folderPath) return;
+      await this.openFolderPath(folderPath);
+    } catch (e) {
+      this.setStatus(this.t('openFailed') + ': ' + e);
+    }
+  }
+
+  // 直接按给定路径加载为工作区目录（不走 dialog）。
+  // CLI 参数 / file-open 事件 / drag-drop 都复用此入口。
+  async openFolderPath(folderPath) {
+    if (!folderPath) return;
+    this.showLoading();
+    try {
+      this.workspaceFolder = folderPath;
+      this.expandedFolders = new Set();
+      await this.renderFolderTree();
+      this.showSidebarTab('files');
+      this.startFolderWatch();
+      this.saveSession();
+      this.setStatus(this.t('folderOpened', { path: folderPath }));
+    } catch (e) {
+      this.setStatus(this.t('openFailed') + ': ' + e);
+    } finally {
+      this.hideLoading();
+    }
+  }
+
+  // 运行中收到目录（拖放 / 二次实例 file-open）时的工作区切换入口：
+  // 已有不同工作区则弹确认框，取消则忽略该目录；启动 CLI 场景传 confirm=false 直接打开。
+  async maybeOpenFolderPath(folderPath, { confirm = true } = {}) {
+    if (!folderPath) return false;
+    if (confirm && this.workspaceFolder && this.workspaceFolder !== folderPath) {
+      const ok = await this.showConfirmDialog(
+        this.t('switchWorkspaceTitle'),
+        this.t('switchWorkspaceMsg', { path: folderPath })
+      );
+      if (!ok) return false;
+    }
+    await this.openFolderPath(folderPath);
+    return true;
+  }
+
+  // 统一「一批路径按目录/文件分发」：目录加载为工作区（仅第一个，多余目录提示忽略），
+  // 文件走 openFilePath。drag-drop / file-open 事件 / 启动 CLI 参数三处入口共用。
+  async openPathsSmart(paths, { confirmWorkspaceSwitch = true } = {}) {
+    let dirOpened = false;
+    const ignoredDirs = [];
+    for (const p of paths || []) {
+      if (!p || p.startsWith('-')) continue;
+      try {
+        let isDir = false;
+        try { isDir = await TauriApi.isDirectory({ path: p }); }
+        catch (_) { /* 非 Tauri 环境或路径不可访问，按文件处理 */ }
+        if (isDir) {
+          if (dirOpened) {
+            ignoredDirs.push(p);
+            continue;
+          }
+          const opened = await this.maybeOpenFolderPath(p, { confirm: confirmWorkspaceSwitch });
+          if (opened) dirOpened = true;
+        } else {
+          await this.openFilePath(p);
+        }
+      } catch (err) {
+        this.setStatus(`${this.t('openFailed')}: ${err}`);
+      }
+    }
+    // 多余目录合并成一条 toast，避免一次拖十几个文件夹时刷屏
+    if (ignoredDirs.length > 0) {
+      this.showToast(this.t('extraDirsIgnoredBatch', { n: ignoredDirs.length }), 'warning');
+    }
+  }
+
+  closeFolder() {
+    this.workspaceFolder = null;
+    this.expandedFolders = new Set();
+    this.saveSession();
+    this.renderFolderTree();
+    try { TauriApi.stopWatch().catch(() => {}); } catch (e) { /* ignore */ }
+  }
+
+  // 开始监听工作区目录树变化（先停掉旧的，避免重复监听）。外部增删目录/文件时会收到 folder-changed 事件
+  async startFolderWatch() {
+    if (!this.workspaceFolder) return;
+    try { await TauriApi.stopWatch(); } catch (e) { /* ignore */ }
+    try { await TauriApi.watchFolder({ path: this.workspaceFolder }); }
+    catch (e) { console.warn('[folder-watch] failed:', e); }
+  }
+
+  // 收到 folder-changed 后防抖重建文件树（保留已展开目录），避免单次操作触发多次重渲染
+  _scheduleTreeRefresh() {
+    if (this._treeRefreshTimer) clearTimeout(this._treeRefreshTimer);
+    this._treeRefreshTimer = setTimeout(() => {
+      this._treeRefreshTimer = null;
+      if (this.workspaceFolder) this.renderFolderTree();
+    }, 400);
+  }
+
+  async renderFolderTree() {
+    const treeEl = document.getElementById('folder-tree');
+    if (!treeEl) return;
+    const headerEl = document.getElementById('folder-header');
+    const pathEl = document.getElementById('folder-path');
+    treeEl.innerHTML = '';
+    if (pathEl) pathEl.textContent = this.workspaceFolder || '';
+    if (headerEl) headerEl.classList.toggle('hidden', !this.workspaceFolder);
+    if (!this.workspaceFolder) {
+      const empty = document.createElement('button');
+      empty.className = 'folder-empty';
+      empty.textContent = this.t('openFolder');
+      empty.addEventListener('click', () => this.openFolder());
+      treeEl.appendChild(empty);
+      return;
+    }
+    await this.renderFolderLevel(this.workspaceFolder, treeEl, 0);
+  }
+
+  async renderFolderLevel(dirPath, containerEl, depth) {
+    if (depth > 20) return; // 防御：限制目录递归深度，避免深层嵌套/符号链接环导致浏览器卡死
+    const CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+    const FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+    const FOLDER_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z"/><path d="M3 10h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+    const FILE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><polyline points="14 3 14 8 19 8"/></svg>';
+
+    let entries;
+    try {
+      entries = await TauriApi.listDir({ path: dirPath });
+    } catch (e) {
+      return;
+    }
+    for (const entry of entries) {
+      const node = document.createElement('div');
+      node.className = 'tree-node ' + (entry.is_dir ? 'tree-folder' : 'tree-file');
+      node.dataset.path = entry.path;
+
+      const row = document.createElement('div');
+      row.className = 'tree-row';
+      row.style.paddingLeft = (8 + depth * 14) + 'px';
+
+      const arrow = document.createElement('span');
+      arrow.className = 'tree-arrow';
+      arrow.innerHTML = CHEVRON;
+      const icon = document.createElement('span');
+      const label = document.createElement('span');
+      label.className = 'tree-label';
+      label.textContent = entry.name;
+
+      if (entry.is_dir) {
+        const expanded = this.expandedFolders.has(entry.path);
+        icon.className = 'tree-icon folder';
+        icon.innerHTML = expanded ? FOLDER_OPEN : FOLDER;
+        node.classList.toggle('expanded', expanded);
+        const childContainer = document.createElement('div');
+        childContainer.className = 'tree-children' + (expanded ? '' : ' hidden');
+        node.appendChild(row);
+        node.appendChild(childContainer);
+        if (expanded) {
+          await this.renderFolderLevel(entry.path, childContainer, depth + 1);
+        }
+        row.addEventListener('click', async () => {
+          const isOpen = !childContainer.classList.contains('hidden');
+          if (isOpen) {
+            childContainer.classList.add('hidden');
+            node.classList.remove('expanded');
+            icon.innerHTML = FOLDER;
+            this.expandedFolders.delete(entry.path);
+          } else {
+            childContainer.classList.remove('hidden');
+            node.classList.add('expanded');
+            icon.innerHTML = FOLDER_OPEN;
+            this.expandedFolders.add(entry.path);
+            if (childContainer.childElementCount === 0) {
+              await this.renderFolderLevel(entry.path, childContainer, depth + 1);
+            }
+          }
+          this.saveSession();
+        });
+      } else {
+        arrow.innerHTML = '';
+        icon.className = 'tree-icon file';
+        icon.innerHTML = FILE;
+        node.appendChild(row);
+        row.addEventListener('click', () => {
+          this.openFilePath(entry.path);
+        });
+      }
+      row.appendChild(arrow);
+      row.appendChild(icon);
+      row.appendChild(label);
+      containerEl.appendChild(node);
+    }
+    this.highlightTreeActiveFile();
+  }
+
+  highlightTreeActiveFile() {
+    const treeEl = document.getElementById('folder-tree');
+    if (!treeEl) return;
+    const activePath = (this.activeTab && this.activeTab.filePath) ? this.activeTab.filePath : null;
+    treeEl.querySelectorAll('.tree-row.active').forEach(el => el.classList.remove('active'));
+    if (!activePath) return;
+    treeEl.querySelectorAll('.tree-node.tree-file').forEach(node => {
+      if (node.dataset.path === activePath) {
+        const row = node.querySelector('.tree-row');
+        if (row) row.classList.add('active');
+      }
+    });
+  }
+
+  async saveFile() {
+    try {
+      let path = this.activeTab.filePath;
+      if (!path) {
+        path = await dialogSave({
+          filters: [
+            { name: 'Markdown', extensions: ['md'] },
+            { name: this.t('allFiles'), extensions: ['*'] }
+          ]
+        });
+        if (!path) return;
+      }
+
+      await TauriApi.writeFile({ path, content: this.activeTab.content });
+      if (!this.activeTab.filePath) {
+        this.activeTab.filePath = path;
+        this.activeTab.name = path.split(/[/\\]/).pop();
+      }
+      this.activeTab.savedContent = this.activeTab.content;
+      this.updateTabDisplay();
+      await this.refreshFileMeta(this.activeTab);
+      this.setStatus(`${this.t('saved')}: ${this.activeTab.filePath}`);
+      this.saveSession();
+    } catch (error) {
+      this.setStatus(`${this.t('saveFailed')}: ${error}`);
+    }
+  }
+
+  async saveAsFile() {
+    try {
+      const path = await dialogSave({
+        defaultPath: this.activeTab.filePath || `${this.activeTab.name}`,
+        filters: [
+          { name: 'Markdown', extensions: ['md'] },
+          { name: this.t('allFiles'), extensions: ['*'] }
+        ]
+      });
+      if (!path) return;
+
+      await TauriApi.writeFile({ path, content: this.activeTab.content });
+      this.activeTab.filePath = path;
+      this.activeTab.name = path.split(/[/\\]/).pop();
+      this.activeTab.savedContent = this.activeTab.content;
+      this.updateTabBar();
+      await this.refreshFileMeta(this.activeTab);
+      this.setStatus(`${this.t('savedAs')}: ${path}`);
+      this.saveSession();
+    } catch (error) {
+      this.setStatus(`${this.t('saveFailed')}: ${error}`);
+    }
+  }
+
+  async exportHTML() {
+    try {
+      const path = await dialogSave({
+        defaultPath: this.activeTab.filePath
+          ? this.activeTab.filePath.replace(/\.md$/, '.html')
+          : 'export.html',
+        filters: [{ name: 'HTML', extensions: ['html'] }]
+      });
+      if (!path) return;
+
+      const clone = this.preview.cloneNode(true);
+      clone.style.position = '';
+      clone.style.left = '';
+      clone.style.top = '';
+      clone.style.width = '';
+      clone.style.padding = '';
+      clone.style.overflow = '';
+      clone.style.height = '';
+
+      clone.querySelectorAll('.copy-btn').forEach(el => el.remove());
+      const abbrData = clone.querySelector('#abbr-data');
+      if (abbrData) abbrData.remove();
+
+      const filePath = this.activeTab.filePath;
+      if (filePath) {
+        const dir = filePath.replace(/[/\\][^/\\]*$/, '');
+        const imgPromises = Array.from(clone.querySelectorAll('img')).map(async (img) => {
+          let src = img.getAttribute('src');
+          if (!src || src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://') || src.startsWith('file://') || src.startsWith('blob:')) return;
+          if (src.startsWith('/')) src = src.slice(1);
+          try {
+            const base64 = await TauriApi.fetchImageAsBase64({ url: dir + '/' + src });
+            const ext = src.split('.').pop().toLowerCase();
+            let mime = 'image/png';
+            if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
+            else if (ext === 'gif') mime = 'image/gif';
+            else if (ext === 'svg') mime = 'image/svg+xml';
+            else if (ext === 'webp') mime = 'image/webp';
+            img.src = `data:${mime};base64,${base64}`;
+          } catch (e) { /* skip unresolvable images */ }
+        });
+        await Promise.allSettled(imgPromises);
+      }
+
+      let katexCSS = '';
+      try {
+        const resp = await fetch('lib/katex/katex.min.css');
+        if (resp.ok) katexCSS = await resp.text();
+      } catch (e) { /* skip */ }
+
+      let hljsCSS = '';
+      try {
+        const themeLink = document.getElementById('highlight-theme');
+        if (themeLink) {
+          const resp = await fetch(themeLink.getAttribute('href'));
+          if (resp.ok) hljsCSS = await resp.text();
+        }
+      } catch (e) { /* skip */ }
+
+      const escapedTitle = this.activeTab.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const fullHTML = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>${escapedTitle}</title>
+  <style>
+    body { max-width: 860px; margin: 0 auto; padding: 40px 20px; line-height: 1.8; color: #2a2a2e; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    h1, h2, h3, h4, h5, h6 { margin-top: 24px; margin-bottom: 12px; font-weight: 600; line-height: 1.3; }
+    h1 { font-size: 2em; border-bottom: 2px solid #d4d4d8; padding-bottom: 10px; }
+    h2 { font-size: 1.5em; border-bottom: 1px solid #d4d4d8; padding-bottom: 8px; }
+    h3 { font-size: 1.25em; }
+    h4 { font-size: 1.1em; }
+    h5 { font-size: 1em; color: #5e5e62; }
+    h6 { font-size: 0.9em; color: #5e5e62; }
+    p { margin-bottom: 14px; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    strong { font-weight: 600; }
+    em { font-style: italic; }
+    del { text-decoration: line-through; color: #5e5e62; }
+    code { padding: 2px 6px; background: #f0efee; border: 1px solid #d4d4d8; border-radius: 4px; font-family: "SF Mono", "Fira Code", monospace; font-size: 0.88em; }
+    pre { padding: 16px; background: #f0efee; border-radius: 6px; overflow-x: auto; margin: 16px 0; max-width: 100%; border: 1px solid #d4d4d8; }
+    pre code { padding: 0; background: none; border: none; font-size: 0.9em; line-height: 1.5; }
+    blockquote { padding: 12px 20px; margin: 0 0 16px 0; border-left: 4px solid #2563eb; background: #f6f5f4; border-radius: 0 6px 6px 0; color: #5e5e62; }
+    blockquote p:last-child { margin-bottom: 0; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
+    th, td { padding: 8px 12px; border: 1px solid #d4d4d8; text-align: left; }
+    th { background: #f0efee; font-weight: 600; }
+    img { max-width: 100%; }
+    hr { border: none; border-top: 1px solid #d4d4d8; margin: 24px 0; }
+    ul, ol { padding-left: 24px; margin-bottom: 14px; }
+    li { margin-bottom: 4px; }
+    mark { display: inline-block; background: #fbbf24; color: #1a1a1a; padding: 1px 4px; border-radius: 3px; }
+    kbd { display: inline-block; padding: 2px 7px; font-size: 0.82em; font-family: "SF Mono", "Fira Code", monospace; background: #f0efee; border: 1px solid #d4d4d8; border-bottom-width: 2px; border-radius: 4px; line-height: 1.5; }
+    abbr { text-decoration: underline dotted; cursor: help; }
+    .mermaid-container { text-align: center; margin: 16px 0; padding: 16px; max-width: 100%; background: #f0efee; border-radius: 8px; border: 1px solid #d4d4d8; overflow-x: auto; }
+    .mermaid-container svg { max-width: 100%; height: auto; }
+    .alert { border-radius: 10px; padding: 14px 18px; margin: 16px 0; max-width: 100%; border-left: 4px solid; overflow-wrap: break-word; }
+    .alert-title { font-weight: 700; margin-bottom: 6px; font-size: 0.95em; display: flex; align-items: center; gap: 8px; }
+    .alert-icon { width: 18px; height: 18px; flex-shrink: 0; }
+    .alert-content p:last-child { margin-bottom: 0; }
+    .alert-note { background: rgba(56,132,255,0.06); border-left-color: #3884ff; }
+    .alert-tip { background: rgba(16,185,129,0.06); border-left-color: #10b981; }
+    .alert-important { background: rgba(139,92,246,0.06); border-left-color: #8b5cf6; }
+    .alert-warning { background: rgba(245,158,11,0.06); border-left-color: #f59e0b; }
+    .alert-caution { background: rgba(239,68,68,0.06); border-left-color: #ef4444; }
+    .math-display { display: block; text-align: center; margin: 16px 0; overflow-x: auto; }
+    .toc-wrapper { padding: 12px 16px; margin: 16px 0; background: #f6f5f4; border-radius: 8px; border: 1px solid #d4d4d8; }
+    .toc-list ul { list-style: none; padding-left: 16px; margin: 2px 0; }
+    .toc-list li { margin-bottom: 3px; line-height: 1.6; }
+.toc a { color: #2563eb; text-decoration: underline; font-size: 0.92em; }
+input[type="checkbox"] { -webkit-appearance: none; appearance: none; margin-right: 8px; width: 16px; height: 16px; border: 1.5px solid #d4d4d8; border-radius: 3px; vertical-align: middle; position: relative; top: -1px; cursor: default; }
+input[type="checkbox"]:checked { background: #16a34a url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIzIiBmaWxsPSJub25lIj48cGF0aCBkPSJNNSAxM2w0IDRMMTkgNyIvPjwvc3ZnPg==") center / 14px no-repeat; border-color: #16a34a; }
+    input[type="checkbox"] { -webkit-appearance: none; appearance: none; margin-right: 8px; width: 16px; height: 16px; border: 1.5px solid #d4d4d8; border-radius: 3px; vertical-align: middle; position: relative; top: -1px; cursor: default; }
+    input[type="checkbox"]:checked { background: #16a34a; border-color: #16a34a; }
+    input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 5px; height: 9px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    details { margin-bottom: 14px; padding: 8px 12px; background: #f6f5f4; border-radius: 6px; border: 1px solid #d4d4d8; }
+    summary { font-weight: 600; cursor: pointer; }
+${katexCSS ? katexCSS + '\n' : ''}${hljsCSS ? hljsCSS : ''}
+  </style>
+</head>
+<body>
+${clone.innerHTML}
+</body>
+</html>`;
+
+      await TauriApi.writeFile({ path, content: fullHTML });
+      this.setStatus(`${this.t('exportedHTML')}: ${path}`);
+    } catch (error) {
+      this.setStatus(`${this.t('exportFailed')}: ${error}`);
+    }
+  }
+
+  async exportImage() {
+    if (typeof html2canvas === 'undefined') {
+      this.reportError('E_RENDER', { detail: '导出组件未加载（html2canvas not loaded）' });
+      return;
+    }
+
+    let clone = null;
+    try {
+      this.setStatus(this.t('generatingImg'));
+
+      clone = this.preview.cloneNode(true);
+      clone.style.position = 'fixed';
+      clone.style.left = '-9999px';
+      clone.style.top = '0';
+      clone.style.width = '800px';
+      clone.style.padding = '32px';
+      clone.style.background = this.isDark ? '#1a1b1e' : '#ffffff';
+      clone.style.color = this.isDark ? '#d4d4d8' : '#2a2a2e';
+      clone.style.overflow = 'visible';
+      clone.style.height = 'auto';
+      document.body.appendChild(clone);
+
+      // 图片加载策略与实时预览 processImages 保持一致：
+      // data:/http(s):/file:/blob: 直接保留；绝对路径直接读取；相对路径按当前文档目录解析
+      const images = clone.querySelectorAll('img');
+      const tabFile = this.activeTab ? this.activeTab.filePath : '';
+      const imgDir = tabFile ? tabFile.replace(/[/\\][^/\\]*$/, '') : '';
+      const imagePromises = Array.from(images).map(async (img) => {
+        const src = img.getAttribute('src');
+        if (!src || src.startsWith('data:') || src.startsWith('http://') ||
+            src.startsWith('https://') || src.startsWith('file://') || src.startsWith('blob:')) return;
+
+        let url = src;
+        if (!(src.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(src)) && imgDir) {
+          url = imgDir + '/' + src; // 相对路径按文档目录解析
+        }
+
+        try {
+          const base64 = await TauriApi.fetchImageAsBase64({ url });
+          const ext = src.split('.').pop().split('?')[0].toLowerCase();
+          let mime = 'image/png';
+          if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
+          else if (ext === 'gif') mime = 'image/gif';
+          else if (ext === 'svg') mime = 'image/svg+xml';
+          else if (ext === 'webp') mime = 'image/webp';
+          img.src = `data:${mime};base64,${base64}`;
+        } catch (e) {
+          img.style.border = '1px solid red';
+          img.alt = this.t('imageLoadFailed');
+        }
+      });
+
+      await Promise.all(imagePromises);
+      await new Promise(r => setTimeout(r, 300));
+
+      const canvas = await html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: this.isDark ? '#1a1b1e' : '#ffffff',
+        width: 800,
+        windowWidth: 800
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+
+      const result = await dialogSave({
+        defaultPath: `${this.activeTab.name.replace(/\.[^.]+$/, '')}.png`,
+        filters: [{ name: 'PNG', extensions: ['png'] }]
+      });
+
+      if (!result) return;
+
+      const base64 = imgData.split(',')[1];
+      const binaryStr = atob(base64);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+
+      const arr = Array.from(bytes);
+      await TauriApi.writeBinaryFile({ path: result, contents: arr });
+
+      this.setStatus(`${this.t('exportedImg')}: ${result}`);
+    } catch (error) {
+      this.setStatus(`${this.t('exportFailed')}: ${error}`);
+    } finally {
+      if (clone && clone.parentNode) {
+        clone.parentNode.removeChild(clone);
+      }
+    }
+  }
+
+  async exportPDF() {
+    // Print tips before starting
+    const proceed = await this.showConfirmDialog(
+      this.t('exportPDF'),
+      `<div style="text-align:left;line-height:1.7;">
+        <p style="margin:0 0 8px;">${this.t('printTip1')}</p>
+        <p style="margin:0;">${this.t('printTip2')}</p>
+      </div>`
+    );
+    if (!proceed) return;
+
+    // --- Loading overlay ---
+    const overlay = document.createElement('div');
+    overlay.innerHTML = `<div class="pdf-loading-spinner"></div><div class="pdf-loading-text">${this.t('preparingPrint')}</div>`;
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);font-family:-apple-system,sans-serif;';
+    if (!document.getElementById('pdf-loading-style')) {
+      const s = document.createElement('style');
+      s.id = 'pdf-loading-style';
+      s.textContent = '.pdf-loading-spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,0.25);border-top-color:#fff;border-radius:50%;animation:pdf-spin .7s linear infinite;margin-bottom:14px;}@keyframes pdf-spin{to{transform:rotate(360deg)}}.pdf-loading-text{color:#fff;font-size:15px;letter-spacing:.5px;}';
+      document.head.appendChild(s);
+    }
+    document.body.appendChild(overlay);
+
+    let overlayDone = false;
+    const hideOverlay = () => {
+      if (overlayDone) return;
+      overlayDone = true;
+      if (overlay.parentNode) overlay.remove();
+    };
+    const safetyTimer = setTimeout(hideOverlay, 30000);
+
+    try {
+      // Yield so the overlay paints before CPU-heavy Mermaid work
+      await new Promise(r => requestAnimationFrame(r));
+
+      const clone = this.preview.cloneNode(true);
+      clone.querySelectorAll('.copy-btn, #abbr-data').forEach(el => el.remove());
+
+      // Re-render Mermaid via mermaid.render() so every diagram gets a
+      // consistent viewBox regardless of the current preview-pane width.
+      const mermaidContainers = Array.from(clone.querySelectorAll('.mermaid-container'));
+      if (typeof mermaid !== 'undefined' && mermaidContainers.length) {
+        const ff = getComputedStyle(document.documentElement).getPropertyValue('--font-preview').trim() || '-apple-system, sans-serif';
+        mermaid.initialize({ startOnLoad: false, theme: this.isDark ? 'dark' : 'default', securityLevel: 'loose', fontFamily: ff, themeVariables: { fontSize: '14px' } });
+        for (let i = 0; i < mermaidContainers.length; i++) {
+          const code = (mermaidContainers[i].getAttribute('data-code') || mermaidContainers[i].textContent || '').trim();
+          if (!code) continue;
+          try {
+            const result = await mermaid.render('pdf-mermaid-' + i, code);
+            const wrapper = document.createElement('div');
+            wrapper.className = 'mermaid-container';
+            wrapper.innerHTML = result.svg;
+            const svgEl = wrapper.querySelector('svg');
+            if (svgEl) {
+              svgEl.removeAttribute('style');
+              svgEl.removeAttribute('width');
+              svgEl.removeAttribute('height');
+              const vb = svgEl.getAttribute('viewBox');
+              if (vb) {
+                const parts = vb.split(/\s+/);
+                if (parts.length >= 4) {
+                  svgEl.setAttribute('width', parts[2]);
+                  svgEl.setAttribute('height', parts[3]);
+                }
+              }
+            }
+            mermaidContainers[i].replaceWith(wrapper);
+          } catch (e) {
+            console.error('Mermaid PDF render error for diagram', i, ':', e);
+          }
+        }
+      }
+
+      const escapedTitle = this.activeTab.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+      let appCSS = '';
+      try { const resp = await fetch('styles.css'); if (resp.ok) appCSS = await resp.text(); } catch (e) { /* skip */ }
+      let hljsCSS = '';
+      try { const themeLink = document.getElementById('highlight-theme'); if (themeLink) { const resp = await fetch(themeLink.getAttribute('href')); if (resp.ok) hljsCSS = await resp.text(); } } catch (e) { /* skip */ }
+      let katexCSS = '';
+      try { const resp = await fetch('lib/katex/katex.min.css'); if (resp.ok) katexCSS = await resp.text(); } catch (e) { /* skip */ }
+
+      const colorScheme = document.documentElement.getAttribute('data-color-scheme') || 'default';
+
+      const printCSS = `
+@page { margin: 1.5cm; }
+html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
+.preview-content { max-width: 680px !important; margin: 0 auto !important; padding: 16px 24px !important; }
+.mermaid-container { margin: 8px 0 !important; max-width: 100% !important; overflow: hidden !important; break-inside: avoid; page-break-inside: avoid; }
+.mermaid-container svg { width: auto !important; max-width: 100% !important; height: auto !important; display: block !important; margin: 0 auto !important; }
+.mermaid-container svg text, .mermaid-container svg .nodeLabel, .mermaid-container svg .edgeLabel, .mermaid-container svg .label, .mermaid-container svg textPath { font-size: 14px !important; }
+.mermaid-container svg foreignObject,
+.mermaid-container svg foreignObject div,
+.mermaid-container svg foreignObject span { font-size: 14px !important; line-height: 1.4 !important; }
+h1, h2, h3 { page-break-after: avoid; }
+blockquote, table, img, .math-display, .alert, .mermaid-container { page-break-inside: avoid; }
+p, li { orphans: 3; widows: 3; }
+input[type="checkbox"] { -webkit-appearance: none; appearance: none; margin-right: 8px; width: 16px; height: 16px; border: 1.5px solid #d4d4d8; border-radius: 3px; vertical-align: middle; position: relative; top: -1px; cursor: default; }
+input[type="checkbox"]:checked { background: #16a34a url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIzIiBmaWxsPSJub25lIj48cGF0aCBkPSJNNSAxM2w0IDRMMTkgNyIvPjwvc3ZnPg==") center / 14px no-repeat; border-color: #16a34a; }
+input[type="checkbox"]:checked::after { display: none !important; }
+`;
+
+      const html = `<!DOCTYPE html>
+<html lang="zh-CN" data-color-scheme="${colorScheme}" data-theme="light">
+<head><meta charset="UTF-8"><title>${escapedTitle}</title>
+<style>${appCSS}${hljsCSS}${katexCSS}${printCSS}</style></head>
+<body>
+<div class="preview-content">${clone.innerHTML}</div>
+</body></html>`;
+
+      // Hide overlay right before print dialog, so the user sees
+      // the spinner until the system print dialog appears.
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:680px;height:600px;border:none;';
+      iframe.srcdoc = html;
+      document.body.appendChild(iframe);
+
+      iframe.onload = () => {
+        const after = () => {
+          iframe.contentWindow.removeEventListener('afterprint', after);
+          iframe.remove();
+          this.setStatus(this.t('exportedPDF'));
+        };
+        iframe.contentWindow.addEventListener('afterprint', after);
+        setTimeout(() => {
+          iframe.contentWindow.removeEventListener('afterprint', after);
+          if (iframe.parentNode) iframe.remove();
+        }, 30000);
+        hideOverlay();
+        clearTimeout(safetyTimer);
+        iframe.contentWindow.print();
+      };
+    } catch (e) {
+      console.error('exportPDF error:', e);
+      hideOverlay();
+      clearTimeout(safetyTimer);
+      this.setStatus(this.t('exportError'));
+    }
+  }
+
+  getCachedImageURL(dataUri) {
+    if (!dataUri || !dataUri.startsWith('data:')) return dataUri;
+    const cached = this._imageURLCache.get(dataUri);
+    if (cached) return cached;
+    try {
+      const comma = dataUri.indexOf(',');
+      const meta = dataUri.slice(0, comma);
+      const b64 = dataUri.slice(comma + 1);
+      const mimeMatch = meta.match(/data:([^;]+)/);
+      const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+      const bin = atob(b64);
+      const len = bin.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: mime });
+      const url = URL.createObjectURL(blob);
+      this._imageURLCache.set(dataUri, url);
+      return url;
+    } catch (e) {
+      return dataUri;
+    }
+  }
+
+  debounceUpdatePreview() {
+    // 任务列表勾选来源：预览 DOM 已就地同步，跳过全量重渲染（不防抖，立即轻量刷新字数/大纲）
+    if (this._suppressNextPreviewRerender) {
+      this._suppressNextPreviewRerender = false;
+      this.updateWordCount();
+      this.updateOutline();
+      return;
+    }
+    clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(() => {
+      this.updatePreview(true);
+      this.updateWordCount();
+      this.updateOutline();
+    }, 300);
+  }
+
+  // 按空行切分为逻辑块，跟踪围栏代码块（内部不切分）
+  parseBlocks(content) {
+    const lines = content.split('\n');
+    const blocks = [];
+    let inFence = false;
+    let fenceChar = '';
+    let fenceCount = 0;
+    let blockStart = -1;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      if (!inFence && (trimmed.startsWith('```') || trimmed.startsWith('~~~'))) {
+        const fc = trimmed[0];
+        const match = trimmed.match(new RegExp('^\\' + fc + '{3,}'));
+        if (match) {
+          inFence = true;
+          fenceChar = fc;
+          fenceCount = match[0].length;
+          if (blockStart >= 0) {
+            blocks.push({ startLine: blockStart, endLine: i - 1 });
+            blockStart = -1;
+          }
+          blockStart = i;
+          continue;
+        }
+      }
+
+      if (inFence) {
+        if (trimmed.startsWith(fenceChar)) {
+          const match = trimmed.match(new RegExp('^\\' + fenceChar + '{' + fenceCount + ',}'));
+          if (match && trimmed.replace(match[0], '').trim() === '') {
+            blocks.push({ startLine: blockStart, endLine: i });
+            blockStart = -1;
+            inFence = false;
+          }
+        }
+        continue;
+      }
+
+      if (trimmed === '') {
+        if (blockStart >= 0) {
+          blocks.push({ startLine: blockStart, endLine: i - 1 });
+          blockStart = -1;
+        }
+      } else if (blockStart < 0) {
+        blockStart = i;
+      }
+    }
+
+    if (blockStart >= 0) {
+      blocks.push({ startLine: blockStart, endLine: lines.length - 1 });
+    }
+
+    return blocks;
+  }
+
+  // 遍历预览 DOM，收集所有块级渲染元素（用于比例映射）
+  collectBlockElements(root) {
+    const blockTags = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'PRE', 'TABLE', 'UL', 'OL', 'BLOCKQUOTE', 'HR', 'DETAILS', 'DIV']);
+    const result = [];
+    const walk = (el) => {
+      if (!el || !el.children) return;
+      for (const child of el.children) {
+        if (blockTags.has(child.tagName)) {
+          result.push(child);
+        } else if (child.tagName === 'IMG') {
+          result.push(child);
+        } else {
+          walk(child);
+        }
+      }
+    };
+    walk(root);
+    return result;
+  }
+
+  // 去掉 markdown 语法，提取用于匹配的纯文本关键词
+  cleanMarkdownForSearch(text) {
+    return text
+      .replace(/^#{1,6}\s*/, '')
+      .replace(/^[-*+]\s+/, '')
+      .replace(/^>\s*/, '')
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/~~(.+?)~~/g, '$1')
+      .replace(/`(.+?)`/g, '$1')
+      .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+      .replace(/!\[(.+?)\]\(.+?\)/g, '$1')
+      .replace(/^\d+\.\s+/, '')
+      .trim();
+  }
+
+  // 从预览元素获取对应的源文件行号（通过 unified 嵌入的 data-source-line）
+  _getSourceLine(el) {
+    if (el.dataset && el.dataset.sourceLine) {
+      return parseInt(el.dataset.sourceLine, 10);
+    }
+    const inner = el.querySelector('[data-source-line]');
+    if (inner) {
+      return parseInt(inner.dataset.sourceLine, 10);
+    }
+    return null;
+  }
+
+  // 构建逐行密集位置映射（纯线性插值，无速度限制）
+  // 每个编辑器行都有精确的 previewTop 插值
+  _computedPosition() {
+    const allElements = this.preview.querySelectorAll('[data-source-line]');
+    const anchors = [];
+    const seenLines = new Set();
+
+    for (const el of allElements) {
+      // 跳过脚注区域内的元素（source line 在文档中部但渲染在预览最底部）
+      if (el.closest('.footnotes')) continue;
+
+      const sourceLine = parseInt(el.dataset.sourceLine, 10);
+      if (isNaN(sourceLine)) continue;
+      if (seenLines.has(sourceLine)) continue;
+      seenLines.add(sourceLine);
+
+      const editorTop = this.cm.heightAtLine(Math.max(0, sourceLine - 1), 'local');
+      const previewTop = this._getOffsetTop(el);
+      if (typeof editorTop !== 'number' || typeof previewTop !== 'number') continue;
+
+      anchors.push({ line: sourceLine, editorTop, previewTop });
+    }
+
+    if (anchors.length < 2) {
+      this._editorElementList = null;
+      this._previewElementList = null;
+      return;
+    }
+
+    anchors.sort((a, b) => a.line - b.line);
+
+    // 过滤非单调锚点（只检查 editorTop）
+    const clean = [anchors[0]];
+    for (let i = 1; i < anchors.length; i++) {
+      if (anchors[i].editorTop > clean[clean.length - 1].editorTop) {
+        clean.push(anchors[i]);
+      }
+    }
+
+    if (clean.length < 2) {
+      this._editorElementList = null;
+      this._previewElementList = null;
+      return;
+    }
+
+    // 逐行构建密集数组
+    const totalLines = this.cm.lineCount();
+    const editorList = new Array(totalLines);
+    const rawPreviewList = new Array(totalLines);
+    let anchorIdx = 0;
+
+    for (let line = 0; line < totalLines; line++) {
+      editorList[line] = this.cm.heightAtLine(line, 'local');
+      const sourceLine = line + 1;
+
+      while (anchorIdx + 1 < clean.length && clean[anchorIdx + 1].line <= sourceLine) {
+        anchorIdx++;
+      }
+
+      if (anchorIdx >= clean.length - 1) {
+        const last = clean[clean.length - 1];
+        rawPreviewList[line] = last.previewTop + Math.max(0, sourceLine - last.line) * 20;
+      } else {
+        const a1 = clean[anchorIdx];
+        const a2 = clean[anchorIdx + 1];
+        const lineGap = a2.line - a1.line;
+        if (lineGap <= 0) {
+          rawPreviewList[line] = a1.previewTop;
+        } else {
+          rawPreviewList[line] = a1.previewTop + (sourceLine - a1.line) / lineGap * (a2.previewTop - a1.previewTop);
+        }
+      }
+    }
+
+    this._editorElementList = editorList;
+    this._previewElementList = rawPreviewList;
+  }
+
+  // 返回预览视口顶部对应的源码行号（1-based）；测量失败返回 null。
+  // 用于切换模式时把「预览像素位置」转成宽度无关的行锚点。
+  _lineAtPreviewTop(pvTop) {
+    this._computedPosition();
+    const list = this._previewElementList;
+    if (!list || list.length < 2) return null;
+    // 二分找 previewList 中 <= pvTop 的最大行索引
+    let lo = 0, hi = list.length - 1, ans = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (list[mid] <= pvTop) { ans = mid; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    return ans + 1; // 1-based 源码行
+  }
+
+  // 根据 unified 渲染结果重建滚动同步数据（仅在内容变化时调用）
+  rebuildScrollSync() {
+    const content = this.cm.getValue();
+    const totalLines = content.split('\n').length;
+
+    // 构建平行位置数组（使用 data-source-line）
+    this._computedPosition();
+
+    // 生成 _linePositions（兼容 updatePreview 滚动恢复）
+    const allElements = Array.from(this.preview.querySelectorAll('[data-source-line]'));
+    const previewRect = this.preview.getBoundingClientRect();
+    const st = this.preview.scrollTop;
+    const sh = this.preview.scrollHeight || 1;
+    const positions = [{ line: 0, fraction: 0 }];
+    const seen = new Set();
+
+    // 超大预览：元素过多时只采样测量，未测行靠行号线性插值，避免全量 getBoundingClientRect 重排卡顿
+    const MAX_SYNC_SAMPLES = 2000;
+    const step = Math.max(1, Math.ceil(allElements.length / MAX_SYNC_SAMPLES));
+
+    for (let i = 0; i < allElements.length; i++) {
+      if (step > 1 && i % step !== 0 && i !== allElements.length - 1) continue;
+      const child = allElements[i];
+      const sourceLine = parseInt(child.dataset.sourceLine, 10);
+      if (isNaN(sourceLine)) continue;
+      if (seen.has(sourceLine)) continue;
+      seen.add(sourceLine);
+
+      const rect = child.getBoundingClientRect();
+      const elTop = rect.top - previewRect.top + st;
+      const elBottom = elTop + child.offsetHeight;
+
+      positions.push({ line: sourceLine, fraction: Math.min(Math.max(elTop / sh, 0), 1) });
+      positions.push({ line: sourceLine + 1, fraction: Math.min(Math.max(elBottom / sh, 0), 1) });
+    }
+
+    positions.push({ line: totalLines - 1, fraction: 1 });
+    positions.sort((a, b) => a.line - b.line);
+
+    const deduped = [];
+    let lastLine = -1;
+    for (const p of positions) {
+      if (p.line !== lastLine) {
+        deduped.push(p);
+        lastLine = p.line;
+      }
+    }
+    if (deduped.length === 0 || deduped[0].line > 0) deduped.unshift({ line: 0, fraction: 0 });
+    if (deduped[deduped.length - 1].line < totalLines - 1) deduped.push({ line: totalLines - 1, fraction: 1 });
+    this._linePositions = deduped;
+  }
+
+  // demo 的 getHeightToTop：计算元素到容器顶部的距离（offsetTop 遍历 offsetParent）
+  _getOffsetTop(el) {
+    let top = el.offsetTop;
+    let parent = el.offsetParent;
+    while (parent && parent !== this.preview) {
+      top += parent.offsetTop;
+      parent = parent.offsetParent;
+    }
+    return top;
+  }
+
+  // demo 风格：节流函数（首次立即执行，后续在 delay 内只保存最后一次调用）
+  _throttleScroll(fn, delay) {
+    if (this._scrollThrottleTimer) {
+      this._scrollThrottlePending = fn;
+      return;
+    }
+    fn();
+    this._scrollThrottleTimer = setTimeout(() => {
+      this._scrollThrottleTimer = null;
+      if (this._scrollThrottlePending) {
+        const pending = this._scrollThrottlePending;
+        this._scrollThrottlePending = null;
+        this._throttleScroll(pending, delay);
+      }
+    }, delay);
+  }
+
+  // demo 风格：防抖函数（每次调用重置计时器）
+  _debounceScroll(fn, delay) {
+    clearTimeout(this._scrollDebounceTimer);
+    this._scrollDebounceTimer = setTimeout(fn, delay);
+  }
+
+  // demo 风格：恢复滚动（重置双标志锁）
+  _resumeScroll() {
+    this._canScroll.editor = true;
+    this._canScroll.preview = true;
+  }
+
+  // 编辑器 → 预览同步（逐行密集插值）
+  _syncEditorToPreview(editorTop) {
+    if (this.previewWindow) { this._syncEditorToPreviewWindow(); return; }
+    this._computedPosition();
+
+    const editorList = this._editorElementList;
+    const previewList = this._previewElementList;
+    if (!editorList || editorList.length < 2) return;
+
+    const { scrollHeight, clientHeight } = this.preview;
+    const cmInfo = this.cm.getScrollInfo();
+    const top = (editorTop != null) ? editorTop : cmInfo.top;
+
+    if (top <= 0.5) { this.preview.scrollTop = 0; return; }
+    if (top + clientHeight >= cmInfo.height - 0.5) {
+      this.preview.scrollTop = Math.max(0, scrollHeight - clientHeight);
+      return;
+    }
+
+    let lo = 0, hi = editorList.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (editorList[mid] <= top) lo = mid + 1;
+      else hi = mid;
+    }
+    let idx = lo - 1;
+    if (idx < 0) { this.preview.scrollTop = 0; return; }
+    if (idx >= editorList.length - 1) {
+      this.preview.scrollTop = Math.max(0, scrollHeight - clientHeight);
+      return;
+    }
+
+    const editorStart = editorList[idx];
+    const editorEnd = editorList[idx + 1];
+    const previewStart = previewList[idx];
+    const previewEnd = previewList[idx + 1];
+
+    if (editorEnd <= editorStart || previewEnd < 0 || previewStart < 0) {
+      this.preview.scrollTop = previewStart;
+      return;
+    }
+
+    const targetScrollTop = previewStart + (top - editorStart) / (editorEnd - editorStart) * (previewEnd - previewStart);
+    this.preview.scrollTop = Math.max(0, Math.min(targetScrollTop, scrollHeight - clientHeight));
+  }
+
+  // 预览 → 编辑器同步（逐行密集插值）
+  // previewTop 可选：指定预览滚动位置作为来源；省略则读当前预览 scrollTop。
+  // 切换模式时用它传入「已保存的预览位置」，避免依赖此刻可能不可靠的实时值。
+  _syncPreviewToEditor(previewTop) {
+    if (this.previewWindow) { this._syncPreviewToEditorWindow(); return; }
+    this._computedPosition();
+
+    const previewList = this._previewElementList;
+    const editorList = this._editorElementList;
+    if (!previewList || previewList.length < 2) return;
+
+    const { scrollHeight, clientHeight } = this.preview;
+    const cmInfo = this.cm.getScrollInfo();
+    const pvTop = (previewTop != null) ? previewTop : this.preview.scrollTop;
+
+    if (pvTop <= 0.5) { this.cm.scrollTo(0, 0); return; }
+    if (pvTop + clientHeight >= scrollHeight - 0.5) {
+      this.cm.scrollTo(0, Math.max(0, cmInfo.height - cmInfo.clientHeight));
+      return;
+    }
+
+    let lo = 0, hi = previewList.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (previewList[mid] <= pvTop) lo = mid + 1;
+      else hi = mid;
+    }
+    let idx = lo - 1;
+    if (idx < 0) { this.cm.scrollTo(0, 0); return; }
+    if (idx >= previewList.length - 1) {
+      this.cm.scrollTo(0, Math.max(0, cmInfo.height - cmInfo.clientHeight));
+      return;
+    }
+
+    const previewStart = previewList[idx];
+    const previewEnd = previewList[idx + 1];
+    const editorStart = editorList[idx];
+    const editorEnd = editorList[idx + 1];
+
+    if (previewEnd <= previewStart || editorEnd < 0 || editorStart < 0) {
+      this.cm.scrollTo(0, editorStart);
+      return;
+    }
+
+    const targetEditorTop = editorStart + (pvTop - previewStart) / (previewEnd - previewStart) * (editorEnd - editorStart);
+    this.cm.scrollTo(0, targetEditorTop);
+  }
+
+  // 滑动窗口模式：编辑器滚动 → 预览
+  // 焦点（编辑区视口顶部对应行）落在窗口内则直接定位预览；否则以焦点重新渲染窗口
+  _syncEditorToPreviewWindow() {
+    const win = this.previewWindow;
+    if (!win) return;
+    const cmInfo = this.cm.getScrollInfo();
+    const focus = this.cm.lineAtHeight(cmInfo.top, 'local'); // 0-based
+    if (focus < win.start + 8 || focus > win.end - 8) {
+      this._previewFocusLine = Math.max(0, Math.min(focus, this.cm.lineCount() - 1));
+      this.debounceUpdatePreview();
+      return;
+    }
+    this._focusPreviewToLine(focus);
+  }
+
+  // 滑动窗口模式：预览滚动 → 编辑器
+  // 预览仅含窗口片段，按当前预览滚动位置反查窗口内对应源码行，回滚编辑器
+  _syncPreviewToEditorWindow() {
+    if (!this._windowLineTops || !this._windowLineTops.length) return;
+    const st = this.preview.scrollTop;
+    let bestLine = this.previewWindow.start;
+    let bestTop = -Infinity;
+    for (const [ln, top] of this._windowLineTops) {
+      if (top <= st + 1 && top > bestTop) { bestLine = ln - 1; bestTop = top; }
+    }
+    const targetTop = this.cm.heightAtLine(bestLine, 'local');
+    if (this.activeTab) this.activeTab.scrollPos = { top: targetTop, left: 0 };
+    this.cm.scrollTo(0, targetTop);
+  }
+
+  // 按 markdown 块级元素边界分割源码，与 pulldown-cmark 渲染输出对齐
+  // 注意：此方法保留用于兼容旧的 _blocks 数组引用
+  _splitMarkdownBlocks(lines) {
+    const blocks = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      while (i < lines.length && lines[i].trim() === '') i++;
+      if (i >= lines.length) break;
+
+      const startLine = i;
+      const line = lines[i].trim();
+
+      // 代码围栏：作为一个整体 block
+      if (line.startsWith('```') || line.startsWith('~~~')) {
+        const fence = line.match(/^(`{3,}|~{3,})/)[0];
+        i++;
+        while (i < lines.length) {
+          if (lines[i].trim().startsWith(fence)) break;
+          i++;
+        }
+        if (i < lines.length) i++;
+        blocks.push({ startLine, endLine: i - 1 });
+        continue;
+      }
+
+      // 标题：始终是单行 block（demo 中每个 # 行 = 一个预览元素）
+      if (/^#{1,6}\s/.test(line)) {
+        blocks.push({ startLine, endLine: i });
+        i++;
+        continue;
+      }
+
+      // 水平分割线：单行 block
+      if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+        blocks.push({ startLine, endLine: i });
+        i++;
+        continue;
+      }
+
+      // 表格：连续的 | 行
+      if (line.startsWith('|')) {
+        while (i < lines.length && lines[i].trim().startsWith('|')) i++;
+        blocks.push({ startLine, endLine: i - 1 });
+        continue;
+      }
+
+      // 段落/列表/引用：消费连续非空行，遇到标题/围栏/分割线/表格时停止
+      i++;
+      while (i < lines.length && lines[i].trim() !== '') {
+        const t = lines[i].trim();
+        if (/^#{1,6}\s/.test(t) ||
+            t.startsWith('```') || t.startsWith('~~~') ||
+            /^(-{3,}|\*{3,}|_{3,})\s*$/.test(t) ||
+            t.startsWith('|')) {
+          break;
+        }
+        i++;
+      }
+      blocks.push({ startLine, endLine: i - 1 });
+    }
+
+    return blocks;
+  }
+
+  // 获取预览 DOM 的直系 block 级子元素（与 blocks 顺序一一对应）
+  _getPreviewBlockElements() {
+    const tags = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'PRE', 'TABLE', 'UL', 'OL', 'BLOCKQUOTE', 'HR', 'DETAILS', 'DIV', 'DL', 'FIGURE', 'IMG']);
+    return Array.from(this.preview.children).filter(el => tags.has(el.tagName));
+  }
+
+  // 像素比例兜底：在文档中均匀取样 20 个点
+  _fallbackPositionMap(totalLines) {
+    const positions = [{ line: 0, fraction: 0 }];
+    const step = Math.max(1, Math.floor(totalLines / 20));
+    for (let l = step; l < totalLines - 1; l += step) {
+      positions.push({ line: l, fraction: l / totalLines });
+    }
+    positions.push({ line: totalLines - 1, fraction: 1 });
+    return positions;
+  }
+
+  // 超大文档预览保护：返回前 maxLines 行内容。
+  // 若在代码围栏内被截断，向后补足到下一个围栏，避免后续整段被当作代码块。
+  _headForPreview(content, maxLines) {
+    const lines = content.split('\n');
+    if (lines.length <= maxLines) return content;
+    let head = lines.slice(0, maxLines).join('\n');
+    const fences = (head.match(/^\s*```/gm) || []).length;
+    if (fences % 2 === 1) {
+      const rest = lines.slice(maxLines).join('\n');
+      const idx = rest.indexOf('```');
+      if (idx >= 0) head += '\n' + rest.slice(0, idx + 3);
+    }
+    return head;
+  }
+
+  // 构建窗口内 [源码行(1-based), 相对预览内容顶部像素] 的有序映射
+  _buildWindowLineTops() {
+    const pRect = this.preview.getBoundingClientRect();
+    const arr = [];
+    this.preview.querySelectorAll('[data-source-line]').forEach((el) => {
+      const ln = parseInt(el.dataset.sourceLine, 10);
+      if (isNaN(ln)) return;
+      const rect = el.getBoundingClientRect();
+      arr.push([ln, rect.top - pRect.top + this.preview.scrollTop]);
+    });
+    arr.sort((a, b) => a[0] - b[0]);
+    this._windowLineTops = arr;
+  }
+
+  // 把预览滚动定位到指定源码行（0-based），使其靠近顶部并保留上方上下文
+  _focusPreviewToLine(line) {
+    if (!Number.isFinite(line)) line = 0; // N22 ③：读取点归一化，NaN/undefined 焦点不污染定位
+    if (!this._windowLineTops || !this._windowLineTops.length) return;
+    const target = line + 1;
+    let bestTop = this._windowLineTops[0][1];
+    let bestLine = this._windowLineTops[0][0];
+    for (const [ln, top] of this._windowLineTops) {
+      if (ln <= target && ln > bestLine) { bestLine = ln; bestTop = top; }
+    }
+    const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
+    this.preview.scrollTop = Math.max(0, Math.min(bestTop - 24, maxScroll));
+  }
+
+  // 纯预览模式大文档：把窗口片段渲染到「撑满全文高度的占位 + 绝对定位块」中，
+  // 使原生滚动条代表整篇文档，用户可平滑滚动 / 拖到任意位置查看全文（虚拟滚动）。
+  // 平均行高恒定（首次渲染后校准一次），故 scrollTop ↔ 源码行比例精确，与 avg 估算无关。
+  _renderPreviewWindowBlock(finalHtml, win, content) {
+    const totalLines = content.split('\n').length;
+    const avg = this._avgLineHeight || 22;
+    const estTotal = totalLines * avg;
+    const blockTop = win.start * avg;
+    this.preview.style.position = 'relative';
+    this.preview.style.padding = '0';
+    this.preview.innerHTML =
+      `<div class="pv-spacer" style="position:absolute;top:0;left:0;width:100%;height:${estTotal}px;"></div>` +
+      `<div class="pv-block" style="position:absolute;top:${blockTop}px;left:0;right:0;padding:16px 24px;box-sizing:border-box;">${finalHtml}</div>`;
+  }
+
+  // 首次渲染后根据已渲染窗口的真实行高校准平均行高（仅一次，之后恒定），
+  // 并据此重设占位高度（此时通常位于头部，scrollTop≈0，无视觉跳动）。
+  _updateVirtualScrollMetrics() {
+    if (!this._previewVirtual || !this.previewWindow) return;
+    if (this._avgLineHeight == null) {
+      const arr = this._windowLineTops;
+      if (arr && arr.length >= 2) {
+        const first = arr[0], last = arr[arr.length - 1];
+        const dh = last[1] - first[1];
+        const dl = last[0] - first[0];
+        if (dl > 0) {
+          const avg = dh / dl;
+          if (avg > 1 && avg < 500) this._avgLineHeight = avg;
+        }
+      }
+      if (this._avgLineHeight == null) this._avgLineHeight = 22;
+      const spacer = this.preview.querySelector('.pv-spacer');
+      if (spacer) spacer.style.height = (this.cm.lineCount() * this._avgLineHeight) + 'px';
+    }
+  }
+
+  // 纯预览模式虚拟滚动：预览滚动时按 scrollTop 估算当前视口顶行（锚定行），
+  // 若超出当前窗口缓冲区则 debounce 重渲染相邻窗口（拖到任意位置均渲染对应内容）。
+  // 重渲染使用最新 scrollTop 反推锚定行，避免滚动期间位置过期导致抖动。
+  _syncPreviewVirtualScroll() {
+    if (!this._previewVirtual || !this.previewWindow) return;
+    const win = this.previewWindow;
+    const avg = this._avgLineHeight || 22;
+    const total = this.cm.lineCount();
+    const anchor = Math.max(0, Math.min(total - 1, Math.round(this.preview.scrollTop / avg)));
+    if (anchor >= win.start + PREVIEW_WINDOW_LEAD && anchor <= win.end - PREVIEW_WINDOW_LEAD) return;
+    if (this._virtualRenderTimer) return;
+    this._virtualRenderTimer = setTimeout(() => {
+      this._virtualRenderTimer = null;
+      const avg2 = this._avgLineHeight || 22;
+      const a2 = Math.max(0, Math.min(this.cm.lineCount() - 1, Math.round(this.preview.scrollTop / avg2)));
+      this._previewFocusLine = a2;
+      this._previewScrollDriven = true; // 滚动驱动：重渲染后保留当前 scrollTop，避免回弹
+      this.updatePreview();
+    }, 120);
+  }
+
+    async updatePreview(suppressLoading = false) {
+      // 防御：若被勾选抑制标记触发（应已被 debounceUpdatePreview 拦截），直接轻量返回，杜绝全量重渲染
+      if (this._suppressNextPreviewRerender) {
+        this._suppressNextPreviewRerender = false;
+        this.updateWordCount();
+        this.updateOutline();
+        return;
+      }
+      const gen = ++this._renderGeneration;
+      let needLoad = false;
+      try {
+        const content = this.cm.getValue();
+        const totalLines = content.split('\n').length;
+        const isLarge = content.length > MAX_PREVIEW_CHARS || totalLines > MAX_PREVIEW_LINES;
+
+        // 大文档重渲染耗时明显：在加载层可见时由本函数接管其生命周期（引用计数），
+        // 仅在「显式打开/切换/视图切换/大纲跳转」等非滚动、非打字触发的重渲染时显示 loading；
+        // 滚动驱动（_previewScrollDriven）与打字（suppressLoading）不显示，避免闪烁
+        needLoad = isLarge && !suppressLoading && !this._previewScrollDriven;
+        if (needLoad) this._beginPaneLoad();
+
+        // 超大文档：预览只渲染「围绕焦点的一段源码」（滑动窗口），避免整篇同步解析/渲染卡死主线程，
+        // 同时保证任意位置（大纲跳转 / 滚动）都可在预览中落点。
+        let renderContent = content;
+        this._previewTruncated = false;
+        if (isLarge) {
+          const focus = Number.isFinite(this._previewFocusLine) ? this._previewFocusLine : 0;
+          const win = PreviewWindow.computePreviewWindow(content, focus, {
+            maxLines: MAX_PREVIEW_LINES,
+            lead: PREVIEW_WINDOW_LEAD,
+            windowLines: PREVIEW_WINDOW_LINES,
+          });
+          this.previewWindow = win;
+          this._previewSliceOffset = win.start;
+          this._previewVirtual = (this.viewMode === 'preview');
+          const slice = content.split('\n').slice(win.start, win.end).join('\n');
+          renderContent = slice.length > HEAD_RENDER_CHAR_CAP ? slice.slice(0, HEAD_RENDER_CHAR_CAP) : slice;
+          this._previewTruncated = true;
+        } else {
+          this.previewWindow = null;
+          this._previewSliceOffset = 0;
+          this._previewVirtual = false;
+        }
+
+
+      const hasToc = content.includes('[TOC]') || content.includes('[toc]');
+      let tocHtml = '';
+      if (hasToc) {
+        tocHtml = await TauriApi.generateToc({ content });
+        if (gen !== this._renderGeneration) return;
+      }
+
+      // 仅在 loading 遮罩可见时，让出主线程两帧确保遮罩先绘制（避免大文档同步渲染期间“无 loading 白屏”）；普通打字刷新不额外延迟
+      const loadingEl = document.getElementById('pane-loading');
+      if (loadingEl && !loadingEl.classList.contains('hidden')) {
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      }
+
+      // P0-0d 产物韧性：unified-bundle.js 缺失/加载失败时，这里原本是裸 ReferenceError
+      // （"UnifiedRenderer is not defined"），对使用者毫无指引。改抛可操作错误，
+      // 由 P0-1 的全局兜底渲染成错误条。
+      if (typeof UnifiedRenderer === 'undefined' || !UnifiedRenderer || typeof UnifiedRenderer.renderMarkdown !== 'function') {
+        throw new Error('渲染器未构建或加载失败（src/lib/unified-bundle.js），请运行 npm run build:renderer');
+      }
+      const html = UnifiedRenderer.renderMarkdown(renderContent, { softBreaks: this.settings.softBreaks });
+      if (gen !== this._renderGeneration) return;
+
+      let finalHtml = html;
+      if (tocHtml) {
+        finalHtml = finalHtml.replace(/<p[^>]*data-source-line="(\d+)"[^>]*>\[TOC\]<\/p>/gi, '<div class="toc-wrapper" data-source-line="$1">' + tocHtml + '</div>');
+      }
+
+      // 内嵌 base64 图片改为按内容缓存的 Blob URL，避免每次重渲染重复解码（大文档多图时是关键性能点）
+      finalHtml = finalHtml.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, (m) => this.getCachedImageURL(m));
+
+      // 滑动窗口：渲染的是切片后的源码，需把 data-source-line 还原为绝对行号（与编辑区一致），
+      // 否则大纲锚点 / 滚动定位会错位
+      if (this.previewWindow && this._previewSliceOffset > 0) {
+        const off = this._previewSliceOffset;
+        finalHtml = finalHtml.replace(/data-source-line="(\d+)"/g, (m, n) => `data-source-line="${parseInt(n, 10) + off}"`);
+      }
+
+      this._canScroll.editor = false;
+      this._canScroll.preview = false;
+      if (this._previewVirtual && this.previewWindow) {
+        this._renderPreviewWindowBlock(finalHtml, this.previewWindow, content);
+      } else {
+        this.preview.style.position = '';
+        this.preview.style.padding = '';
+        this.preview.innerHTML = finalHtml;
+      }
+
+      // 超大文档：顶部全局横幅提示（不塞进预览内容，避免随滚动/重渲染消失）
+      if (this._previewTruncated) {
+        const totalLines = content.split('\n').length;
+        const key = this.activeTab ? (this.activeTab.filePath || ('untitled:' + this.tabs.indexOf(this.activeTab))) : 'none';
+        this.showLargeFileNotice(key, totalLines, content.length);
+        this._previewTruncated = false;
+      } else {
+        this.hideLargeFileNotice();
+      }
+
+      this.preview.querySelectorAll('details:not([open])').forEach(el => el.open = true);
+      // 任务列表 checkbox：remark-gfm 默认输出 disabled 不可交互，渲染后移除 disabled 使其可点击
+      this.preview.querySelectorAll('input[type="checkbox"][disabled]').forEach(cb => cb.removeAttribute('disabled'));
+
+      try { await this.processImages(); } catch (e) { console.warn('[preview] Images error:', e); }
+      if (gen !== this._renderGeneration) { this._resumeScroll(); return; }
+      const postOpts = {
+        t: (k) => this.t(k),
+        isDark: this.isDark,
+        escapeHtml: (s) => this.escapeHtml(s),
+        escapeAttr: (s) => this.escapeAttr(s),
+        headingToId: (s) => this.headingToId(s),
+        mermaidCache: this._mermaidCache,
+      };
+      try { PreviewPost.processEmojiShortcodes(this.preview); } catch (e) { console.warn('[preview] Emoji error:', e); }
+      try { PreviewPost.processMath(this.preview); } catch (e) { console.warn('[preview] Math error:', e); }
+      try { PreviewPost.processAbbreviations(this.preview, postOpts); } catch (e) { console.warn('[preview] Abbr error:', e); }
+      try { this.processFootnotes(); } catch (e) { console.warn('[preview] Footnotes error:', e); }
+      try { PreviewPost.processHeadings(this.preview, postOpts); } catch (e) { console.warn('[preview] Headings error:', e); }
+      try { await PreviewPost.processMermaid(this.preview, postOpts); } catch (e) { console.warn('[preview] Mermaid error:', e); }
+      if (gen !== this._renderGeneration) { this._resumeScroll(); return; }
+      try { PreviewPost.addCopyButtons(this.preview, postOpts); } catch (e) { console.warn('[preview] Copy btn error:', e); }
+
+      // 代码高亮 + 行号：抽到 src/modules/code-block.js（独立模块，便于单独测试）
+      try {
+        CodeBlock.processCodeBlocks(this.preview, {
+          hljs,
+          cache: this._hljsCache,
+          lineNumbers: this.preview.classList.contains('code-line-numbers'),
+        });
+      } catch (e) { console.warn('[preview] Code block error:', e); }
+
+      // 等待浏览器完成布局后再测量元素位置
+      await new Promise(r => requestAnimationFrame(r));
+      if (gen !== this._renderGeneration) { this._resumeScroll(); return; }
+
+      // 滑动窗口模式：构建「源码行 → 预览像素」映射，并把预览滚动定位到焦点行；
+      // 不走整篇滚动同步（预览只含窗口片段，1:1 映射无意义）
+      if (this.previewWindow) {
+        this._buildWindowLineTops();
+        if (this._previewVirtual) this._updateVirtualScrollMetrics();
+        // 滚动驱动的重渲染保留当前 scrollTop（内容按 ℓ*avg 线性连续，无需回弹）；
+        // 仅大纲跳转 / 打开文件等显式跳转才贴顶定位
+        if (!this._previewScrollDriven) this._focusPreviewToLine(this._previewFocusLine);
+        this._previewScrollDriven = false;
+        requestAnimationFrame(() => {
+          if (gen === this._renderGeneration) this._resumeScroll();
+        });
+        return;
+      }
+
+      // 重建滚动同步数据（blocks + 预览子元素）
+      this.rebuildScrollSync();
+
+      // 恢复预览滚动位置（逐行密集插值）；预览发起的编辑（复选框勾选）已保存位置，跳过以免被重算覆盖
+      if (this.settings.scrollSync && this._editorElementList && this._editorElementList.length > 1) {
+        const cmInfo = this.cm.getScrollInfo();
+        const top = cmInfo.top;
+
+        if (top <= 0.5) {
+          this.preview.scrollTop = 0;
+        } else if (top + cmInfo.clientHeight >= cmInfo.height - 0.5) {
+          this.preview.scrollTop = Math.max(0, this.preview.scrollHeight - this.preview.clientHeight);
+        } else {
+          let idx = -1;
+          for (let i = 0; i < this._editorElementList.length; i++) {
+            if (top < this._editorElementList[i]) {
+              idx = i - 1;
+              break;
+            }
+          }
+          if (idx < 0) idx = 0;
+          if (idx < this._editorElementList.length - 1) {
+            const editorStart = this._editorElementList[idx];
+            const editorEnd = this._editorElementList[idx + 1];
+            const previewStart = this._previewElementList[idx];
+            const previewEnd = this._previewElementList[idx + 1];
+            if (editorEnd > editorStart) {
+              const ratio = (top - editorStart) / (editorEnd - editorStart);
+              this.preview.scrollTop = previewStart + ratio * (previewEnd - previewStart);
+            }
+          }
+        }
+      } else {
+        const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
+        if (this.preview.scrollTop > maxScroll) this.preview.scrollTop = maxScroll;
+      }
+      requestAnimationFrame(() => {
+        if (gen === this._renderGeneration) this._resumeScroll();
+      });
+    } catch (error) {
+      if (gen !== this._renderGeneration) return;
+      this._resumeScroll();
+      const msg = String(error).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      this.preview.innerHTML = `<p style="color: red;">预览错误: ${msg}</p>`;
+    } finally {
+      if (needLoad) this._endPaneLoad();
+    }
+  }
+
+  // P1-1：逻辑已抽到 src/modules/image-processor.js（纯函数 + 依赖注入）。
+  // 这里只做 DI 适配：把实例字段/方法包成注入项，错误仍上交调用方（6772 处的 try/catch）。
+  async processImages() {
+    return ImageProcessor.processImages(this.preview, {
+      activeTab: this.activeTab,
+      imageCache: this._imageBase64Cache,
+      tauri: TauriApi,
+      getCachedImageURL: (dataUri) => this.getCachedImageURL(dataUri),
+      getRenderGeneration: () => this._renderGeneration,
+    });
+  }
+
+  processFootnotes() {
+    this.preview.querySelectorAll('.footnote-ref a').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const href = link.getAttribute('href');
+        if (!href) return;
+        const target = this.preview.querySelector(href);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.classList.add('footnote-flash');
+          setTimeout(() => target.classList.remove('footnote-flash'), 1500);
+        }
+      });
+    });
+
+    this.preview.querySelectorAll('.footnote-backref').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const href = link.getAttribute('href');
+        if (!href) return;
+        const target = this.preview.querySelector(href);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.classList.add('footnote-flash');
+          setTimeout(() => target.classList.remove('footnote-flash'), 1500);
+        }
+      });
+    });
+  }
+
+  showToast(text, type = 'danger', opts = {}) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+
+    const iconSvg = type === 'danger'
+      ? '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>'
+      : type === 'warning'
+        ? '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
+        : type === 'info'
+          ? '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>'
+          : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>';
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'toast-icon';
+    iconSpan.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + iconSvg + '</svg>';
+
+    const body = document.createElement('div');
+    body.className = 'toast-body';
+    if (typeof text === 'object' && text !== null) {
+      const titleEl = document.createElement('div');
+      titleEl.className = 'toast-title';
+      titleEl.textContent = text.title || '';
+      body.appendChild(titleEl);
+      if (text.detail) {
+        const detailEl = document.createElement('div');
+        detailEl.className = 'toast-detail';
+        detailEl.textContent = text.detail;
+        body.appendChild(detailEl);
+      }
+      if (text.code) {
+        const codeEl = document.createElement('div');
+        codeEl.className = 'toast-code';
+        codeEl.textContent = '错误码 ' + text.code;
+        body.appendChild(codeEl);
+      }
+    } else {
+      body.textContent = text;
+    }
+
+    el.appendChild(iconSpan);
+    el.appendChild(body);
+    container.appendChild(el);
+
+    const duration = opts.duration || (type === 'danger' ? 5000 : type === 'warning' ? 4000 : 3000);
+    setTimeout(() => {
+      el.style.transition = 'opacity 0.3s, transform 0.3s';
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(-20px)';
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  }
+
+  // 统一错误上报：用户友好提示 + 开发可诊断（错误码 + 上下文写入 console）
+  reportError(code, opts = {}) {
+    const lang = this.settings && this.settings.language === 'en' ? 'en' : 'zh';
+    const dict = ERROR_MESSAGES[code] || {};
+    const entry = dict[lang] || dict.zh || { title: code, detail: '' };
+    let detail = opts.detail || entry.detail || '';
+    if (detail && opts.params) {
+      for (const [k, v] of Object.entries(opts.params)) {
+        detail = detail.replace('{' + k + '}', v == null ? '' : v);
+      }
+    }
+    const title = opts.title || entry.title || code;
+    const context = opts.context || {};
+    // 开发可诊断：错误码 + 上下文 + 完整堆栈写入 console（用户不可见，但开发可查）
+    console.error('[TizuMark]', code, JSON.stringify(context), opts.error && (opts.error.stack || opts.error));
+    if (opts.toast === false) {
+      this.setStatus(title + (detail ? '：' + detail : ''));
+    } else {
+      this.showToast({ title, detail, code }, opts.type || 'danger', { duration: opts.duration });
+    }
+  }
+
+  // 解析 Rust read_file 的结构化错误 JSON，返回带 .code 的 Error 供上层 reportError 使用
+  _mapReadFileError(e, path) {
+    let kind = 'Io';
+    try {
+      const raw = typeof e === 'string' ? e : (e && e.message ? e.message : null);
+      const obj = raw ? JSON.parse(raw) : null;
+      if (obj && obj.kind) kind = obj.kind;
+    } catch (_) { /* 非结构化错误，按 Io 处理 */ }
+    const codeMap = {
+      NotFound: 'E_NOT_FOUND',
+      PermissionDenied: 'E_PERMISSION',
+      Locked: 'E_LOCKED',
+      PathTooLong: 'E_PATH_TOO_LONG',
+      InvalidEncoding: 'E_ENCODING',
+      Io: 'E_IO',
+    };
+    const code = codeMap[kind] || 'E_IO';
+    const name = path ? path.split(/[/\\]/).pop() : '';
+    const err = new Error('读取文件失败: ' + kind);
+    err.code = code;
+    err.path = path;
+    err.params = { name };
+    return err;
+  }
+
+  // ====== 外部文件变更检测 ======
+  async refreshFileMeta(tab) {
+    if (!tab) return;
+    if (!tab.filePath) { tab.fileMeta = null; return; }
+    try {
+      tab.fileMeta = await TauriApi.fileMeta({ path: tab.filePath });
+    } catch (e) {
+      tab.fileMeta = null;
+    }
+  }
+
+  async reloadTabFromDisk(tab) {
+    if (!tab || !tab.filePath) return;
+    try {
+      const content = await this.readFileNormalized(tab.filePath);
+      tab.content = content;
+      tab.savedContent = content;
+      await this.refreshFileMeta(tab);
+      tab.pendingExternalChange = false;
+      if (tab === this.activeTab) {
+        this.cm.setValue(content);
+        this.updatePreview();
+        this.updateOutline();
+        this.updateWordCount();
+      }
+      this.updateTabDisplay();
+    } catch (e) {
+      this.reportError(e.code || 'E_IO', { context: { path: tab.filePath }, error: e, params: e.params, detail: e.detail });
+    }
+  }
+
+  enqueueExternalChange(tab) {
+    if (!tab || !tab.filePath) return;
+    if (this._externalQueue.includes(tab)) return;
+    tab.pendingExternalChange = true;
+    this._externalQueue.push(tab);
+    this.updateTabDisplay();
+    this.updateExternalChangeBanner();
+  }
+
+  // 提示条始终反映当前激活标签页的外部变更
+  updateExternalChangeBanner() {
+    const tab = this.activeTab;
+    if (tab && tab.pendingExternalChange) {
+      this.renderExternalChangeBanner(tab);
+    } else {
+      this.hideExternalChangeBanner();
+    }
+  }
+
+  async dismissExternalChange(tab, reload) {
+    const idx = this._externalQueue.indexOf(tab);
+    if (idx !== -1) this._externalQueue.splice(idx, 1);
+    if (reload) {
+      await this.reloadTabFromDisk(tab);
+    } else {
+      await this.refreshFileMeta(tab);
+      tab.pendingExternalChange = false;
+    }
+    this.updateTabDisplay();
+    this.updateExternalChangeBanner();
+  }
+
+  async reloadAllExternalChanges() {
+    const queue = this._externalQueue.slice();
+    for (const tab of queue) {
+      await this.reloadTabFromDisk(tab);
+      const i = this._externalQueue.indexOf(tab);
+      if (i !== -1) this._externalQueue.splice(i, 1);
+    }
+    this.updateTabDisplay();
+    this.updateExternalChangeBanner();
+  }
+
+  ignoreAllExternalChanges() {
+    this._externalQueue.slice().forEach(t => {
+      t.pendingExternalChange = false;
+      this.refreshFileMeta(t);
+    });
+    this._externalQueue = [];
+    this.updateTabDisplay();
+    this.updateExternalChangeBanner();
+  }
+
+  renderExternalChangeBanner(tab) {
+    const banner = document.getElementById('external-change-banner');
+    if (!banner) return;
+    const dirty = tab.isModified;
+    banner.querySelector('.ecb-name').textContent = tab.name || tab.filePath || '';
+    banner.querySelector('.ecb-msg').textContent = dirty ? this.t('externalChangedDirty') : this.t('externalChanged');
+    banner.querySelector('.ecb-reload').textContent = this.t('ecbReload');
+    banner.querySelector('.ecb-ignore').textContent = this.t('ecbIgnore');
+    banner.querySelector('.ecb-reload-all').textContent = this.t('ecbReloadAll');
+    banner.querySelector('.ecb-ignore-all').textContent = this.t('ecbIgnoreAll');
+    banner.dataset.tabIndex = this.activeTabIndex;
+    banner.classList.add('visible');
+    this._externalBannerVisible = true;
+  }
+
+  hideExternalChangeBanner() {
+    const banner = document.getElementById('external-change-banner');
+    if (banner) banner.classList.remove('visible');
+    this._externalBannerVisible = false;
+  }
+
+  initFileWatcher() {
+    if (this._fileWatcherStarted) return;
+    this._fileWatcherStarted = true;
+    this._externalQueue = [];
+    this._externalBannerVisible = false;
+    this._watching = false;
+
+    const banner = document.getElementById('external-change-banner');
+    if (banner) {
+      banner.querySelector('.ecb-reload').addEventListener('click', () => {
+        const i = parseInt(banner.dataset.tabIndex, 10);
+        const tab = this.tabs[i];
+        if (tab) this.dismissExternalChange(tab, true);
+      });
+      banner.querySelector('.ecb-ignore').addEventListener('click', () => {
+        const i = parseInt(banner.dataset.tabIndex, 10);
+        const tab = this.tabs[i];
+        if (tab) this.dismissExternalChange(tab, false);
+      });
+      banner.querySelector('.ecb-reload-all').addEventListener('click', () => this.reloadAllExternalChanges());
+      banner.querySelector('.ecb-ignore-all').addEventListener('click', () => this.ignoreAllExternalChanges());
+    }
+
+    const pass = async () => {
+      for (const tab of this.tabs) {
+        if (!tab.filePath) continue;
+        let meta;
+        try { meta = await TauriApi.fileMeta({ path: tab.filePath }); }
+        catch (e) { meta = undefined; }
+        if (meta === undefined) continue;
+        if (!meta) {
+          if (tab.fileMeta !== null && !tab.pendingExternalChange) this.enqueueExternalChange(tab);
+          continue;
+        }
+        if (!tab.fileMeta) { tab.fileMeta = meta; continue; }
+        if (meta.mtime !== tab.fileMeta.mtime || meta.size !== tab.fileMeta.size) {
+          let disk = null;
+          try { disk = await this.readFileNormalized(tab.filePath); } catch (e) { disk = null; }
+          // 磁盘内容换行已归一化为 LF，savedContent 同为 LF，统一比较，避免 CRLF/CR 文件每次轮询误报"外部已修改"
+          if (disk !== null && disk !== tab.savedContent) this.enqueueExternalChange(tab);
+          else tab.fileMeta = meta;
+        }
+      }
+    };
+
+    setInterval(async () => {
+      if (this._watching) return;
+      this._watching = true;
+      try { await pass(); } catch (e) { /* ignore */ } finally { this._watching = false; }
+    }, 1500);
+
+    window.addEventListener('focus', () => {
+      if (this._watching) return;
+      this._watching = true;
+      pass().catch(() => {}).finally(() => { this._watching = false; });
+    });
+  }
+
+  setStatus(text) {
+    this.statusText.textContent = text;
+    setTimeout(() => {
+      if (this.statusText.textContent === text) {
+        this.statusText.textContent = this.t('ready');
+      }
+    }, 3000);
+  }
+
+  updateWordCount() {
+    const { words, chars, lines } = WordCount.countStats(this.cm.getValue());
+    this.wordCountEl.textContent = `${this.t('words')}: ${words}`;
+    this.charCountEl.textContent = `${this.t('chars')}: ${chars}`;
+    this.lineCountEl.textContent = `${this.t('lines')}: ${lines}`;
+  }
+
+  async toggleTheme() {
+    if (this.settings.themeMode !== 'light' && this.settings.themeMode !== 'dark') {
+      this.settings.themeMode = this.isDark ? 'light' : 'dark';
+      document.getElementById('set-theme-mode').value = this.settings.themeMode;
+    }
+    this.isDark = !this.isDark;
+    this.settings.themeMode = this.isDark ? 'dark' : 'light';
+    document.getElementById('set-theme-mode').value = this.settings.themeMode;
+    this.saveSettings();
+    document.documentElement.setAttribute('data-theme', this.isDark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-color-scheme', this.settings.colorScheme || 'default');
+    this.cm.setOption('theme', this.isDark ? 'material-darker' : 'default');
+    this.updateThemeIcon();
+
+    const highlightTheme = document.getElementById('highlight-theme');
+    if (highlightTheme) {
+      highlightTheme.href = this.isDark
+        ? 'lib/highlight.js/github-dark.min.css'
+        : 'lib/highlight.js/github.min.css';
+    }
+
+    await this.rerenderMermaid();
+    this.setStatus(this.t('themeSwitched', { theme: this.isDark ? this.t('themeDark') : this.t('themeLight') }));
+  }
+
+  updateThemeIcon() {
+    const svg = document.getElementById('theme-icon');
+    const text = document.getElementById('theme-text');
+    if (!svg) return;
+    if (this.isDark) {
+      svg.innerHTML = '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>';
+      if (text) text.textContent = this.t('themeDark');
+    } else {
+      svg.innerHTML = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>';
+      if (text) text.textContent = this.t('themeLight');
+    }
+  }
+
+  loadTheme() {
+    this.applyThemeMode();
+    
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (this.settings.themeMode === 'system') {
+        this.applyThemeMode();
+      }
+    });
+  }
+
+  setViewMode(mode) {
+    if (this.viewMode === mode) return;
+    
+    if (mode === 'preview') {
+      document.getElementById('find-panel').classList.add('hidden');
+    } else {
+      document.getElementById('preview-find-panel').classList.add('hidden');
+      this.clearPreviewHighlight();
+    }
+
+    // 切换前保存滚动位置 + 行锚点。
+    // 关键：像素位置（scrollPos / previewScrollTop）与宽度绑定——纯预览 100% 宽与分屏 50% 宽
+    // 下同一像素对应不同段落。切换会让预览重排，跨宽度用旧像素定位必然错位。
+    // 因此额外算出「视口顶部对应的源码行号」作为宽度无关的锚点，切换后按该行在新宽度下定位。
+    this._pendingSwitchAnchorLine = null;
+    const swTab = this.activeTab;
+    if (swTab) {
+      // 预览在分屏/纯预览两种模式都可见，始终记录其像素位置（锚点失效时回退用）
+      if (this.preview) swTab.previewScrollTop = this.preview.scrollTop;
+      if (this.cm && this.viewMode === 'edit') {
+        // 离开编辑（分屏）：编辑器可见，存像素 + 视口顶部源码行
+        const si = this.cm.getScrollInfo();
+        swTab.scrollPos = { top: si.top, left: si.left };
+        try { this._pendingSwitchAnchorLine = this.cm.lineAtHeight(si.top, 'local') + 1; } catch (_) {}
+      } else if (this.preview && this.viewMode === 'preview') {
+        // 离开纯预览（100% 宽）：预览可见，存视口顶部源码行
+        this._pendingSwitchAnchorLine = this._lineAtPreviewTop(this.preview.scrollTop);
+      }
+    }
+
+    this.viewMode = mode;
+    this.applyViewMode();
+  }
+
+  toggleViewMode() {
+    this.setViewMode(this.viewMode === 'preview' ? 'edit' : 'preview');
+  }
+
+  applyViewMode() {
+    const container = document.querySelector('.editor-container');
+    const editorPane = document.getElementById('editor-pane');
+    const previewPane = document.getElementById('preview-pane');
+    const btnPreview = document.getElementById('btn-view-preview');
+    const btnEdit = document.getElementById('btn-view-edit');
+    const sideLeft = document.getElementById('btn-side-left');
+    const sideRight = document.getElementById('btn-side-right');
+
+    editorPane.style.flex = '';
+    editorPane.style.width = '';
+    previewPane.style.flex = '';
+    previewPane.style.width = '';
+
+    container.classList.remove('preview-mode', 'editor-collapsed', 'preview-collapsed');
+
+    btnPreview.classList.toggle('active', this.viewMode === 'preview');
+    btnEdit.classList.toggle('active', this.viewMode === 'edit');
+
+    if (this.viewMode === 'preview') {
+      container.classList.add('preview-mode');
+      sideLeft.classList.add('side-hidden');
+      sideRight.classList.add('side-hidden');
+    } else {
+      sideLeft.classList.remove('side-hidden', 'side-active');
+      sideLeft.innerHTML = '&#9664;';
+      sideLeft.title = this.t('collapseEditor');
+      sideRight.classList.remove('side-hidden', 'side-active');
+      sideRight.innerHTML = '&#9654;';
+      sideRight.title = this.t('collapsePreview');
+    }
+
+    setTimeout(() => {
+      this.cm.refresh();
+      this.updateSideButtons();
+      // 切换视图模式后，若虚拟滚动状态与新模式不一致则按新模式重建预览
+      if (this.previewWindow && this._previewVirtual !== (this.viewMode === 'preview')) {
+        this.updatePreview();
+      }
+      // 恢复滚动位置：用切换前算出的「源码行锚点」在新宽度下定位目标面板。
+      // 行锚点与宽度无关，能正确跨越分屏(50%)↔纯预览(100%)的重排；像素值只在锚点失效时回退。
+      const rTab = this.activeTab;
+      if (rTab) {
+        const anchor = this._pendingSwitchAnchorLine;
+        this._pendingSwitchAnchorLine = null;
+        if (this.viewMode === 'preview') {
+          // 进入纯预览（100% 宽）：预览已重排，用锚点行在新布局下的预览位置定位
+          let restored = false;
+          if (anchor != null) {
+            this._computedPosition();
+            const list = this._previewElementList;
+            if (list && anchor - 1 < list.length) {
+              const pMax = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
+              this.preview.scrollTop = Math.min(Math.max(0, list[anchor - 1] || 0), pMax);
+              restored = true;
+            }
+          }
+          if (!restored) {
+            const pMax = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
+            this.preview.scrollTop = Math.min(rTab.previewScrollTop || 0, pMax);
+          }
+        } else {
+          // 切回编辑（分屏）：编辑器已 refresh，用锚点行在编辑器里的像素位置定位
+          let restored = false;
+          if (anchor != null && this.cm) {
+            try {
+              const targetTop = this.cm.heightAtLine(Math.max(0, anchor - 1), 'local');
+              if (typeof targetTop === 'number') { this.cm.scrollTo(0, targetTop); restored = true; }
+            } catch (_) {}
+          }
+          if (!restored) {
+            const sp = rTab.scrollPos || { top: 0, left: 0 };
+            this.cm.scrollTo(sp.left || 0, sp.top || 0);
+          }
+        }
+      }
+      requestAnimationFrame(() => this._resumeScroll());
+    }, 50);
+  }
+
+  toggleCollapse(pane) {
+    const container = document.querySelector('.editor-container');
+    if (this.viewMode === 'preview') {
+      this.setStatus(this.t('collapseHint'));
+      return;
+    }
+
+    this._canScroll.editor = false;
+    this._canScroll.preview = false;
+
+    const sideLeft = document.getElementById('btn-side-left');
+    const sideRight = document.getElementById('btn-side-right');
+    const editorPane = document.getElementById('editor-pane');
+    const previewPane = document.getElementById('preview-pane');
+    const previewScrollTop = this.preview.scrollTop;
+
+    editorPane.style.flex = '';
+    editorPane.style.width = '';
+    previewPane.style.flex = '';
+    previewPane.style.width = '';
+
+    if (pane === 'editor') {
+      container.classList.toggle('editor-collapsed');
+      const isCollapsed = container.classList.contains('editor-collapsed');
+      sideLeft.innerHTML = isCollapsed ? '&#9654;' : '&#9664;';
+      sideLeft.title = isCollapsed ? this.t('restoreEditor') : this.t('collapseEditor');
+      sideLeft.classList.toggle('side-active', isCollapsed);
+    } else {
+      container.classList.toggle('preview-collapsed');
+      const isCollapsed = container.classList.contains('preview-collapsed');
+      sideRight.innerHTML = isCollapsed ? '&#9664;' : '&#9654;';
+      sideRight.title = isCollapsed ? this.t('restorePreview') : this.t('collapsePreview');
+      sideRight.classList.toggle('side-active', isCollapsed);
+    }
+
+    let restored = false;
+    const doRefresh = () => {
+      if (restored) return;
+      restored = true;
+      this.cm.refresh();
+      this.preview.scrollTop = previewScrollTop;
+      this.updateSideButtons();
+      requestAnimationFrame(() => {
+        this._resumeScroll();
+      });
+    };
+    const targetPane = pane === 'editor' ? editorPane : previewPane;
+    targetPane.addEventListener('transitionend', (e) => {
+      if (e.propertyName === 'flex') doRefresh();
+    }, { once: true });
+    setTimeout(doRefresh, 280);
+  }
+
+  async openUserGuide() {
+    const isEn = this.settings.language === 'en';
+    const fileName = isEn ? 'guide.en.md' : 'guide.md';
+    const tabName = isEn ? 'User Guide.md' : '使用说明.md';
+    const existingIndex = this.tabs.findIndex(t => t.name === tabName);
+    if (existingIndex !== -1) {
+      this.switchTab(existingIndex);
+      return;
+    }
+    let content = null;
+    // 优先用 fetch 读取打包后的前端资源（开发/多数运行环境）
+    // guide.md 位于 src/ 目录，webview 前端路径 frontendDist: ../src 可访问
+    try {
+      const resp = await fetch(fileName);
+      if (resp.ok) {
+        const text = await resp.text();
+        // 防止静态服务把未知路径回退成 index.html：内容是 HTML 则视为读取失败，走兜底
+        const looksLikeHtml = text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html');
+        if (!looksLikeHtml) content = text;
+      }
+    } catch (_) { /* 落到下面的兜底读取 */ }
+    // 兜底：通过 Rust 从应用资源目录读取（部分打包/WebView 环境下 fetch 受限）
+    if (content === null) {
+      try {
+        const baseDir = (await TauriApi.resourceDir()) || '';
+        const p = baseDir ? (baseDir.replace(/[/\\]$/, '') + '/' + fileName) : fileName;
+        content = await TauriApi.readFile({ path: p });
+      } catch (e) {
+        this.reportError('guide', { error: e });
+        return;
+      }
+      // read_file 也可能返回 HTML（某些资源目录解析不符预期），同样排除
+      if (content && (content.trim().startsWith('<!DOCTYPE') || content.trim().startsWith('<html'))) {
+        content = null;
+      }
+    }
+    if (content === null) {
+      this.reportError('guide');
+      return;
+    }
+    this.addTab(tabName, content, null);
+    this.activeTab.savedContent = content;
+    this.activeTab.isGuide = true;
+    this.updateTabDisplay();
+    this.setStatus(isEn ? this.t('openedGuideEn') : this.t('openedGuide'));
+  }
+
+  async _openBundledFile(href, content, filePath = null) {
+    const name = filePath ? filePath.split(/[/\\]/).pop() : href.split(/[/\\]/).pop();
+    // 去重：有真实路径按路径，无路径（打包资源，如从「使用说明」打开的 demo.md）按名称，
+    // 避免同一资源重复打开多个标签页
+    const existingIndex = filePath
+      ? this.tabs.findIndex(t => t.filePath === filePath)
+      : this.tabs.findIndex(t => t.name === name);
+    if (existingIndex !== -1) {
+      this.switchTab(existingIndex);
+      return;
+    }
+    this.addTab(name, content, filePath);
+    this.activeTab.savedContent = content;
+    // 标记为打包资源 tab：processImages 仅对这类 tab 启用 read_bundled_image_as_base64
+    // 回退（dev 模式 filePath 目录可能读不到图片），普通本地文档不回退，避免误加载打包资源。
+    this.activeTab.isBundled = true;
+    this.updateTabDisplay();
+  }
+
+  // 还原被渲染器编码的链接 URL（%5C→\、%2F→/ 等），得到可读取的真实文件路径。
+  // 兼容 Windows 盘符路径（D:\ 或 D:/）与 macOS/Linux 绝对路径（/...），
+  // 相对路径原样返回，交由 resolveDocPath 处理。
+  normalizeLinkHref(href) {
+    let p = href;
+    try { p = decodeURIComponent(href); } catch (_) { p = href; }
+    return p;
+  }
+
+  async showAbout() {
+    const dialog = document.getElementById('about-dialog');
+    dialog.classList.remove('hidden');
+    const details = document.querySelector('#about-dialog .dependency-details');
+    if (details) details.open = false;
+    if (!dialog._devSetup) {
+      dialog._devSetup = true;
+      let cnt = 0;
+      let timer = null;
+      const verEl = document.getElementById('about-version');
+      if (verEl) {
+        verEl.addEventListener('click', async () => {
+          cnt++;
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => { cnt = 0; }, 400);
+          if (cnt >= 5) {
+            cnt = 0;
+            clearTimeout(timer);
+            timer = null;
+            try {
+              await TauriApi.openDevtools();
+              this.showToast('DevTools 已打开', 'success');
+            } catch (e) {
+              this.showToast('DevTools 打开失败: ' + e, 'danger');
+            }
+          }
+        });
+      }
+    }
+    try {
+      const ver = await TauriApi.getVersion();
+      const el = document.getElementById('about-version');
+      if (el) el.textContent = 'TizuMark v' + ver;
+    } catch (_) {}
+  }
+
+  hideAbout() {
+    document.getElementById('about-dialog').classList.add('hidden');
+  }
+
+  // ========== Update / Auto-updater ==========
+
+  showUpdateDialog() {
+    document.getElementById('update-dialog').classList.remove('hidden');
+  }
+
+  hideUpdateDialog() {
+    this._updateDismissed = true;
+    document.getElementById('update-dialog').classList.add('hidden');
+  }
+
+  showUpdateState(state, checkId) {
+    ['checking', 'available', 'latest'].forEach(s => {
+      document.getElementById('update-state-' + s).classList.toggle('hidden', s !== state);
+    });
+    const titles = { checking: '检查更新', available: '发现新版本', latest: '已是最新' };
+    const titleEl = document.getElementById('update-title');
+    if (titleEl) titleEl.textContent = titles[state] || '发现新版本';
+    const btn = document.getElementById('update-action');
+    const skipBtn = document.getElementById('update-skip');
+    if (state === 'checking') {
+      btn.disabled = true;
+      btn.textContent = this.t('updateChecking');
+      document.getElementById('update-progress-wrap').classList.add('hidden');
+      if (skipBtn) skipBtn.classList.remove('hidden');
+    } else if (state === 'available') {
+      if (skipBtn) skipBtn.classList.remove('hidden');
+    } else if (state === 'latest') {
+      // 已是最新：弹框保持打开，不弹 toast，下方按钮变为单个蓝色「确认」
+      if (skipBtn) skipBtn.classList.add('hidden');
+      btn.disabled = false;
+      btn.dataset.state = 'confirm';
+      btn.textContent = this.t('updateConfirm');
+      document.getElementById('update-progress-wrap').classList.add('hidden');
+      this._fillLatestVersion(checkId);
+    }
+  }
+
+  async _fillLatestVersion(checkId) {
+    const el = document.getElementById('update-latest-version');
+    if (!el) return;
+    try {
+      const ver = await TauriApi.getVersion();
+      if (checkId !== undefined && this._updateCheckId !== checkId) return;
+      el.textContent = 'v' + ver;
+    } catch (_) {}
+  }
+
+  async checkUpdate(showUpToDate = false) {
+    const checkId = (this._updateCheckId || 0) + 1;
+    this._updateCheckId = checkId;
+    this._updateDismissed = false;
+    if (showUpToDate) {
+      this.showUpdateDialog();
+      this.showUpdateState('checking', checkId);
+    }
+    try {
+
+      const result = await TauriApi.updater.check();
+      if (this._updateCheckId !== checkId || this._updateDismissed) return;
+      if (!result) {
+        if (showUpToDate) {
+          this.showUpdateState('latest', checkId);
+        }
+        return;
+      }
+      const update = result;
+      if (!showUpToDate) this.showUpdateDialog();
+      document.getElementById('update-new-version').textContent = update.version;
+      try {
+        const ver = await TauriApi.getVersion();
+        if (this._updateCheckId !== checkId || this._updateDismissed) return;
+        document.getElementById('update-current-version').textContent = ver;
+      } catch (_) {}
+      const notesEl = document.getElementById('update-notes-body');
+      if (update.body) {
+        if (window.markdownit) {
+          notesEl.innerHTML = window.markdownit({ html: false, linkify: true }).render(update.body);
+        } else {
+          notesEl.innerHTML = update.body.replace(/\n/g, '<br>');
+        }
+      } else {
+        notesEl.textContent = this.t('noUpdateNotes');
+      }
+      this.showUpdateState('available', checkId);
+      this.pendingUpdate = update;
+      this.pendingUpdateRid = update.rid;
+      this.setUpdateAction('download');
+    } catch (err) {
+      console.error('Update check failed:', err);
+      if (showUpToDate) {
+        this.hideUpdateDialog();
+        this.showToast(this.t('updateFailed'));
+      }
+    }
+  }
+
+  setUpdateAction(state) {
+    const btn = document.getElementById('update-action');
+    btn.dataset.state = state;
+    btn.disabled = state === 'downloading';
+    if (state === 'download') {
+      btn.textContent = this.t('updateDownloadLabel');
+    } else if (state === 'downloading') {
+      btn.textContent = this.t('updateDownloading');
+    } else if (state === 'install') {
+      btn.textContent = this.t('updateInstallNow');
+    }
+  }
+
+  async handleUpdateAction() {
+    const state = document.getElementById('update-action').dataset.state;
+    if (state === 'confirm') {
+      this.hideUpdateDialog();
+      return;
+    }
+    if (state === 'download') {
+      this.setUpdateAction('downloading');
+      document.getElementById('update-progress-wrap').classList.remove('hidden');
+      await this.downloadUpdate();
+    } else if (state === 'install') {
+      await this.installUpdate();
+    }
+  }
+
+  async downloadUpdate() {
+    if (!this.pendingUpdate || !this.pendingUpdateRid) return;
+    this.pendingBytesRid = null;
+    try {
+
+      const channel = new Channel();
+      let totalSize = 0;
+      let downloadedSize = 0;
+      channel.onmessage = (eventData) => {
+        if (eventData.event === 'Started') {
+          totalSize = eventData.data?.contentLength || 0;
+        } else if (eventData.event === 'Progress') {
+          downloadedSize += eventData.data?.chunkLength || 0;
+          const pct = totalSize > 0 ? Math.min(100, Math.round((downloadedSize / totalSize) * 100)) : 0;
+          document.getElementById('update-progress-fill').style.width = pct + '%';
+          document.getElementById('update-progress-text').textContent = pct + '%';
+        } else if (eventData.event === 'Finished') {
+          document.getElementById('update-progress-fill').style.width = '100%';
+          document.getElementById('update-progress-text').textContent = '100%';
+        }
+      };
+      const bytesRid = await TauriApi.updater.download({ rid: this.pendingUpdateRid, onEvent: channel });
+      this.pendingBytesRid = bytesRid;
+      this.setUpdateAction('install');
+    } catch (err) {
+      console.error('Download failed:', err);
+      this.showToast(this.t('updateFailed'));
+      this.hideUpdateDialog();
+    }
+  }
+
+  async installUpdate() {
+    if (!this.pendingUpdateRid || !this.pendingBytesRid) return;
+    document.getElementById('update-action').disabled = true;
+    this.hideUpdateDialog();
+    try {
+
+      await TauriApi.updater.install({ updateRid: this.pendingUpdateRid, bytesRid: this.pendingBytesRid });
+    } catch (err) {
+      console.error('Install failed:', err);
+      document.getElementById('update-action').disabled = false;
+      this.showToast(this.t('updateFailed'));
+    }
+  }
+
+  openExternal(url) {
+    TauriApi.shellOpen(url).then((opened) => {
+      if (!opened) window.open(url, '_blank', 'noopener,noreferrer');
+    });
+  }
+
+  async minimizeWindow() {
+    try {
+      const appWindow = TauriApi.currentWindow();
+      await appWindow.minimize();
+    } catch (e) {
+      console.warn('minimize failed:', e);
+    }
+  }
+
+  async toggleMaximize() {
+    try {
+      const appWindow = TauriApi.currentWindow();
+      const isMaximized = await appWindow.isMaximized();
+      if (isMaximized) {
+        await appWindow.unmaximize();
+      } else {
+        await appWindow.maximize();
+      }
+      this.updateMaximizeIcon();
+    } catch (e) {
+      console.warn('maximize failed:', e);
+    }
+  }
+
+  async updateMaximizeIcon() {
+    try {
+      const appWindow = TauriApi.currentWindow();
+      const isMaximized = await appWindow.isMaximized();
+      const btn = document.getElementById('btn-maximize');
+      if (isMaximized) {
+        btn.innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10"><rect x="0.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.2"/><polyline points="2.5,2.5 2.5,0.5 9.5,0.5 9.5,7.5 7.5,7.5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>';
+      } else {
+        btn.innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>';
+      }
+    } catch (e) {
+      console.warn('updateMaximizeIcon failed:', e);
+    }
+  }
+
+  async closeWindow() {
+    await this.handleAppClose();
+  }
+
+  // ========== Markdown 格式化辅助方法 ==========
+
+  wrapSelection(before, after) {
+    const sel = this.cm.getSelection();
+    if (sel) {
+      this.cm.replaceSelection(before + sel + after);
+    } else {
+      const cursor = this.cm.getCursor();
+      this.cm.replaceRange(before + after, cursor);
+      this.cm.setCursor({ line: cursor.line, ch: cursor.ch + before.length });
+    }
+    this.cm.focus();
+  }
+
+  insertAtCursor(text, cursorOffset) {
+    const cursor = this.cm.getCursor();
+    const prevLine = cursor.line > 0 ? this.cm.getLine(cursor.line - 1) : '';
+    const needNewline = cursor.line > 0 && prevLine.trim() !== '';
+    const prefix = needNewline ? '\n' : '';
+    const addedLines = needNewline ? 1 : 0;
+    this.cm.replaceRange(prefix + text, cursor);
+    if (cursorOffset !== undefined) {
+      this.cm.setCursor({ line: cursor.line + addedLines, ch: cursor.ch + cursorOffset });
+    } else {
+      this.cm.setCursor({ line: cursor.line + addedLines, ch: cursor.ch + text.length });
+    }
+    this.cm.focus();
+  }
+
+  insertImageBlock(text) {
+    const cursor = this.cm.getCursor();
+    const line = this.cm.getLine(cursor.line);
+    const afterText = line.slice(cursor.ch);
+    const prevLine = cursor.line > 0 ? this.cm.getLine(cursor.line - 1) : '';
+    let prefix = '';
+    let addedLines = 0;
+    if (cursor.ch > 0 || (cursor.line > 0 && prevLine.trim() !== '')) {
+      prefix = '\n';
+      addedLines = 1;
+    }
+    this.cm.replaceRange(prefix + text + '\n' + afterText, cursor, { line: cursor.line, ch: line.length });
+    this.cm.setCursor({ line: cursor.line + addedLines + 1, ch: 0 });
+    this.cm.focus();
+  }
+
+  handleTaskCheckboxToggle(checkbox) {
+    // 通过 li 的 data-source-line 反查源码行（remark plugin 给所有节点标注，1-based）
+    const li = checkbox.closest('li');
+    if (!li) return;
+    const lineAttr = li.getAttribute('data-source-line');
+    if (!lineAttr) return;
+    const lineNum = parseInt(lineAttr, 10) - 1;  // 转 0-based
+    if (isNaN(lineNum) || lineNum < 0 || lineNum >= this.cm.lineCount()) return;
+    const lineText = this.cm.getLine(lineNum);
+    // 匹配任务列表行：可选 > 前缀（引用块嵌套）+ 前缀（- * + 或 数字.）+ [ ] / [x] + 可选内容
+    const taskRe = /^(\s*(?:>\s*)*(?:[*+-]|\d+[.)])\s+)\[([ xX])\](\s.*)?$/;
+    const m = lineText.match(taskRe);
+    if (!m) return;
+    // 按源码标记取反作为目标态（与即将发生的原生 click 默认切换结果一致）。
+    // 这里【不】手动设置 checkbox.checked：不 preventDefault，原生默认行为会把
+    // checkbox 切到 newChecked 并自己重绘 :checked 样式；若我们抢先设了 checked，
+    // 原生默认行为会在事件末尾再翻一次，反而错。
+    const sourceChecked = m[2] === 'x' || m[2] === 'X';
+    const newChecked = !sourceChecked;
+    const newMark = newChecked ? 'x' : ' ';
+    const newLine = m[1] + '[' + newMark + ']' + (m[3] || '');
+    const cursor = this.cm.getCursor();
+    // 预览 checkbox 已由原生 click 默认行为即时切到 newChecked（浏览器自绘，必然有响应）；
+    // 抑制整篇重渲染，避免重复重建把即时勾选态覆盖 / 引发预览或编辑器跳动。
+    this._suppressNextPreviewRerender = true;
+    // 同时取消任何已排队的防抖重建（如打字 / setValue 触发的待执行 300ms 定时器）：
+    // 否则勾选后那个遗留定时器仍会到期并整篇重建 preview，覆盖即时勾选并引发跳动/“看似没反应”。
+    clearTimeout(this.debounceTimer);
+    // 临时关闭滚动同步：cm.replaceRange/cm.setCursor 可能让编辑器自动滚动，
+    // 触发 _syncEditorToPreview 把预览滚到光标行（任务列表某行），导致上方 H3「任务列表」
+    // 被滚出视野顶部——表现为「点完之后预览框根本没有渲染出来」。
+    // _resumeScroll 会在 100ms 后自动恢复 _canScroll 标志，不影响正常滚动同步。
+    const prevCanScroll = { editor: this._canScroll.editor, preview: this._canScroll.preview };
+    this._canScroll.editor = false;
+    this._canScroll.preview = false;
+    this.cm.replaceRange(newLine, { line: lineNum, ch: 0 }, { line: lineNum, ch: lineText.length });
+    this.cm.setCursor(cursor, { scroll: false });  // 保持光标位置不跳动且不让编辑器自动滚动
+    setTimeout(() => {
+      if (this._canScroll) {
+        this._canScroll.editor = prevCanScroll.editor;
+        this._canScroll.preview = prevCanScroll.preview;
+      }
+    }, 120);
+    // activeTab.content 由 change 事件同步；预览 DOM 已就地更新，无需重渲染。
+  }
+
+  insertLinePrefix(prefix, ordered = false) {
+    const cm = this.cm;
+    // 有选区（跨行 / 多选区）：对选区覆盖的每一行逐行加前缀，用 operation 包裹保证一次 undo 撤销整批
+    if (cm.somethingSelected()) {
+      cm.operation(() => {
+        const selections = cm.listSelections();
+        const newSelections = [];
+        for (const sel of selections) {
+          const startLine = Math.min(sel.anchor.line, sel.head.line);
+          const endLine = Math.max(sel.anchor.line, sel.head.line);
+          let n = 1;
+          for (let ln = startLine; ln <= endLine; ln++) {
+            const text = cm.getLine(ln);
+            // 单行替换不增删行，行号在循环中保持有效
+            const linePrefix = ordered ? (n++) + '. ' : prefix;
+            cm.replaceRange(linePrefix + text, { line: ln, ch: 0 }, { line: ln, ch: text.length });
+          }
+          // 选中整批改动行（行首到末行行尾），让用户直观看到加前缀后的范围
+          const lastLineText = cm.getLine(endLine);
+          newSelections.push({
+            anchor: { line: startLine, ch: 0 },
+            head: { line: endLine, ch: lastLineText.length },
+          });
+        }
+        cm.setSelections(newSelections);
+      });
+      cm.focus();
+      return;
+    }
+    // 无选区：原单行行为（含上一行非空时自动换行再加前缀）
+    const cursor = cm.getCursor();
+    const line = cm.getLine(cursor.line);
+    const prevLine = cursor.line > 0 ? cm.getLine(cursor.line - 1) : '';
+    const needNewline = cursor.line > 0 && prevLine.trim() !== '';
+    const newLine = needNewline ? '\n' : '';
+    cm.replaceRange(newLine + prefix + line, { line: cursor.line, ch: 0 }, { line: cursor.line, ch: line.length });
+    cm.setCursor({ line: cursor.line + (needNewline ? 1 : 0), ch: prefix.length + cursor.ch });
+    cm.focus();
+  }
+
+  // 表格行内按 Enter 自动补充表格结构
+  _handleTableEnter(cm) {
+    const TABLE_ROW_RE = /^\|.*\|\s*$/;
+    const TABLE_SEPARATOR_RE = /^\|\s*[-:][-:\s]*\|/;
+    const pos = cm.getCursor();
+    const line = cm.getLine(pos.line);
+    // 非表格行或分隔行 → 交回原有列表延续逻辑
+    if (!TABLE_ROW_RE.test(line) || TABLE_SEPARATOR_RE.test(line)) {
+      const cmdName = 'newlineAndIndentContinueMarkdownList';
+      if (CodeMirror.commands[cmdName]) {
+        cm.execCommand(cmdName);
+      } else {
+        cm.execCommand('newlineAndIndent');
+      }
+      return;
+    }
+    // 有选区（多行选择）→ 交回原有逻辑
+    if (cm.somethingSelected()) {
+      const cmdName = 'newlineAndIndentContinueMarkdownList';
+      if (CodeMirror.commands[cmdName]) {
+        cm.execCommand(cmdName);
+      } else {
+        cm.execCommand('newlineAndIndent');
+      }
+      return;
+    }
+    // 计算列数
+    const colCount = (line.match(/\|/g) || []).length - 1;
+    if (colCount < 1) {
+      cm.execCommand('newlineAndIndentContinueMarkdownList');
+      return;
+    }
+    // 判断是否空行（去除 | 和空白后无内容）
+    const stripped = line.replace(/\|/g, '').trim();
+    if (stripped === '') {
+      // 空表格行 → 退出表格：删除本行
+      const nextLine = cm.getLine(pos.line + 1);
+      if (nextLine !== undefined) {
+        cm.replaceRange('', { line: pos.line, ch: 0 }, { line: pos.line + 1, ch: 0 });
+      } else {
+        // 最后一行：清空内容
+        cm.replaceRange('', { line: pos.line, ch: 0 }, { line: pos.line, ch: line.length });
+      }
+      cm.setCursor({ line: pos.line, ch: 0 });
+      return;
+    }
+    // 正常表格行 → 插入等列新行，光标置于第一格
+    const cells = [];
+    for (let i = 0; i < colCount; i++) cells.push(' ');
+    const newRow = '| ' + cells.join(' | ') + ' |';
+    cm.replaceRange('\n' + newRow, { line: pos.line, ch: line.length });
+    cm.setCursor({ line: pos.line + 1, ch: 2 });
+  }
+
+  insertBlock(text, cursorOffset) {
+    const cursor = this.cm.getCursor();
+    const line = this.cm.getLine(cursor.line);
+    const needNewline = line.trim() !== '';
+    const prefix = needNewline ? '\n\n' : '';
+    const addedLines = needNewline ? 2 : 0;
+    this.cm.replaceRange(prefix + text + '\n', cursor);
+    if (cursorOffset !== undefined) {
+      const before = text.substring(0, cursorOffset);
+      const lastNewline = before.lastIndexOf('\n');
+      const targetLine = cursor.line + addedLines + (before.split('\n').length - 1);
+      const targetCh = lastNewline === -1 ? cursorOffset : (cursorOffset - lastNewline - 1);
+      this.cm.setCursor({ line: targetLine, ch: targetCh });
+    } else {
+      const lines = text.split('\n');
+      this.cm.setCursor({ line: cursor.line + addedLines + lines.length - 1, ch: lines[lines.length - 1].length });
+    }
+    this.cm.focus();
+  }
+
+  // ========== 右键菜单 ==========
+
+  initContextMenu() {
+    const editorWrapper = document.getElementById('editor-wrapper');
+    const previewWrapper = document.getElementById('preview-wrapper');
+
+    editorWrapper.addEventListener('contextmenu', (e) => {
+      if (e.target.closest('.copy-btn')) return;
+      e.preventDefault();
+      this.hideAllContextMenus();
+      this.showContextMenu('context-menu-editor', e.clientX, e.clientY);
+    });
+
+    previewWrapper.addEventListener('contextmenu', (e) => {
+      if (e.target.closest('.copy-btn')) return;
+      e.preventDefault();
+      this.hideAllContextMenus();
+      this.showContextMenu('context-menu-preview', e.clientX, e.clientY);
+    });
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.hideAllContextMenus();
+        this._contextTabIndex = parseInt(tab.dataset.index);
+        this.showContextMenu('context-menu-tab', e.clientX, e.clientY);
+      });
+    });
+
+    const observer = new MutationObserver(() => {
+      document.querySelectorAll('.tab').forEach(tab => {
+        if (!tab._ctxBound) {
+          tab._ctxBound = true;
+          tab.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.hideAllContextMenus();
+            this._contextTabIndex = parseInt(tab.dataset.index);
+            this.showContextMenu('context-menu-tab', e.clientX, e.clientY);
+          });
+        }
+      });
+    });
+    observer.observe(document.getElementById('tab-bar'), { childList: true, subtree: true });
+
+    document.addEventListener('click', () => this.hideAllContextMenus());
+    document.addEventListener('contextmenu', (e) => {
+      if (e.target.closest('input:not([type="file"]):not([type="checkbox"]):not([type="radio"]), textarea, select') &&
+          !e.target.closest('#editor-wrapper') && !e.target.closest('#preview-wrapper')) {
+        return;
+      }
+      e.preventDefault();
+      if (!e.target.closest('.context-menu') && !e.target.closest('.dropdown-menu') && !e.target.closest('#editor-wrapper') && !e.target.closest('#preview-wrapper') && !e.target.closest('.tab')) {
+        this.hideAllContextMenus();
+      }
+    });
+
+    document.querySelectorAll('.context-menu-item[data-action]').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = item.dataset.action;
+        this.hideAllContextMenus();
+        this.executeMenuAction(action);
+      });
+    });
+
+    document.querySelectorAll('.context-submenu-trigger').forEach(trigger => {
+      const showSubmenu = () => {
+        const parentMenu = trigger.closest('.context-menu');
+        const submenuId = trigger.dataset.submenu;
+        const submenu = document.getElementById(submenuId);
+        if (!submenu) return;
+
+        const ancestors = [];
+        let el = parentMenu;
+        while (el) {
+          if (el.classList && el.classList.contains('context-menu')) {
+            ancestors.push(el);
+          }
+          el = el.parentElement;
+        }
+
+        document.querySelectorAll('.context-menu.submenu').forEach(s => {
+          if (!ancestors.includes(s) && s !== submenu) {
+            s.classList.add('hidden');
+          }
+        });
+
+        submenu.classList.remove('hidden');
+        const parentRect = trigger.getBoundingClientRect();
+        submenu.style.left = (parentRect.right - 1) + 'px';
+        submenu.style.top = parentRect.top + 'px';
+
+        requestAnimationFrame(() => {
+          const subRect = submenu.getBoundingClientRect();
+          if (subRect.right > window.innerWidth) {
+            submenu.style.left = (parentRect.left - subRect.width + 1) + 'px';
+          }
+          if (subRect.bottom > window.innerHeight) {
+            submenu.style.top = (window.innerHeight - subRect.height - 4) + 'px';
+          }
+        });
+      };
+
+      trigger.addEventListener('mouseenter', showSubmenu);
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const submenuId = trigger.dataset.submenu;
+        const submenu = document.getElementById(submenuId);
+        if (submenu && submenu.classList.contains('hidden')) {
+          showSubmenu();
+        }
+      });
+    });
+
+    let ctxHideTimer = null;
+
+    document.querySelectorAll('.context-menu').forEach(menu => {
+      menu.addEventListener('mouseleave', () => {
+        clearTimeout(ctxHideTimer);
+        ctxHideTimer = setTimeout(() => {
+          if (!document.querySelector('.context-menu.submenu:hover') && !document.querySelector('.context-submenu-trigger:hover')) {
+            document.querySelectorAll('.context-menu.submenu').forEach(s => s.classList.add('hidden'));
+          }
+        }, 150);
+      });
+      menu.addEventListener('mouseenter', () => {
+        if (menu.classList.contains('submenu')) {
+          clearTimeout(ctxHideTimer);
+        }
+      });
+    });
+
+    document.querySelectorAll('.context-menu .context-menu-item:not(.context-submenu-trigger)').forEach(item => {
+      item.addEventListener('mouseenter', () => {
+        const parentMenu = item.closest('.context-menu');
+        parentMenu.querySelectorAll('.context-submenu-trigger').forEach(trigger => {
+          const sub = document.getElementById(trigger.dataset.submenu);
+          if (sub) sub.classList.add('hidden');
+        });
+      });
+    });
+  }
+
+  showContextMenu(menuId, x, y) {
+    const menu = document.getElementById(menuId);
+    if (!menu) return;
+    menu.classList.remove('hidden');
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+
+    requestAnimationFrame(() => {
+      const rect = menu.getBoundingClientRect();
+      if (rect.right > window.innerWidth) {
+        menu.style.left = (x - rect.width) + 'px';
+      }
+      if (rect.bottom > window.innerHeight) {
+        menu.style.top = (y - rect.height) + 'px';
+      }
+    });
+  }
+
+  hideAllContextMenus() {
+    document.querySelectorAll('.context-menu').forEach(m => m.classList.add('hidden'));
+    document.querySelectorAll('.dropdown-menu.submenu').forEach(m => m.classList.add('hidden'));
+  }
+
+  executeMenuAction(action) {
+    switch (action) {
+      case 'cut': { const s = this.cm.getSelection(); if (s) { navigator.clipboard.writeText(s); this.cm.replaceSelection(''); } this.cm.focus(); break; }
+      case 'copy': { const s = this.cm.getSelection(); if (s) navigator.clipboard.writeText(s); this.cm.focus(); break; }
+      case 'paste': { navigator.clipboard.readText().then(t => { if (t) this.cm.replaceSelection(t); }).catch(() => {}); this.cm.focus(); break; }
+      case 'find-replace': this.toggleFindPanel(true); break;
+      case 'select-all': this.cm.execCommand('selectAll'); break;
+
+      case 'insert-bold': this.wrapSelection('**', '**'); break;
+      case 'insert-italic': this.wrapSelection('*', '*'); break;
+      case 'insert-strikethrough': this.wrapSelection('~~', '~~'); break;
+      case 'insert-inline-code': this.wrapSelection('`', '`'); break;
+      case 'insert-highlight': this.wrapSelection('==', '=='); break;
+      case 'insert-superscript': this.wrapSelection('<sup>', '</sup>'); break;
+      case 'insert-subscript': this.wrapSelection('<sub>', '</sub>'); break;
+
+      case 'insert-h1': this.insertLinePrefix('# '); break;
+      case 'insert-h2': this.insertLinePrefix('## '); break;
+      case 'insert-h3': this.insertLinePrefix('### '); break;
+      case 'insert-h4': this.insertLinePrefix('#### '); break;
+      case 'insert-h5': this.insertLinePrefix('##### '); break;
+      case 'insert-h6': this.insertLinePrefix('###### '); break;
+
+      case 'insert-code-block': this.insertBlock('```javascript\n// code here\n```', 14); break;
+      case 'insert-table': this.insertBlock('| 列1 | 列2 | 列3 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |', 2); break;
+      case 'insert-quote': this.insertLinePrefix('> '); break;
+      case 'insert-math-block': this.insertBlock('$$\nE = mc^2\n$$', 3); break;
+      case 'insert-mermaid': this.insertBlock('```mermaid\ngraph TD\n    A[开始] --> B[结束]\n```', 11); break;
+      case 'insert-hr': this.insertBlock('---'); break;
+      case 'insert-toc': this.insertBlock('[TOC]'); break;
+
+      case 'insert-callout-note': this.insertBlock('> [!NOTE]\n> 提示内容', 12); break;
+      case 'insert-callout-tip': this.insertBlock('> [!TIP]\n> 建议内容', 11); break;
+      case 'insert-callout-warning': this.insertBlock('> [!WARNING]\n> 警告内容', 15); break;
+      case 'insert-callout-caution': this.insertBlock('> [!CAUTION]\n> 注意内容', 15); break;
+      case 'insert-callout-important': this.insertBlock('> [!IMPORTANT]\n> 重要内容', 17); break;
+
+      case 'insert-ul': this.insertLinePrefix('- '); break;
+      case 'insert-ol': this.insertLinePrefix('1. ', true); break;
+      case 'insert-task': this.insertLinePrefix('- [ ] '); break;
+
+      case 'insert-link': this.showInsertLinkDialog(); break;
+      case 'insert-image': this.showInsertImageDialog(); break;
+
+      case 'preview-copy': { const s = window.getSelection(); if (s && s.toString()) navigator.clipboard.writeText(s.toString()).catch(() => {}); break; }
+      case 'preview-select-all': { const range = document.createRange(); range.selectNodeContents(this.preview); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); break; }
+      case 'preview-copy-html': { const sel = window.getSelection(); if (sel.rangeCount > 0) { const range = sel.getRangeAt(0); const frag = range.cloneContents(); const div = document.createElement('div'); div.appendChild(frag); navigator.clipboard.writeText(div.innerHTML); } break; }
+      case 'preview-find': this.toggleFindPanel(); break;
+
+      case 'tab-close': this.closeTab(this._contextTabIndex); break;
+      case 'tab-close-others': this.closeOtherTabs(this._contextTabIndex); break;
+      case 'tab-close-all': this.closeAllTabs(); break;
+      case 'tab-copy-path': this.copyTabPath(this._contextTabIndex); break;
+    }
+  }
+
+  async closeOtherTabs(keepIndex) {
+    if (keepIndex < 0 || keepIndex >= this.tabs.length) return;
+    const otherModified = this.tabs.filter((t, i) => i !== keepIndex && t.isModified);
+    if (otherModified.length > 0) {
+      const result = await this.showSaveDialog(
+        this.t('saveChanges'),
+        this.t('filesModifiedConfirm', { n: otherModified.length }),
+        this.t('saveAll'), this.t('discardAll'), this.t('cancel')
+      );
+      if (result === 'cancel') return;
+      if (result === 'save') {
+        const ok = await this.batchSaveTabs(otherModified);
+        if (!ok) return;
+      } else {
+        for (const tab of otherModified) {
+          tab.content = tab.savedContent;
+        }
+        this.cm.setValue(this.activeTab.content);
+        this.updateTabDisplay();
+        this.updatePreview();
+      }
+    }
+    const tab = this.tabs[keepIndex];
+    this.tabs = [tab];
+    this.activeTabIndex = 0;
+    await this.ensureTabLoaded(tab);
+    this.cm.setValue(tab.content || '');
+    this.cm.setCursor(tab.cursorPos || { line: 0, ch: 0 });
+    this.updateTabBar();
+    this.updatePreview();
+    this.saveSession();
+  }
+
+  async closeAllTabs() {
+    const modified = this.tabs.filter(t => t.isModified);
+    if (modified.length > 0) {
+      const result = await this.showSaveDialog(
+        this.t('saveChanges'),
+        this.t('filesModifiedConfirm', { n: modified.length }),
+        this.t('saveAll'), this.t('discardAll'), this.t('cancel')
+      );
+      if (result === 'cancel') return;
+      if (result === 'save') {
+        const ok = await this.batchSaveTabs(modified);
+        if (!ok) return;
+      }
+    }
+    this.tabs = [new Tab(`${this.t('untitled')}${this.untitledCounter++}`)];
+    this.activeTabIndex = 0;
+    this.cm.setValue('');
+    this.updateTabBar();
+    this.updatePreview();
+    this.saveSession();
+  }
+
+  async copyTabPath(index) {
+    if (index < 0 || index >= this.tabs.length) return;
+    const tab = this.tabs[index];
+    if (!tab.filePath) {
+      this.setStatus(this.t('notSaved'));
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(tab.filePath);
+      this.setStatus(this.t('pathCopied'));
+    } catch {
+      this.setStatus(this.t('copyFailed'));
+    }
+  }
+
+  async batchSaveTabs(tabs) {
+    for (const tab of tabs) {
+      if (!tab.isModified) continue;
+      try {
+        if (!tab.filePath) {
+          const path = await dialogSave({
+            filters: [
+              { name: 'Markdown', extensions: ['md'] },
+              { name: this.t('allFiles'), extensions: ['*'] }
+            ]
+          });
+          if (!path) return false;
+          tab.filePath = path;
+          tab.name = path.split(/[/\\]/).pop();
+        }
+        await TauriApi.writeFile({ path: tab.filePath, content: tab.content });
+        tab.savedContent = tab.content;
+        await this.refreshFileMeta(tab);
+      } catch (error) {
+        this.setStatus(`${this.t('saveFailed')}: ${error}`);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  async handleAppClose() {
+    try {
+      const appWindow = TauriApi.currentWindow();
+      // 1. 处理未保存文档
+      const modified = this.tabs.filter(t => t.isModified);
+      if (modified.length > 0) {
+        const result = await this.showSaveDialog(
+          this.t('saveChanges'),
+          this.t('filesModifiedConfirm', { n: modified.length }),
+          this.t('saveAll'), this.t('discardAll'), this.t('cancel')
+        );
+        if (result === 'cancel') return;
+        if (result === 'save') {
+          const ok = await this.batchSaveTabs(modified);
+          if (!ok) return;
+        } else {
+          for (const tab of modified) {
+            tab.content = tab.savedContent;
+          }
+          const remaining = this.tabs.filter(t => t.filePath || t.content !== '');
+          if (remaining.length === 0) {
+            this.tabs.length = 0;
+            this.tabs.push(new Tab(`${this.t('untitled')}${this.untitledCounter++}`));
+            this.activeTabIndex = 0;
+          } else {
+            this.tabs = remaining;
+            if (this.activeTabIndex >= this.tabs.length) {
+              this.activeTabIndex = this.tabs.length - 1;
+            }
+          }
+          this.cm.setValue(this.activeTab.content);
+          this.updateTabBar();
+          this.updatePreview();
+        }
+      }
+      // 2. 保存会话
+      this.saveSession();
+      // 3. 按用户偏好执行关闭行为
+      const action = await this._resolveCloseAction();
+      if (!action) return; // 用户在弹框点了取消
+      if (action === 'quit') {
+        await TauriApi.quitApp();
+      } else {
+        await appWindow.hide();
+      }
+    } catch (error) {
+      console.error('handleAppClose error:', error);
+      try {
+        const w = TauriApi.currentWindow();
+        if (w) await w.hide();
+      } catch { /* 浏览器环境下降级 */ }
+    }
+  }
+
+  async _resolveCloseAction() {
+    const action = this.settings.closeAction || 'ask';
+    if (action === 'quit') return 'quit';
+    if (action === 'minimize') return 'minimize';
+    // ask — 弹出确认对话框
+    const result = await Dialogs.showCloseDialog({
+      t: (k, p) => this.t(k, p),
+      doc: document,
+    });
+    if (!result) return null; // cancelled
+    if (result.remember) {
+      this.settings.closeAction = result.action;
+      this.saveSettings();
+    }
+    return result.action;
+  }
+
+  initFormatToolbar() {
+    // 格式工具栏：直接按钮 + 复合下拉（悬停展开），折叠状态持久化
+    const fmtToolbar = document.getElementById('format-toolbar');
+    if (fmtToolbar) {
+      fmtToolbar.classList.toggle('collapsed', !!this.settings.toolbarCollapsed);
+      fmtToolbar.querySelectorAll('[data-action]').forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.executeMenuAction(item.dataset.action);
+          // 点击菜单项后关闭弹出菜单：强制隐藏，直到鼠标移出下拉区再恢复 hover 展开
+          const menu = item.closest('.dropdown-menu');
+          if (menu) menu.classList.add('force-hide');
+        });
+      });
+      // 鼠标移出下拉区后清除强制隐藏，恢复 hover 展开能力
+      fmtToolbar.querySelectorAll('.fmt-dropdown').forEach(dd => {
+        dd.addEventListener('mouseleave', () => {
+          const m = dd.querySelector('.dropdown-menu');
+          if (m) m.classList.remove('force-hide');
+        });
+      });
+      const fmtCollapse = document.getElementById('fmt-collapse');
+      if (fmtCollapse) {
+        fmtCollapse.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.settings.toolbarCollapsed = !this.settings.toolbarCollapsed;
+          fmtToolbar.classList.toggle('collapsed', this.settings.toolbarCollapsed);
+          const lbl = fmtCollapse.querySelector('.fmt-toggle-label');
+          if (lbl) lbl.textContent = this.settings.toolbarCollapsed ? this.t('expandToolbar') : this.t('collapseToolbar');
+          this.saveSettings();
+        });
+      }
+    }
+  }
+
+  // ========== 标签栏滚动 ==========
+
+  initTabScroll() {
+    this.scrollContainer = document.getElementById('tab-bar-scroll');
+    this.scrollLeftBtn = document.getElementById('tab-scroll-left');
+    this.scrollRightBtn = document.getElementById('tab-scroll-right');
+
+    if (!this.scrollContainer) return;
+
+    const updateArrows = () => {
+      const maxScroll = this.scrollContainer.scrollWidth - this.scrollContainer.clientWidth;
+      if (maxScroll <= 1) {
+        this.scrollLeftBtn.classList.add('hidden');
+        this.scrollRightBtn.classList.add('hidden');
+      } else {
+        this.scrollLeftBtn.classList.toggle('hidden', this.scrollContainer.scrollLeft <= 1);
+        this.scrollRightBtn.classList.toggle('hidden', this.scrollContainer.scrollLeft >= maxScroll - 1);
+      }
+    };
+
+    this.scrollContainer.addEventListener('scroll', updateArrows, { passive: true });
+
+    this.scrollContainer.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        this.scrollContainer.scrollLeft += e.deltaY;
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    this.scrollLeftBtn.addEventListener('click', () => {
+      this.scrollContainer.scrollBy({ left: -200, behavior: 'auto' });
+    });
+
+    this.scrollRightBtn.addEventListener('click', () => {
+      this.scrollContainer.scrollBy({ left: 200, behavior: 'auto' });
+    });
+
+    // Update arrows after tab bar changes or window resize
+    const observer = new ResizeObserver(updateArrows);
+    observer.observe(this.scrollContainer);
+
+    // Also observe the tab bar itself for changes when tabs are added/removed
+    const tabBar = document.getElementById('tab-bar');
+    if (tabBar) {
+      const tabObserver = new ResizeObserver(updateArrows);
+      tabObserver.observe(tabBar);
+    }
+
+    // Store updateArrows for external calls (e.g. after updateTabBar)
+    this.updateTabScrollArrows = updateArrows;
+  }
+}
+
+function updateLoadingProgress(percent, text) {
+  document.getElementById('loading-progress-fill').style.width = Math.min(100, Math.max(0, percent)) + '%';
+  const textEl = document.getElementById('loading-text');
+  if (textEl && text) textEl.textContent = text;
+}
+
+function initEula() {
+  const eulaAccepted = localStorage.getItem('tizumark-eula-accepted');
+  if (eulaAccepted === 'true') {
+    document.getElementById('eula-dialog').classList.add('hidden');
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('eula-dialog');
+    const acceptBtn = document.getElementById('eula-accept');
+
+    overlay.classList.remove('hidden');
+
+    const autoAccept = () => {
+      localStorage.setItem('tizumark-eula-accepted', 'true');
+      overlay.classList.add('hidden');
+      console.warn('EULA auto-accepted after timeout');
+      resolve(true);
+    };
+
+    const autoTimer = setTimeout(autoAccept, 20000);
+
+    const gplLink = overlay.querySelector('.gpl-link');
+    if (gplLink) {
+      gplLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.open('https://www.gnu.org/licenses/gpl-3.0.html', '_blank');
+      });
+    }
+
+    acceptBtn.addEventListener('click', () => {
+      clearTimeout(autoTimer);
+      localStorage.setItem('tizumark-eula-accepted', 'true');
+      overlay.classList.add('hidden');
+      resolve(true);
+    });
+  });
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  // 防重入：DOMContentLoaded 只允许初始化一次（jsdom 测试环境会自然触发 + 手动派发各一次，
+  // 双重初始化会重复注册 file-open/drag-drop 等监听，导致确认框弹两次等问题）
+  if (window.__tizumarkInited) return;
+  window.__tizumarkInited = true;
+  // 安全兜底：20 秒后强制隐藏加载遮罩，防止任何异常导致卡死
+  const loadingSafetyTimer = setTimeout(() => {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay && !overlay.classList.contains('hidden')) {
+      overlay.classList.add('hidden');
+      console.warn('Loading overlay force-hidden by safety timeout (20s)');
+    }
+  }, 20000);
+
+  try {
+    updateLoadingProgress(5, '正在检查许可协议…');
+    const isFirstLaunch = await initEula();
+
+    updateLoadingProgress(15, '正在初始化编辑器…');
+    window.editor = new MarkdownEditor();
+    window.editor._loadingStart = Date.now();
+
+    updateLoadingProgress(60, '正在注册事件监听…');
+    await TauriApi.onEvent('close-requested', async () => {
+      await window.editor.handleAppClose();
+    });
+
+    // 工作区目录树随外部文件增删自动刷新（由 Rust watch_folder 广播 folder-changed 事件）
+    await TauriApi.onEvent('folder-changed', () => {
+      if (window.editor) window.editor._scheduleTreeRefresh();
+    });
+
+    await TauriApi.onEvent('file-open', async (event) => {
+      const args = event.payload;
+      if (!args || args.length === 0) return;
+
+      try {
+        const w = TauriApi.currentWindow();
+        await w.unminimize();
+        await w.show();
+        await w.setFocus();
+      } catch (_) {}
+
+      // 二次实例传参：目录进工作区（已有不同工作区时弹确认），文件开 tab。
+      // 注意：不要在此先 showLoading——加载遮罩 z-index(10000) 会盖住确认框，
+      // 导致切换工作区确认框点不到而卡在加载页；加载由 openFolderPath 内部负责。
+      await window.editor.openPathsSmart(args);
+    });
+
+    updateLoadingProgress(85, '正在加载文件…');
+    try {
+      const args = await TauriApi.getCliArgs();
+      const hadSession = await window.editor.restoreSession();
+      let currentVersion = '';
+      if (args && args.length > 0) {
+        // 启动 CLI 参数：命令行显式指定目录，直接作为工作区打开（不弹确认）
+        await window.editor.openPathsSmart(args, { confirmWorkspaceSwitch: false });
+      } else {
+        // 首次安装 / 升级后首次打开：自动展示使用说明和 demo.md
+        const lastVersion = localStorage.getItem('tizumark-app-version');
+        try {
+          currentVersion = await TauriApi.getVersion();
+        } catch (_) { /* fallback 到静默跳过 */ }
+        if (isFirstLaunch || (currentVersion && lastVersion !== currentVersion)) {
+          window.editor.openUserGuide();
+          // 同步打开 demo.md（使用说明内嵌的 demo.md 链接已可手动点开，
+          // 此处自动打开省去用户多一步点击）
+          try {
+            const result = await TauriApi.readBundledFile({ filename: 'demo.md' });
+            const demoContent = result && typeof result === 'object' ? result.content : result;
+            const demoPath = result && typeof result === 'object' ? result.path : 'demo.md';
+            if (demoContent && !demoContent.trim().startsWith('<!DOCTYPE') && !demoContent.trim().startsWith('<html')) {
+              await window.editor._openBundledFile('demo.md', demoContent, demoPath);
+            }
+          } catch (_) {
+            // demo.md 读取失败不影响主功能
+          }
+        }
+      }
+      // 持久化当前应用版本，供下次启动比对
+      if (currentVersion) {
+        localStorage.setItem('tizumark-app-version', currentVersion);
+      }
+    } catch (e) {
+      console.warn('Failed to load session / cli args:', e);
+    }
+
+    updateLoadingProgress(100, '准备就绪');
+    await window.editor.initFileWatcher();
+    await new Promise(r => setTimeout(r, 300));
+  } catch (e) {
+    console.error('Initialization error:', e);
+    // 初始化异常对用户可见（否则整页空白无提示）；toast:false 避免依赖尚未就绪的 UI，改用页面顶部错误条
+    try {
+      if (window.editor && window.editor.reportError) {
+        window.editor.reportError('E_INIT', { error: e, toast: false });
+      }
+      const bar = document.createElement('div');
+      bar.className = 'fatal-error-bar';
+      bar.textContent = '编辑器初始化失败，请重启应用。如反复出现，请将此界面截图反馈给开发者。';
+      document.body.insertBefore(bar, document.body.firstChild);
+    } catch (_) {}
+  } finally {
+    clearTimeout(loadingSafetyTimer);
+    window.editor?.hideLoading();
+  }
+});
