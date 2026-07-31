@@ -43,10 +43,18 @@
     }
 
     // 终点后移到块边界 / 围栏闭合处
+    // P1-9 优化（N17）：原实现每步对整窗口 lines.slice(start,end+1).join('\n') 再全局正则，
+    // 最坏 ~windowLines 次 join+match ≈ O(n²)。改为预计算每行围栏标记 + 前缀和，循环内 O(1)
+    // 取区间 [start,end] 围栏奇偶，与原 slice+join+match 计数语义严格一致。
+    const isFence = new Array(total);
+    for (let i = 0; i < total; i++) isFence[i] = /^`{3,}|^~{3,}/.test(lines[i]);
+    const fencePre = new Array(total + 1).fill(0);
+    for (let i = 0; i < total; i++) fencePre[i + 1] = fencePre[i] + (isFence[i] ? 1 : 0);
+    const fenceParityEven = (a, b) => ((fencePre[b + 1] - fencePre[a]) % 2) === 0;
+
     guard = 0;
     while (end < total && guard < 500) {
-      const fences = (lines.slice(start, end + 1).join('\n').match(/^`{3,}|^~{3,}/gm) || []).length;
-      if (fences % 2 === 0 && isBlockStart(lines[end]) && end > start) break;
+      if (fenceParityEven(start, end) && isBlockStart(lines[end]) && end > start) break;
       end += 1; guard++;
     }
     if (end > total) end = total;
