@@ -30,6 +30,7 @@ class Tab {
     this.pendingExternalChange = false;
     this._loaded = true;
     this.previewScrollTop = 0;
+    this.fontSize = null; // 每标签独立缩放字号；null=未初始化，切换时按 settings.fontSize 初始化
   }
 
   get isModified() {
@@ -398,6 +399,12 @@ const I18N = {
     files: '文件',
     closeFolder: '关闭文件夹',
     folderOpened: '已打开文件夹: {path}',
+    extraDirsIgnoredBatch: '已忽略 {n} 个多余目录（每次仅打开一个文件夹）',
+    fontSizeChanged: '字号 {size}px',
+    fontSizeHint: '字号 {size}px',
+    fontSizeReset: '还原 {base}px',
+    switchWorkspaceTitle: '切换工作区',
+    switchWorkspaceMsg: '当前已打开工作区，是否切换到 {path}？',
     sidebar: '侧边栏',
   },
   en: {
@@ -739,6 +746,12 @@ const I18N = {
     files: 'Files',
     closeFolder: 'Close Folder',
     folderOpened: 'Opened folder: {path}',
+    extraDirsIgnoredBatch: 'Ignored {n} extra folders (only one folder can be opened at a time)',
+    fontSizeChanged: 'Font size {size}px',
+    fontSizeHint: 'Font size {size}px',
+    fontSizeReset: 'Reset to {base}px',
+    switchWorkspaceTitle: 'Switch Workspace',
+    switchWorkspaceMsg: 'A workspace is already open. Switch to {path}?',
     sidebar: 'Sidebar',
   }
 };
@@ -1431,6 +1444,7 @@ class MarkdownEditor {
 
     document.getElementById('set-font-size').addEventListener('input', (e) => {
       const v = Number(e.target.value);
+      if (this.activeTab) this.activeTab.fontSize = v;
       this.cm.getWrapperElement().style.fontSize = v + 'px';
       document.getElementById('font-size-label').textContent = v + 'px';
       this.cm.refresh();
@@ -1825,6 +1839,7 @@ class MarkdownEditor {
 
   async applySettings() {
     const s = this.settings;
+    if (this.activeTab) this.activeTab.fontSize = s.fontSize;
     this.cm.getWrapperElement().style.fontSize = s.fontSize + 'px';
     this.cm.setOption('tabSize', s.tabSize);
     this.cm.setOption('indentUnit', s.tabSize);
@@ -2753,6 +2768,78 @@ class MarkdownEditor {
       }
     });
 
+    // Ctrl + 鼠标滚轮缩放编辑器字体（仅当前标签，不持久化到 settings）
+    const _zoomWrapper = this.cm.getWrapperElement();
+
+    // 顶部缩放提示（与 .lightbox-hint 视觉一致）
+    this.zoomHint = document.createElement('div');
+    this.zoomHint.className = 'zoom-hint';
+    this.zoomHint.innerHTML = '<span class="zoom-hint-text"></span><span class="zoom-hint-reset hidden" role="button" title="Reset font size"></span>';
+    this.zoomHint.querySelector('.zoom-hint-reset').addEventListener('click', () => this.resetEditorFontSize());
+    this._zoomHintHovering = false;
+    this.zoomHint.addEventListener('mouseenter', () => {
+      this._zoomHintHovering = true;
+      clearTimeout(this._zoomHintTimer);
+    });
+    this.zoomHint.addEventListener('mouseleave', () => {
+      this._zoomHintHovering = false;
+      this._zoomHintTimer = setTimeout(() => this.zoomHint.classList.remove('show'), 3000);
+    });
+    document.body.appendChild(this.zoomHint);
+
+    this.showZoomHint = () => {
+      if (!this.activeTab || !this.zoomHint) return;
+      const cur = this.activeTab.fontSize ?? this.settings.fontSize;
+      const base = this.settings.fontSize;
+      const textEl = this.zoomHint.querySelector('.zoom-hint-text');
+      const resetEl = this.zoomHint.querySelector('.zoom-hint-reset');
+      // 左侧始终显示当前字号
+      textEl.textContent = this.t('fontSizeHint', { size: cur });
+      if (cur !== base) {
+        // 右侧显示「还原 Npx」按钮（与设置字号一致）
+        resetEl.textContent = this.t('fontSizeReset', { base });
+        resetEl.classList.remove('hidden');
+      } else {
+        resetEl.classList.add('hidden');
+      }
+      this.zoomHint.classList.add('show');
+      clearTimeout(this._zoomHintTimer);
+      // hover 期间保持显示；离开后才按 3 秒倒计时消失
+      if (!this._zoomHintHovering) {
+        this._zoomHintTimer = setTimeout(() => this.zoomHint.classList.remove('show'), 3000);
+      }
+    };
+
+    this.hideZoomHint = () => {
+      if (!this.zoomHint) return;
+      this.zoomHint.classList.remove('show');
+      clearTimeout(this._zoomHintTimer);
+    };
+
+    this.resetEditorFontSize = () => {
+      const tab = this.activeTab;
+      if (!tab) return;
+      tab.fontSize = this.settings.fontSize;
+      this.cm.getWrapperElement().style.fontSize = tab.fontSize + 'px';
+      this.cm.refresh();
+      this.showZoomHint();
+    };
+
+    _zoomWrapper.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey) return;            // 非 Ctrl：放行，CM 正常滚动
+      e.preventDefault();               // 阻止 CM 滚动 + 浏览器整页/页面缩放
+      e.stopPropagation();
+      const tab = this.activeTab;
+      if (!tab) return;
+      const cur = tab.fontSize ?? this.settings.fontSize;
+      const next = Math.max(8, Math.min(72, cur + (e.deltaY < 0 ? 1 : -1)));
+      if (next === cur) return;
+      tab.fontSize = next;
+      _zoomWrapper.style.fontSize = next + 'px';
+      this.cm.refresh();
+      this.showZoomHint();
+    }, true);  // capture：先于 CM 内部 mousewheel 监听拦截
+
     this.cm.on('change', () => {
       this.activeTab.content = this.cm.getValue();
       this.updateTabDisplay();
@@ -2918,9 +3005,14 @@ class MarkdownEditor {
       oldTab.cursorPos = this.cm.getCursor();
       oldTab.scrollPos = { top: this.cm.getScrollInfo().top, left: this.cm.getScrollInfo().left };
       oldTab.previewScrollTop = this.preview.scrollTop;
+      oldTab.fontSize = parseInt(this.cm.getWrapperElement().style.fontSize, 10) || this.settings.fontSize;
 
       this.activeTabIndex = index;
       const newTab = this.activeTab;
+      // 每标签独立字号：未初始化时按设置字号
+      if (newTab.fontSize == null) newTab.fontSize = this.settings.fontSize;
+      this.cm.getWrapperElement().style.fontSize = newTab.fontSize + 'px';
+      this.hideZoomHint();
 
       if (!newTab._loaded && newTab.filePath) {
         await this.ensureTabLoaded(newTab);
@@ -4861,29 +4953,10 @@ class MarkdownEditor {
       window.__TAURI__.event.listen('tauri://drag-drop', async (event) => {
         app.classList.remove('drag-over');
         dragOverlay.classList.add('hidden');
-        this.showLoading();
-        try {
-          const paths = event.payload.paths || [];
-          for (const filePath of paths) {
-            try {
-              const content = await this.readFileNormalized(filePath);
-              const name = filePath.split(/[/\\]/).pop();
-              const existingIndex = this.tabs.findIndex(t => t.filePath === filePath);
-              if (existingIndex !== -1) {
-                this.switchTab(existingIndex);
-                continue;
-              }
-              this.addTab(name, content, filePath);
-              this.updateWordCount();
-              this.updateOutline();
-              this.setStatus(`${this.t('opened')}: ${name}`);
-            } catch (err) {
-              this.setStatus(`${this.t('openFailed')}: ${err}`);
-            }
-          }
-        } finally {
-          this.hideLoading();
-        }
+        // 目录/文件统一分发：目录进工作区（已有不同工作区时弹确认），文件开 tab。
+        // 注意：不要在此先 showLoading——加载遮罩 z-index(10000) 会盖住确认框，
+        // 导致切换工作区确认框点不到而卡在加载页；加载由 openFolderPath 内部负责。
+        await this.openPathsSmart(event.payload.paths || []);
       });
 
       window.__TAURI__.event.listen('tauri://drag-leave', () => {
@@ -5416,7 +5489,18 @@ class MarkdownEditor {
       if (!selected) return;
       const folderPath = Array.isArray(selected) ? selected[0] : selected;
       if (!folderPath) return;
-      this.showLoading();
+      await this.openFolderPath(folderPath);
+    } catch (e) {
+      this.setStatus(this.t('openFailed') + ': ' + e);
+    }
+  }
+
+  // 直接按给定路径加载为工作区目录（不走 dialog）。
+  // CLI 参数 / file-open 事件 / drag-drop 都复用此入口。
+  async openFolderPath(folderPath) {
+    if (!folderPath) return;
+    this.showLoading();
+    try {
       this.workspaceFolder = folderPath;
       this.expandedFolders = new Set();
       await this.renderFolderTree();
@@ -5428,6 +5512,52 @@ class MarkdownEditor {
       this.setStatus(this.t('openFailed') + ': ' + e);
     } finally {
       this.hideLoading();
+    }
+  }
+
+  // 运行中收到目录（拖放 / 二次实例 file-open）时的工作区切换入口：
+  // 已有不同工作区则弹确认框，取消则忽略该目录；启动 CLI 场景传 confirm=false 直接打开。
+  async maybeOpenFolderPath(folderPath, { confirm = true } = {}) {
+    if (!folderPath) return false;
+    if (confirm && this.workspaceFolder && this.workspaceFolder !== folderPath) {
+      const ok = await this.showConfirmDialog(
+        this.t('switchWorkspaceTitle'),
+        this.t('switchWorkspaceMsg', { path: folderPath })
+      );
+      if (!ok) return false;
+    }
+    await this.openFolderPath(folderPath);
+    return true;
+  }
+
+  // 统一「一批路径按目录/文件分发」：目录加载为工作区（仅第一个，多余目录提示忽略），
+  // 文件走 openFilePath。drag-drop / file-open 事件 / 启动 CLI 参数三处入口共用。
+  async openPathsSmart(paths, { confirmWorkspaceSwitch = true } = {}) {
+    let dirOpened = false;
+    const ignoredDirs = [];
+    for (const p of paths || []) {
+      if (!p || p.startsWith('-')) continue;
+      try {
+        let isDir = false;
+        try { isDir = await invoke('is_directory', { path: p }); }
+        catch (_) { /* 非 Tauri 环境或路径不可访问，按文件处理 */ }
+        if (isDir) {
+          if (dirOpened) {
+            ignoredDirs.push(p);
+            continue;
+          }
+          const opened = await this.maybeOpenFolderPath(p, { confirm: confirmWorkspaceSwitch });
+          if (opened) dirOpened = true;
+        } else {
+          await this.openFilePath(p);
+        }
+      } catch (err) {
+        this.setStatus(`${this.t('openFailed')}: ${err}`);
+      }
+    }
+    // 多余目录合并成一条 toast，避免一次拖十几个文件夹时刷屏
+    if (ignoredDirs.length > 0) {
+      this.showToast(this.t('extraDirsIgnoredBatch', { n: ignoredDirs.length }), 'warning');
     }
   }
 
@@ -8548,6 +8678,10 @@ function initEula() {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
+  // 防重入：DOMContentLoaded 只允许初始化一次（jsdom 测试环境会自然触发 + 手动派发各一次，
+  // 双重初始化会重复注册 file-open/drag-drop 等监听，导致确认框弹两次等问题）
+  if (window.__tizumarkInited) return;
+  window.__tizumarkInited = true;
   // 安全兜底：20 秒后强制隐藏加载遮罩，防止任何异常导致卡死
   const loadingSafetyTimer = setTimeout(() => {
     const overlay = document.getElementById('loading-overlay');
@@ -8586,15 +8720,10 @@ window.addEventListener('DOMContentLoaded', async () => {
         await w.setFocus();
       } catch (_) {}
 
-      window.editor.showLoading();
-      try {
-        for (const filePath of args) {
-          if (filePath.startsWith('-')) continue;
-          await window.editor.openFilePath(filePath);
-        }
-      } finally {
-        window.editor.hideLoading();
-      }
+      // 二次实例传参：目录进工作区（已有不同工作区时弹确认），文件开 tab。
+      // 注意：不要在此先 showLoading——加载遮罩 z-index(10000) 会盖住确认框，
+      // 导致切换工作区确认框点不到而卡在加载页；加载由 openFolderPath 内部负责。
+      await window.editor.openPathsSmart(args);
     });
 
     updateLoadingProgress(85, '正在加载文件…');
@@ -8603,10 +8732,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       const hadSession = await window.editor.restoreSession();
       let currentVersion = '';
       if (args && args.length > 0) {
-        for (const filePath of args) {
-          if (filePath.startsWith('-')) continue;
-          await window.editor.openFilePath(filePath);
-        }
+        // 启动 CLI 参数：命令行显式指定目录，直接作为工作区打开（不弹确认）
+        await window.editor.openPathsSmart(args, { confirmWorkspaceSwitch: false });
       } else {
         // 首次安装 / 升级后首次打开：自动展示使用说明和 demo.md
         const lastVersion = localStorage.getItem('tizumark-app-version');

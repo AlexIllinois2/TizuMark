@@ -18,6 +18,12 @@ test('成对 $...$ 保留不包裹（交给 KaTeX 渲染）', async () => {
   assert.strictEqual(r, s);
 });
 
+test('成对 $...$ 内含 | / > / ｜ 保留不包裹', async () => {
+  assert.strictEqual(protectUnpairedDollar('$P(A|B)$'), '$P(A|B)$', '条件概率保留');
+  assert.strictEqual(protectUnpairedDollar('$x>0$'), '$x>0$', '比较符号保留');
+  assert.strictEqual(protectUnpairedDollar('$x｜y$'), '$x｜y$', '全角竖线保留');
+});
+
 test('成对 $$...$$ 保留不包裹', async () => {
   const s = '$$c^2$$';
   const r = protectUnpairedDollar(s);

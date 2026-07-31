@@ -293,8 +293,19 @@ function guardMathBlocks(content) {
       while (i < len) {
         if (content[i] === '$' && (i === start + 1 || content[i - 1] !== ' ')) {
           const inner = content.substring(start + 1, i);
-          // 不成对/跨边界（换行、表格列分隔、块引用）一律不当公式
-          if (!/[\n\r|>\uFF5C]/.test(inner)) {
+          // 不成对/跨行一律不当公式。
+          // | 在"同一行且行内还有其他 |"时保守地不当公式，避免把表格单元格分隔符吞进数学；
+          // > 与全角 ｜ 不再限制（它们在数学表达式中合法）。
+          let reject = /[\n\r]/.test(inner);
+          if (!reject && inner.includes('|')) {
+            const lineStart = content.lastIndexOf('\n', start - 1) + 1;
+            const lineEnd = content.indexOf('\n', start);
+            const line = content.substring(lineStart, lineEnd === -1 ? len : lineEnd);
+            const before = line.substring(0, start - lineStart);
+            const after = line.substring(i + 1 - lineStart);
+            if (before.includes('|') || after.includes('|')) reject = true;
+          }
+          if (!reject) {
             i += 1;
             const mathBlock = content.substring(start, i);
             const idx = placeholders.length;

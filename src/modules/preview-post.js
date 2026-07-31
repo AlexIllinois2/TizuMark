@@ -84,7 +84,7 @@ function protectUnpairedDollar(text) {
       const close = text.indexOf('$$', i + 2);
       // 块级放宽：只要 $$ 自身成对 + 闭合 $$ 后跟行边界就信任，让 KaTeX 自己用 throwOnError:false 容错。
       // 块级允许跨行（多行 LaTeX 公式），也允许内含 | > ｜（条件概率/绝对值/范数/比较符号等是合法 LaTeX）。
-      // 行内 $...$ 仍保留 | > ｜ 限制（第 103 行），因为行内 $ 容易被 markdown 表格列误吃。
+      // 行内 $...$ 也允许 | > ｜；仅在文本节点里还存在另一个 | 时保守跳过，避免把表格单元格分隔符吞进数学。
       const closeOk = close !== -1 &&
         (close + 2 === n || isLineBoundary(text[close + 2])) &&
         (text[close - 1] !== '$');
@@ -99,9 +99,11 @@ function protectUnpairedDollar(text) {
     } else if (text[i] === '$') {
       if (i + 1 < n && text[i + 1] !== ' ' && text[i + 1] !== '\n' && text[i + 1] !== '\r') {
         const close = text.indexOf('$', i + 1);
+        const inner = text.substring(i + 1, close);
         if (close !== -1 &&
             text[close - 1] !== ' ' && text[close - 1] !== '\n' && text[close - 1] !== '\r' &&
-            !/[\n\r|>\uFF5C]/.test(text.substring(i + 1, close)) &&
+            !/[\n\r]/.test(inner) &&
+            !(inner.includes('|') && (text.lastIndexOf('|', i - 1) !== -1 || text.indexOf('|', close + 1) !== -1)) &&
             (close + 1 >= n || text[close + 1] !== '$')) {
           out += text.substring(i, close + 1);
           i = close + 1;
