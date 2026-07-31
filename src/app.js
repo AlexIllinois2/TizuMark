@@ -771,6 +771,7 @@ class MarkdownEditor {
     this._renderGeneration = 0;
     this._mermaidGeneration = 0;
     this.previewWindow = null;       // 大文档窗口模式：{start, end}（0-based 源码行），普通文档为 null
+    this.previewController = new PreviewController(this); // P2-1 Strangler facade（ADR-3）
     this._previewVirtual = false;    // 纯预览模式 + 大文档：虚拟滚动（spacer 撑高，可拖到任意位置）
     this._avgLineHeight = null;      // 虚拟滚动平均行高（首次渲染后校准一次，之后恒定）
     this._virtualRenderTimer = null; // 虚拟滚动重渲染 debounce 计时器
@@ -6576,292 +6577,28 @@ input[type="checkbox"]:checked::after { display: none !important; }
     return head;
   }
 
-  // 构建窗口内 [源码行(1-based), 相对预览内容顶部像素] 的有序映射
+  // P2-1 Strangler（ADR-3）：以下 5 个虚拟窗口方法逻辑已迁至 PreviewController，
+  // 当前保留薄委托，待全部调用点迁移后删除。
   _buildWindowLineTops() {
-    const pRect = this.preview.getBoundingClientRect();
-    const arr = [];
-    this.preview.querySelectorAll('[data-source-line]').forEach((el) => {
-      const ln = parseInt(el.dataset.sourceLine, 10);
-      if (isNaN(ln)) return;
-      const rect = el.getBoundingClientRect();
-      arr.push([ln, rect.top - pRect.top + this.preview.scrollTop]);
-    });
-    arr.sort((a, b) => a[0] - b[0]);
-    this._windowLineTops = arr;
+    return this.previewController._buildWindowLineTops();
   }
-
-  // 把预览滚动定位到指定源码行（0-based），使其靠近顶部并保留上方上下文
   _focusPreviewToLine(line) {
-    if (!Number.isFinite(line)) line = 0; // N22 ③：读取点归一化，NaN/undefined 焦点不污染定位
-    if (!this._windowLineTops || !this._windowLineTops.length) return;
-    const target = line + 1;
-    let bestTop = this._windowLineTops[0][1];
-    let bestLine = this._windowLineTops[0][0];
-    for (const [ln, top] of this._windowLineTops) {
-      if (ln <= target && ln > bestLine) { bestLine = ln; bestTop = top; }
-    }
-    const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
-    this.preview.scrollTop = Math.max(0, Math.min(bestTop - 24, maxScroll));
+    return this.previewController._focusPreviewToLine(line);
   }
-
-  // 纯预览模式大文档：把窗口片段渲染到「撑满全文高度的占位 + 绝对定位块」中，
-  // 使原生滚动条代表整篇文档，用户可平滑滚动 / 拖到任意位置查看全文（虚拟滚动）。
-  // 平均行高恒定（首次渲染后校准一次），故 scrollTop ↔ 源码行比例精确，与 avg 估算无关。
   _renderPreviewWindowBlock(finalHtml, win, content) {
-    const totalLines = content.split('\n').length;
-    const avg = this._avgLineHeight || 22;
-    const estTotal = totalLines * avg;
-    const blockTop = win.start * avg;
-    this.preview.style.position = 'relative';
-    this.preview.style.padding = '0';
-    this.preview.innerHTML =
-      `<div class="pv-spacer" style="position:absolute;top:0;left:0;width:100%;height:${estTotal}px;"></div>` +
-      `<div class="pv-block" style="position:absolute;top:${blockTop}px;left:0;right:0;padding:16px 24px;box-sizing:border-box;">${finalHtml}</div>`;
+    return this.previewController._renderPreviewWindowBlock(finalHtml, win, content);
   }
-
-  // 首次渲染后根据已渲染窗口的真实行高校准平均行高（仅一次，之后恒定），
-  // 并据此重设占位高度（此时通常位于头部，scrollTop≈0，无视觉跳动）。
   _updateVirtualScrollMetrics() {
-    if (!this._previewVirtual || !this.previewWindow) return;
-    if (this._avgLineHeight == null) {
-      const arr = this._windowLineTops;
-      if (arr && arr.length >= 2) {
-        const first = arr[0], last = arr[arr.length - 1];
-        const dh = last[1] - first[1];
-        const dl = last[0] - first[0];
-        if (dl > 0) {
-          const avg = dh / dl;
-          if (avg > 1 && avg < 500) this._avgLineHeight = avg;
-        }
-      }
-      if (this._avgLineHeight == null) this._avgLineHeight = 22;
-      const spacer = this.preview.querySelector('.pv-spacer');
-      if (spacer) spacer.style.height = (this.cm.lineCount() * this._avgLineHeight) + 'px';
-    }
+    return this.previewController._updateVirtualScrollMetrics();
   }
-
-  // 纯预览模式虚拟滚动：预览滚动时按 scrollTop 估算当前视口顶行（锚定行），
-  // 若超出当前窗口缓冲区则 debounce 重渲染相邻窗口（拖到任意位置均渲染对应内容）。
-  // 重渲染使用最新 scrollTop 反推锚定行，避免滚动期间位置过期导致抖动。
   _syncPreviewVirtualScroll() {
-    if (!this._previewVirtual || !this.previewWindow) return;
-    const win = this.previewWindow;
-    const avg = this._avgLineHeight || 22;
-    const total = this.cm.lineCount();
-    const anchor = Math.max(0, Math.min(total - 1, Math.round(this.preview.scrollTop / avg)));
-    if (anchor >= win.start + PREVIEW_WINDOW_LEAD && anchor <= win.end - PREVIEW_WINDOW_LEAD) return;
-    if (this._virtualRenderTimer) return;
-    this._virtualRenderTimer = setTimeout(() => {
-      this._virtualRenderTimer = null;
-      const avg2 = this._avgLineHeight || 22;
-      const a2 = Math.max(0, Math.min(this.cm.lineCount() - 1, Math.round(this.preview.scrollTop / avg2)));
-      this._previewFocusLine = a2;
-      this._previewScrollDriven = true; // 滚动驱动：重渲染后保留当前 scrollTop，避免回弹
-      this.updatePreview();
-    }, 120);
+    return this.previewController._syncPreviewVirtualScroll();
   }
 
     async updatePreview(suppressLoading = false) {
-      // 防御：若被勾选抑制标记触发（应已被 debounceUpdatePreview 拦截），直接轻量返回，杜绝全量重渲染
-      if (this._suppressNextPreviewRerender) {
-        this._suppressNextPreviewRerender = false;
-        this.updateWordCount();
-        this.updateOutline();
-        return;
-      }
-      const gen = ++this._renderGeneration;
-      let needLoad = false;
-      try {
-        const content = this.cm.getValue();
-        const totalLines = content.split('\n').length;
-        const isLarge = content.length > MAX_PREVIEW_CHARS || totalLines > MAX_PREVIEW_LINES;
-
-        // 大文档重渲染耗时明显：在加载层可见时由本函数接管其生命周期（引用计数），
-        // 仅在「显式打开/切换/视图切换/大纲跳转」等非滚动、非打字触发的重渲染时显示 loading；
-        // 滚动驱动（_previewScrollDriven）与打字（suppressLoading）不显示，避免闪烁
-        needLoad = isLarge && !suppressLoading && !this._previewScrollDriven;
-        if (needLoad) this._beginPaneLoad();
-
-        // 超大文档：预览只渲染「围绕焦点的一段源码」（滑动窗口），避免整篇同步解析/渲染卡死主线程，
-        // 同时保证任意位置（大纲跳转 / 滚动）都可在预览中落点。
-        let renderContent = content;
-        this._previewTruncated = false;
-        if (isLarge) {
-          const focus = Number.isFinite(this._previewFocusLine) ? this._previewFocusLine : 0;
-          const win = PreviewWindow.computePreviewWindow(content, focus, {
-            maxLines: MAX_PREVIEW_LINES,
-            lead: PREVIEW_WINDOW_LEAD,
-            windowLines: PREVIEW_WINDOW_LINES,
-          });
-          this.previewWindow = win;
-          this._previewSliceOffset = win.start;
-          this._previewVirtual = (this.viewMode === 'preview');
-          const slice = content.split('\n').slice(win.start, win.end).join('\n');
-          renderContent = slice.length > HEAD_RENDER_CHAR_CAP ? slice.slice(0, HEAD_RENDER_CHAR_CAP) : slice;
-          this._previewTruncated = true;
-        } else {
-          this.previewWindow = null;
-          this._previewSliceOffset = 0;
-          this._previewVirtual = false;
-        }
-
-
-      const hasToc = content.includes('[TOC]') || content.includes('[toc]');
-      let tocHtml = '';
-      if (hasToc) {
-        tocHtml = await TauriApi.generateToc({ content });
-        if (gen !== this._renderGeneration) return;
-      }
-
-      // 仅在 loading 遮罩可见时，让出主线程两帧确保遮罩先绘制（避免大文档同步渲染期间“无 loading 白屏”）；普通打字刷新不额外延迟
-      const loadingEl = document.getElementById('pane-loading');
-      if (loadingEl && !loadingEl.classList.contains('hidden')) {
-        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-      }
-
-      // P0-0d 产物韧性：unified-bundle.js 缺失/加载失败时，这里原本是裸 ReferenceError
-      // （"UnifiedRenderer is not defined"），对使用者毫无指引。改抛可操作错误，
-      // 由 P0-1 的全局兜底渲染成错误条。
-      if (typeof UnifiedRenderer === 'undefined' || !UnifiedRenderer || typeof UnifiedRenderer.renderMarkdown !== 'function') {
-        throw new Error('渲染器未构建或加载失败（src/lib/unified-bundle.js），请运行 npm run build:renderer');
-      }
-      const html = UnifiedRenderer.renderMarkdown(renderContent, { softBreaks: this.settings.softBreaks });
-      if (gen !== this._renderGeneration) return;
-
-      let finalHtml = html;
-      if (tocHtml) {
-        finalHtml = finalHtml.replace(/<p[^>]*data-source-line="(\d+)"[^>]*>\[TOC\]<\/p>/gi, '<div class="toc-wrapper" data-source-line="$1">' + tocHtml + '</div>');
-      }
-
-      // 内嵌 base64 图片改为按内容缓存的 Blob URL，避免每次重渲染重复解码（大文档多图时是关键性能点）
-      finalHtml = finalHtml.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, (m) => this.getCachedImageURL(m));
-
-      // 滑动窗口：渲染的是切片后的源码，需把 data-source-line 还原为绝对行号（与编辑区一致），
-      // 否则大纲锚点 / 滚动定位会错位
-      if (this.previewWindow && this._previewSliceOffset > 0) {
-        const off = this._previewSliceOffset;
-        finalHtml = finalHtml.replace(/data-source-line="(\d+)"/g, (m, n) => `data-source-line="${parseInt(n, 10) + off}"`);
-      }
-
-      this._canScroll.editor = false;
-      this._canScroll.preview = false;
-      if (this._previewVirtual && this.previewWindow) {
-        this._renderPreviewWindowBlock(finalHtml, this.previewWindow, content);
-      } else {
-        this.preview.style.position = '';
-        this.preview.style.padding = '';
-        this.preview.innerHTML = finalHtml;
-      }
-
-      // 超大文档：顶部全局横幅提示（不塞进预览内容，避免随滚动/重渲染消失）
-      if (this._previewTruncated) {
-        const totalLines = content.split('\n').length;
-        const key = this.activeTab ? (this.activeTab.filePath || ('untitled:' + this.tabs.indexOf(this.activeTab))) : 'none';
-        this.showLargeFileNotice(key, totalLines, content.length);
-        this._previewTruncated = false;
-      } else {
-        this.hideLargeFileNotice();
-      }
-
-      this.preview.querySelectorAll('details:not([open])').forEach(el => el.open = true);
-      // 任务列表 checkbox：remark-gfm 默认输出 disabled 不可交互，渲染后移除 disabled 使其可点击
-      this.preview.querySelectorAll('input[type="checkbox"][disabled]').forEach(cb => cb.removeAttribute('disabled'));
-
-      try { await this.processImages(); } catch (e) { console.warn('[preview] Images error:', e); }
-      if (gen !== this._renderGeneration) { this._resumeScroll(); return; }
-      const postOpts = {
-        t: (k) => this.t(k),
-        isDark: this.isDark,
-        escapeHtml: (s) => this.escapeHtml(s),
-        escapeAttr: (s) => this.escapeAttr(s),
-        headingToId: (s) => this.headingToId(s),
-        mermaidCache: this._mermaidCache,
-      };
-      try { PreviewPost.processEmojiShortcodes(this.preview); } catch (e) { console.warn('[preview] Emoji error:', e); }
-      try { PreviewPost.processMath(this.preview); } catch (e) { console.warn('[preview] Math error:', e); }
-      try { PreviewPost.processAbbreviations(this.preview, postOpts); } catch (e) { console.warn('[preview] Abbr error:', e); }
-      try { this.processFootnotes(); } catch (e) { console.warn('[preview] Footnotes error:', e); }
-      try { PreviewPost.processHeadings(this.preview, postOpts); } catch (e) { console.warn('[preview] Headings error:', e); }
-      try { await PreviewPost.processMermaid(this.preview, postOpts); } catch (e) { console.warn('[preview] Mermaid error:', e); }
-      if (gen !== this._renderGeneration) { this._resumeScroll(); return; }
-      try { PreviewPost.addCopyButtons(this.preview, postOpts); } catch (e) { console.warn('[preview] Copy btn error:', e); }
-
-      // 代码高亮 + 行号：抽到 src/modules/code-block.js（独立模块，便于单独测试）
-      try {
-        CodeBlock.processCodeBlocks(this.preview, {
-          hljs,
-          cache: this._hljsCache,
-          lineNumbers: this.preview.classList.contains('code-line-numbers'),
-        });
-      } catch (e) { console.warn('[preview] Code block error:', e); }
-
-      // 等待浏览器完成布局后再测量元素位置
-      await new Promise(r => requestAnimationFrame(r));
-      if (gen !== this._renderGeneration) { this._resumeScroll(); return; }
-
-      // 滑动窗口模式：构建「源码行 → 预览像素」映射，并把预览滚动定位到焦点行；
-      // 不走整篇滚动同步（预览只含窗口片段，1:1 映射无意义）
-      if (this.previewWindow) {
-        this._buildWindowLineTops();
-        if (this._previewVirtual) this._updateVirtualScrollMetrics();
-        // 滚动驱动的重渲染保留当前 scrollTop（内容按 ℓ*avg 线性连续，无需回弹）；
-        // 仅大纲跳转 / 打开文件等显式跳转才贴顶定位
-        if (!this._previewScrollDriven) this._focusPreviewToLine(this._previewFocusLine);
-        this._previewScrollDriven = false;
-        requestAnimationFrame(() => {
-          if (gen === this._renderGeneration) this._resumeScroll();
-        });
-        return;
-      }
-
-      // 重建滚动同步数据（blocks + 预览子元素）
-      this.rebuildScrollSync();
-
-      // 恢复预览滚动位置（逐行密集插值）；预览发起的编辑（复选框勾选）已保存位置，跳过以免被重算覆盖
-      if (this.settings.scrollSync && this._editorElementList && this._editorElementList.length > 1) {
-        const cmInfo = this.cm.getScrollInfo();
-        const top = cmInfo.top;
-
-        if (top <= 0.5) {
-          this.preview.scrollTop = 0;
-        } else if (top + cmInfo.clientHeight >= cmInfo.height - 0.5) {
-          this.preview.scrollTop = Math.max(0, this.preview.scrollHeight - this.preview.clientHeight);
-        } else {
-          let idx = -1;
-          for (let i = 0; i < this._editorElementList.length; i++) {
-            if (top < this._editorElementList[i]) {
-              idx = i - 1;
-              break;
-            }
-          }
-          if (idx < 0) idx = 0;
-          if (idx < this._editorElementList.length - 1) {
-            const editorStart = this._editorElementList[idx];
-            const editorEnd = this._editorElementList[idx + 1];
-            const previewStart = this._previewElementList[idx];
-            const previewEnd = this._previewElementList[idx + 1];
-            if (editorEnd > editorStart) {
-              const ratio = (top - editorStart) / (editorEnd - editorStart);
-              this.preview.scrollTop = previewStart + ratio * (previewEnd - previewStart);
-            }
-          }
-        }
-      } else {
-        const maxScroll = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
-        if (this.preview.scrollTop > maxScroll) this.preview.scrollTop = maxScroll;
-      }
-      requestAnimationFrame(() => {
-        if (gen === this._renderGeneration) this._resumeScroll();
-      });
-    } catch (error) {
-      if (gen !== this._renderGeneration) return;
-      this._resumeScroll();
-      const msg = String(error).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      this.preview.innerHTML = `<p style="color: red;">预览错误: ${msg}</p>`;
-    } finally {
-      if (needLoad) this._endPaneLoad();
+      // P2-1 Strangler（ADR-3）：编排逻辑已迁至 PreviewController.render()，此处保留薄委托。
+      return this.previewController.render(suppressLoading);
     }
-  }
 
   // P1-1：逻辑已抽到 src/modules/image-processor.js（纯函数 + 依赖注入）。
   // 这里只做 DI 适配：把实例字段/方法包成注入项，错误仍上交调用方（6772 处的 try/catch）。

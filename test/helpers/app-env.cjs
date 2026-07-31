@@ -177,6 +177,20 @@ async function buildEnv(options = {}) {
     }
   }
 
+  // P2-1：加载 src/controllers/*.js（PreviewController facade），必须在 eval app.js 之前，
+  // 否则 app.js 构造期 `new PreviewController(this)` 会 ReferenceError。
+  const controllersDir = path.join(ROOT, 'src', 'controllers');
+  if (fs.existsSync(controllersDir)) {
+    for (const f of fs.readdirSync(controllersDir).filter((x) => x.endsWith('.js') && fs.statSync(path.join(controllersDir, x)).isFile())) {
+      const full = path.join(controllersDir, f);
+      try {
+        w.eval(fs.readFileSync(full, 'utf8'));
+      } catch (e) {
+        throw new Error(`[harness] 控制器 ${f} 加载失败，终止初始化（原错误：${e && e.stack ? e.stack : e}）`);
+      }
+    }
+  }
+
   // 加载 src/lib/md-links.js：UMD 模块，浏览器环境挂到 root（即 jsdom window），
   // 让 app.js 中直接调用的 isMarkdownLink / resolveDocPath 在测试中可见。
   // 缺失时 app.js 4516 行的 isMarkdownLink(href) 引用会 ReferenceError。
