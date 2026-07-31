@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+target/
+out/
+
+# Generated renderer bundle — built from src/unified-renderer.js via scripts/build-renderer.mjs
+# Regenerate with `npm run build:renderer` (also auto-run on `npm install` via the `prepare` script). Do NOT edit by hand.
+src/lib/unified-bundle.js
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/
+src-tauri/Frameworks/
+src-tauri/*.msi
+src-tauri/*.exe
+src-tauri/*.app
+
+# Lock files (keep package-lock.json for reproducibility)
+# pnpm-lock.yaml
+
+# Environment
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files
+test.md
+.workbuddy/
+.agents/
+skills-lock.json
+
+# Local tool data / build artifacts (not part of source)
+release/
+.git-rewrite/
+.opencode/
+ccstart.bat

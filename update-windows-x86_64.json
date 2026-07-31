@@ -1,0 +1,11 @@
+{
+  "version": "1.1.0",
+  "notes": "## ⬇️ 下载\n\n> **🏆 推荐大多数用户选择：** [⬇ TizuMark_1.1.0_x64-setup.exe](https://gitee.com/tizu/tizu-mark/releases/download/v1.1.0/TizuMark_1.1.0_x64-setup.exe)\n>\n> **🛠 企业/批量部署：** [⬇ TizuMark_1.1.0_x64_en-US.msi](https://gitee.com/tizu/tizu-mark/releases/download/v1.1.0/TizuMark_1.1.0_x64_en-US.msi)\n>\n> **📦 绿色版（免安装）：** [⬇ TizuMark_1.1.0_x64.exe](https://gitee.com/tizu/tizu-mark/releases/download/v1.1.0/TizuMark_1.1.0_x64.exe)\n\n### 三种安装包说明\n\n| 安装包 | 适用人群 | 特点 |\n|--------|---------|------|\n| ⭐ **NSIS 安装包 (.exe)** — **推荐** | 绝大多数 Windows 用户 | 传统的 setup 向导安装，支持自定义安装路径、创建桌面快捷方式、自动注册文件关联。双击即装，即装即用。 |\n| **MSI 安装包 (.msi)** | 企业 IT 管理员、需要批量部署的用户 | 标准的 Windows Installer 格式，支持组策略推送、静默安装（msiexec /i TizuMark_1.1.0_x64_en-US.msi /qn）、适合企业环境集中管理。 |\n| **绿色版 (.exe)** | 追求便携的用户 | 单文件免安装，解压即用，适合 U 盘携带、临时使用，不写注册表。 |\n\n---\n\n## ✨ v1.1.0 更新内容\n\n### 新增\n- 脚注（footnote）支持，可双向跳转\n- 段落内换行（单个换行即渲染为换行，符合书写直觉）\n- 关闭窗口行为偏好（询问／退出／最小化到系统托盘）+ 托盘图标显隐设置\n- 窗口位置与大小记忆，重启自动恢复\n- 「重新加载文件」与「开发者工具」入口\n- 最近打开文件列表\n- 标签页拖拽排序、中键关闭标签\n- 引用块内任务列表\n- 快捷键方案预设下拉（默认／VS Code／Typora／Sublime 等）\n- 跨文件搜索增强（结果点击跳转、正则＋目录搜索、性能提升）\n- 预览放开内联 style（HTML 卡片等可正常渲染，带安全过滤）\n- 支持 GitHub 风格行内数学（反引号定界）\n- 首次启动／升级后自动打开使用说明与完整示例 demo.md\n- 表格行尾回车自动补全等列空行，空行回车退出表格\n\n### 改进\n- 任务列表勾选即时生效并恢复点击响应\n- 编辑／预览滚动同步精度提升（切换标签、加载文件时恢复双栏位置）\n- 软换行开关修复并生效\n- 预览锚点跳转与外部 .md 链接修复\n- 大文档预览渲染缓存（Mermaid／图片），切换更流畅\n- 代码块行号／自动换行可配置\n- 提示框（Callout）支持自定义标题\n- 移除误打包的冗余资源，安装包体积更小\n\n### 修复\n- 修复任务列表勾选点击无响应\n- 修复跨文件搜索点击结果不跳转\n- 修复外部 .md 链接与预览锚点跳转\n- 修复软换行开关失效\n- 修复切换代码行号后代码块出现多余 []\n- 修复不成对行内数学定界符跨段配对吞掉正文\n- 修复自定义字体不生效与恢复默认误删字体\n- 安全：预览渲染增加安全过滤（内联 style 白名单校验），升级相关依赖\n\n> 使用中遇到问题欢迎加 QQ 群：1035294939",
+  "pub_date": "2026-07-28T17:04:13Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSbFczUG4wTWlicVhDdUlXT2w3bTJ5RjErSkNWMHR1b21NOGtkQ3owbUFnQ2ZvSWlMM0tUVEZxUGRnYWlrMjRRVDNOZTFHTjJZRHU4dWNGa01NQjgwYVVvL0JrelFVdHdNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg1MjU3ODU4CWZpbGU6VGl6dU1hcmtfMS4xLjBfeDY0LXNldHVwLmV4ZQprUG1EeFVRRnc1Y0k3ejNpbytLZHdxYk90c1FidVUxWTEwWmhyTXpVN3djenNtNGhxbnZPTGhBaWVPa0htTkNEdVVweTdqbmwzbWYvcUJQb0ducUNCdz09Cg==",
+      "url": "https://gitee.com/tizu/tizu-mark/releases/download/v1.1.0/TizuMark_1.1.0_x64-setup.exe"
+    }
+  }
+}
