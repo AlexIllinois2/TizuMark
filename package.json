@@ -1,0 +1,46 @@
+{
+  "name": "tizumark",
+  "version": "1.1.0",
+  "description": "A lightweight cross-platform Markdown editor",
+  "private": true,
+  "scripts": {
+    "dev": "npm run build:renderer && tauri dev",
+    "build": "npm run build:renderer && tauri build",
+    "build:renderer": "node scripts/build-renderer.mjs",
+    "prepare": "node scripts/build-renderer.mjs",
+    "postbuild": "node -e \"const{existsSync,copyFileSync}=require('fs');const{version}=require('./package.json');const src='src-tauri/target/release/tizumark.exe';const dst='src-tauri/target/release/TizuMark_'+version+'_x64.exe';existsSync(src)&&(copyFileSync(src,dst),console.log('版本化可执行文件已输出: '+dst))\"",
+    "tauri": "tauri",
+    "pretest": "node scripts/build-renderer.mjs",
+    "test": "node scripts/run-tests.cjs",
+    "check": "node scripts/check-globals.cjs && node scripts/coupling-report.cjs && node test/entry-scripts.test.cjs && node test/tauri-api.test.cjs"
+  },
+  "author": "TizuMark",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "codemirror": "^5.65.18",
+    "highlight.js": "^11.10.0",
+    "html2canvas": "^1.4.1",
+    "katex": "^0.17.0",
+    "linkify-it": "^5.0.2",
+    "markdown-it": "^14.1.0",
+    "markdown-it-highlightjs": "^4.2.0",
+    "mermaid": "^11.15.0",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
+    "rehype-stringify": "^10.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.1.0"
+  },
+  "devDependencies": {
+    "@fiahfy/icns": "^0.0.7",
+    "@tauri-apps/api": "^2.1.0",
+    "@tauri-apps/cli": "^2.11.3",
+    "esbuild": "^0.28.1",
+    "jsdom": "^29.1.1",
+    "sharp": "^0.35.1",
+    "to-ico": "^1.1.5"
+  }
+}
