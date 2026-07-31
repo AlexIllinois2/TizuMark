@@ -220,3 +220,37 @@ test('settings: resetSettings 恢复默认并保留自定义字体', async () =>
     assert.strictEqual(stored.tabSize, 4);
   } finally { cleanup(w); }
 });
+
+test('settings: saveSettings→loadSettings 端到端一致（真往返）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    // 构造一份偏离默认的配置
+    ed.settings = ed.defaultSettings();
+    ed.settings.tabSize = 2;
+    ed.settings.themeMode = 'dark';
+    ed.settings.colorScheme = 'nord';
+    ed.settings.maxWidth = 720;
+    ed.settings.customFonts = [{ id: 'cf9', name: 'X', fileName: 'x.ttf', hash: 'h9' }];
+    ed.saveSettings();
+
+    // 模拟"重启"：清空内存对象，仅从 localStorage 重新载入
+    ed.settings = null;
+    const loaded = ed.loadSettings();
+
+    assert.strictEqual(loaded.tabSize, 2, '保存的 tabSize 应原样取回');
+    assert.strictEqual(loaded.themeMode, 'dark');
+    assert.strictEqual(loaded.colorScheme, 'nord');
+    assert.strictEqual(loaded.maxWidth, 720);
+    assert.strictEqual(loaded.fontSize, 14, '未改动的字段应仍是默认');
+    // customFonts 逐字段比较：JSON 往返后元素键序可能变化，deepStrictEqual 对键序敏感会误报
+    assert.strictEqual(loaded.customFonts.length, 1, 'customFonts 应整组保留');
+    assert.strictEqual(loaded.customFonts[0].id, 'cf9');
+    assert.strictEqual(loaded.customFonts[0].name, 'X');
+    assert.strictEqual(loaded.customFonts[0].fileName, 'x.ttf');
+    assert.strictEqual(loaded.customFonts[0].hash, 'h9');
+    // 持久层内容应与内存一致
+    const stored = JSON.parse(w.localStorage.getItem('tizumark-settings'));
+    assert.strictEqual(stored.tabSize, 2);
+    assert.strictEqual(stored.maxWidth, 720);
+  } finally { cleanup(w); }
+});
