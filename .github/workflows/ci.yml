@@ -38,6 +38,11 @@ jobs:
       - name: Run tests
         run: npm test
 
+      # P2-3：release 前端聚合冒烟——验证 dist/ 可生成（beforeBuildCommand 关键一环，
+      # 若 build-frontend 在 CI 上坏掉，tauri build 会直接失败）
+      - name: Frontend bundle smoke (build-frontend)
+        run: npm run build-frontend
+
   rust:
     name: Rust (cargo test, optional)
     runs-on: ubuntu-latest

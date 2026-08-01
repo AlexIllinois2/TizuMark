@@ -35,7 +35,19 @@ if (!fs.existsSync(path.join(srcDir, 'index.html'))) {
 }
 
 // 清理旧 dist，避免残留过期文件。
-fs.rmSync(distDir, { recursive: true, force: true });
+// 健壮性：某些环境（如 WorkBuddy 开发沙箱）对批量递归删除有防护，rmSync 可能抛错；
+// 回退为「重命名旧 dist 到临时名」继续构建，避免整个 release 构建被打断。
+try {
+  fs.rmSync(distDir, { recursive: true, force: true });
+} catch (e) {
+  const tmp = distDir + '.old-' + Date.now();
+  try {
+    if (fs.existsSync(distDir)) fs.renameSync(distDir, tmp);
+    console.warn('[build-frontend] ⚠ 旧 dist 删除被拦截，已重命名为 ' + path.basename(tmp) + '（可手动清理）');
+  } catch (e2) {
+    fail('无法清空 dist：' + (e && e.message ? e.message : String(e)));
+  }
+}
 
 let copied = 0;
 function copyTree(from, to) {

@@ -161,7 +161,7 @@ app 侧字段/方法统一经 `this.app` 访问，控制器自有方法走 `this
 "prepare": "node scripts/build-renderer.mjs && node scripts/ensure-vendor.mjs",
 "pretest": "node scripts/build-renderer.mjs",
 "test": "node scripts/run-tests.cjs",
-"check": "node scripts/check-globals.cjs && node scripts/coupling-report.cjs && node test/entry-scripts.test.cjs && node test/tauri-api.test.cjs"
+"check": "node scripts/check-globals.cjs && node scripts/coupling-report.cjs && node scripts/check-version.mjs && node test/entry-scripts.test.cjs && node test/tauri-api.test.cjs"
 ```
 `tauri.conf.json`：`beforeDevCommand: "node scripts/dev-server.mjs"`，`devUrl: "http://localhost:1420"`，
 `beforeBuildCommand: "npm run build:renderer && npm run build-frontend"`，`frontendDist: "../dist"`。
@@ -170,7 +170,7 @@ app 侧字段/方法统一经 `this.app` 访问，控制器自有方法走 `this
 
 ## 6. 耦合护栏（`npm run check`）
 
-四件套，任一硬门失败即非零退出：
+七个硬门，任一失败即非零退出：
 
 1. **check-globals**：`src/modules/*.js` 的全局导出必须 ∈ 白名单 **且每模块恰好一个**命名空间。
    白名单（9）：`CodeBlock` `Dialogs` `Outline` `WordCount` `FindReplace` `PreviewPost`
@@ -182,6 +182,8 @@ app 侧字段/方法统一经 `this.app` 访问，控制器自有方法走 `this
    P2-1 后收敛为 `PreviewController.render()` 薄委托，fan-in 显著下降，仍监控回归。
 5. **entry-scripts**：`src/modules/` 与 `src/index.html` 脚本清单必须一致（每增模块须加 `<script>`）。
 6. **tauri-api**：契约测试（命令名、双导出、reject 透传）。
+7. **check-version**：`scripts/check-version.mjs` 以 `package.json` 为基准校验其余 8 处发布相关版本号
+   （Cargo.toml / tauri.conf.json / app.js×2 / index.html / README×2 / release-notes.js / update json）。
 
 > 信息项：`coupling-report --changed <file>` 列出单文件改动连坐的测试（>3 告警，不阻断）。
 
@@ -218,6 +220,21 @@ app 侧字段/方法统一经 `this.app` 访问，控制器自有方法走 `this
    `contains_html_tag` / `process_inline_markdown` / `parse_alert` 为 P1-7 退役僵尸渲染时
    漏删的辅助链，已从 `lib.rs` 移除（1472→1114 行），`cargo check --no-default-features` 零警告。
 4. **全量测试策略**：无 CI 前的全量靠手动 `npm test`；P1-8 CI 已建，可在 push/PR 时自动门禁。
+5. **安全与可用性收口（2026-08-01 全工程审查）**：12 项修复全部落地并补测试（+11 用例）：
+   - 脚注 XSS：`renderFootnotes` 改走 `unifiedToHtml` 最小管线（sanitize 后不再拼 raw 定义；
+     顺带修复脚注定义内 markdown 显示为字面量的缺陷）；mermaid `securityLevel` loose→strict；
+     确认框 message innerHTML→textContent（4 调用方去 `<b>`/`<p>`，index.html 加 pre-line）。
+   - capabilities 移除未使用的 5 项 fs 插件权限（`fs:default/allow-read-file/write-file/read-all/write-all`，
+     前端零调用 plugin:fs，文件读写全走自定义命令），新增 `test/capabilities.test.cjs` 契约锁定。
+   - 健壮性：查找高亮 `range.setEnd` 越界钳制；空标题 id 点击守卫；`_imageURLCache` Blob URL
+     改 LRU（上限 64 + beforeunload 全量 revoke）。
+   - 性能：find-prev 改用 `cm.indexFromPos/posFromIndex`（原全文 split O(n²)）；
+     `_computedPosition` 加 `_scrollSyncDirty` 守卫（滚动热路径仅在内容/布局变化时重建，
+     权威调用点传 `force=true`）。
+   - 工程：`check-version` 版本一致性校验接入 `npm run check`；release.js 去硬编码路径 +
+     GITEE_TOKEN 缺失检查；CI 增加 build-frontend 冒烟。
+   - 遗留低风险（非本次范围）：`formatShortcutDisplay` 的 `<kbd>${k}</kbd>` 未转义——
+     k 为用户自录 KeyboardEvent.key，不含 `<`，无实际攻击面。
 
 ---
 
