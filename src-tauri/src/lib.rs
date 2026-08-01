@@ -716,6 +716,91 @@ fn ensure_dir(path: String) -> Result<(), String> {
     fs::create_dir_all(&path).map_err(|e| e.to_string())
 }
 
+// ====== 文件树右键菜单：重命名 / 删除 / 复制 / 移动 ======
+// 所有命令复用 safe_write_target 做路径规范化与黑名单校验，
+// 拒绝越界或系统关键目录。前端另外做业务级校验（禁止删除工作区根等）。
+
+// 检查 dst 是否等于 src 或位于 src 内部（按路径组件比较，跨平台 normalize 分隔符）。
+// 防止把目录复制/移动到自身或子目录内导致递归复制直到路径超长。
+fn is_path_within(src: &str, dst: &str) -> bool {
+    let norm = |p: &str| p.replace('\\', "/").trim_end_matches('/').to_lowercase();
+    let s = norm(src);
+    let d = norm(dst);
+    s == d || d.starts_with(&format!("{}/", s))
+}
+
+#[tauri::command]
+fn rename_path(from: String, to: String) -> Result<(), String> {
+    let _ = safe_write_target(&from)?;
+    let _ = safe_write_target(&to)?;
+    fs::rename(&from, &to).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn remove_path(path: String) -> Result<(), String> {
+    let _ = safe_write_target(&path)?;
+    let p = std::path::Path::new(&path);
+    if p.is_dir() {
+        fs::remove_dir_all(&path).map_err(|e| e.to_string())
+    } else {
+        fs::remove_file(&path).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn copy_path(from: String, to: String) -> Result<(), String> {
+    let _ = safe_write_target(&from)?;
+    let _ = safe_write_target(&to)?;
+    // 纵深防御：后端也检查目标是否在源内部，防止绕过前端直接 invoke 导致递归复制
+    if is_path_within(&from, &to) {
+        return Err("Cannot copy into itself or its subdirectory".into());
+    }
+    let from_p = std::path::Path::new(&from);
+    if from_p.is_file() {
+        fs::copy(&from, &to).map_err(|e| e.to_string()).map(|_| ())
+    } else {
+        copy_dir_recursive(from_p, std::path::Path::new(&to))
+    }
+}
+
+// 递归复制目录：跳过符号链接以避免循环；不跟随链接语义，保持物理复制。
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+    if !dst.exists() {
+        fs::create_dir_all(dst).map_err(|e| e.to_string())?;
+    }
+    for entry in fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_symlink() {
+            continue;
+        }
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn move_path(from: String, to: String) -> Result<(), String> {
+    let _ = safe_write_target(&from)?;
+    let _ = safe_write_target(&to)?;
+    if is_path_within(&from, &to) {
+        return Err("Cannot move into itself or its subdirectory".into());
+    }
+    // 同设备 rename 是原子的；跨设备 rename 会失败，回退到 copy + remove
+    match fs::rename(&from, &to) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            copy_path(from.clone(), to)?;
+            remove_path(from)
+        }
+    }
+}
+
 // 工作区文件监听：监听整棵目录树，外部（资源管理器等）增删目录/文件时向前端广播 folder-changed 事件，
 // 前端防抖后重建文件树。监听句柄存入托管状态，重复监听或关闭文件夹时会先丢弃旧句柄。
 struct WatcherState(pub Mutex<Option<RecommendedWatcher>>);
@@ -1658,6 +1743,10 @@ pub fn run() {
             list_dir,
             write_binary_file,
             ensure_dir,
+            rename_path,
+            remove_path,
+            copy_path,
+            move_path,
             watch_folder,
             stop_watch,
             app_data_dir,

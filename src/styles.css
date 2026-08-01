@@ -2795,6 +2795,13 @@ body.is-resizing .side-btn {
   color: var(--accent-text);
 }
 
+/* 禁用状态：新建文件/文件夹仅在文件夹上可用，粘贴仅在剪贴板非空时可用 */
+.context-menu-item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .context-menu-item:hover .shortcut {
   color: rgba(255, 255, 255, 0.75);
 }
@@ -2922,6 +2929,29 @@ body.is-resizing .side-btn {
   font-size: 14px;
   color: var(--text-primary);
   margin: 0;
+}
+
+/* 通用输入对话框（新建文件/文件夹/重命名） */
+.prompt-dialog {
+  max-width: 400px;
+}
+.prompt-dialog .dialog-content p {
+  margin-bottom: 10px;
+}
+#prompt-dialog-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  outline: none;
+  box-sizing: border-box;
+}
+#prompt-dialog-input:focus {
+  border-color: var(--accent-color);
 }
 
 .save-dialog {

@@ -688,6 +688,23 @@
     </div>
   </div>
 
+  <!-- 通用输入对话框：用于新建文件/文件夹/重命名 -->
+  <div id="prompt-dialog" class="dialog-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="prompt-dialog-title">
+    <div class="dialog prompt-dialog">
+      <div class="dialog-header">
+        <h2 id="prompt-dialog-title">输入</h2>
+      </div>
+      <div class="dialog-content">
+        <p id="prompt-dialog-message"></p>
+        <input id="prompt-dialog-input" type="text" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="dialog-footer">
+        <button id="prompt-dialog-cancel" class="dialog-btn">取消</button>
+        <button id="prompt-dialog-confirm" class="dialog-btn dialog-btn-primary">确认</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 关闭窗口确认对话框 -->
   <div id="close-confirm-dialog" class="dialog-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="close-dialog-title">
     <div class="dialog close-confirm-dialog">
@@ -1166,6 +1183,21 @@
     <div class="context-menu-item" data-action="tab-close-all"><span>关闭所有</span></div>
     <div class="context-menu-separator"></div>
     <div class="context-menu-item" data-action="tab-copy-path"><span>复制文件路径</span></div>
+  </div>
+
+  <!-- 文件树右键菜单：action 用 file- 前缀避免与编辑器菜单的 cut/copy/paste 冲突 -->
+  <div id="context-menu-file-tree" class="context-menu hidden">
+    <div class="context-menu-item" data-action="file-new-file"><span>新建文件</span><span class="shortcut">Ctrl+Alt+N</span></div>
+    <div class="context-menu-item" data-action="file-new-folder"><span>新建文件夹</span><span class="shortcut">Ctrl+Shift+N</span></div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" data-action="file-cut"><span>剪切</span><span class="shortcut">Ctrl+X</span></div>
+    <div class="context-menu-item" data-action="file-copy"><span>复制</span><span class="shortcut">Ctrl+C</span></div>
+    <div class="context-menu-item" data-action="file-paste"><span>粘贴</span><span class="shortcut">Ctrl+V</span></div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" data-action="file-rename"><span>重命名</span><span class="shortcut">F2</span></div>
+    <div class="context-menu-item" data-action="file-copy-path"><span>复制路径</span></div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" data-action="file-delete" style="color:var(--color-danger)"><span>删除</span><span class="shortcut">Delete</span></div>
   </div>
 
   <div id="loading-overlay" class="loading-overlay">

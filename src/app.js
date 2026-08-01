@@ -142,6 +142,28 @@ const I18N = {
     closeOther: '关闭其他',
     closeAll: '关闭所有',
     copyFilePath: '复制文件路径',
+    // 文件树右键菜单
+    fileNewFile: '新建文件',
+    fileNewFolder: '新建文件夹',
+    fileRename: '重命名',
+    fileDelete: '删除',
+    fileCopyPath: '复制路径',
+    newFileNamePrompt: '文件名称（含扩展名，如 note.md）',
+    newFolderNamePrompt: '文件夹名称',
+    renamePrompt: '新名称',
+    confirmDeleteFile: '确定要删除文件「{name}」吗？',
+    confirmDeleteFolder: '确定要删除文件夹「{name}」及其所有内容吗？此操作不可撤销。',
+    nameEmpty: '名称不能为空',
+    nameInvalid: '名称包含非法字符（/ \\ : * ? " < > |）',
+    nameExists: '已存在同名文件或文件夹',
+    clipboardEmpty: '剪贴板为空',
+    pasteIntoSelf: '不能将目录粘贴到自身或其子目录内',
+    fileCutDone: '已剪切到剪贴板',
+    fileCopyDone: '已复制到剪贴板',
+    filePasteDone: '已粘贴',
+    fileDeleteFailed: '删除失败',
+    fileCreateFailed: '创建失败',
+    fileRenameFailed: '重命名失败',
     recentFiles: '打开最近的文件',
     noRecentFiles: '暂无最近文件',
     clearRecentFiles: '清空最近文件',
@@ -499,6 +521,28 @@ const I18N = {
     closeOther: 'Close Others',
     closeAll: 'Close All',
     copyFilePath: 'Copy File Path',
+    // 文件树右键菜单
+    fileNewFile: 'New File',
+    fileNewFolder: 'New Folder',
+    fileRename: 'Rename',
+    fileDelete: 'Delete',
+    fileCopyPath: 'Copy Path',
+    newFileNamePrompt: 'File name (with extension, e.g. note.md)',
+    newFolderNamePrompt: 'Folder name',
+    renamePrompt: 'New name',
+    confirmDeleteFile: 'Delete file "{name}"?',
+    confirmDeleteFolder: 'Delete folder "{name}" and all its contents? This cannot be undone.',
+    nameEmpty: 'Name cannot be empty',
+    nameInvalid: 'Name contains invalid characters (/ \\ : * ? " < > |)',
+    nameExists: 'A file or folder with this name already exists',
+    clipboardEmpty: 'Clipboard is empty',
+    pasteIntoSelf: 'Cannot paste a folder into itself or its subdirectory',
+    fileCutDone: 'Cut to clipboard',
+    fileCopyDone: 'Copied to clipboard',
+    filePasteDone: 'Pasted',
+    fileDeleteFailed: 'Delete failed',
+    fileCreateFailed: 'Create failed',
+    fileRenameFailed: 'Rename failed',
     newFileCreated: 'New file created',
     opened: 'Opened',
     openedFiles: 'Opened {n} files',
@@ -768,6 +812,10 @@ class MarkdownEditor {
     this.cm = null;
     this.workspaceFolder = null;
     this.expandedFolders = new Set();
+    // 文件树右键菜单状态：_fileTreeCtx 为当前右键目标 {path, isDir, nodeEl}；
+    // _fileClipboard 为剪切/复制状态 {op:'cut'|'copy', path, isDir}，粘贴时据此调用 move/copy
+    this._fileTreeCtx = null;
+    this._fileClipboard = null;
     this.debounceTimer = null;
     this._imageURLCache = new Map();
     this._imageBase64Cache = new Map(); // key: 绝对路径 → value: base64 data URI，省去每次打字跨 IPC 读磁盘
@@ -1287,6 +1335,15 @@ class MarkdownEditor {
       'tab-close-others': 'closeOther',
       'tab-close-all': 'closeAll',
       'tab-copy-path': 'copyFilePath',
+      // 文件树右键菜单（file- 前缀避免与编辑器菜单的 cut/copy/paste 冲突）
+      'file-new-file': 'fileNewFile',
+      'file-new-folder': 'fileNewFolder',
+      'file-cut': 'cut',
+      'file-copy': 'copy',
+      'file-paste': 'paste',
+      'file-rename': 'fileRename',
+      'file-copy-path': 'fileCopyPath',
+      'file-delete': 'fileDelete',
     };
     document.querySelectorAll('.context-menu-item[data-action]').forEach(el => {
       const key = ctxActionKeys[el.dataset.action];
@@ -3600,6 +3657,34 @@ class MarkdownEditor {
     document.addEventListener('keydown', (e) => {
       if (this.handleShortcutRecording(e)) return;
 
+      // 文件树右键菜单快捷键：_fileTreeCtx 存在时，F2/Delete/Ctrl+X/C/V 对其生效。
+      // 编辑器聚焦时 Ctrl+X/C/V 让 CodeMirror 处理；F2/Delete 始终对文件树生效（编辑器不占用）。
+      if (this._fileTreeCtx) {
+        const inEditor = e.target.closest('.CodeMirror');
+        const inInput = e.target.closest('input, textarea, select');
+        if (!inInput) {
+          const ctrl = e.ctrlKey || e.metaKey;
+          if (e.key === 'F2') { e.preventDefault(); this.fileTreeRename(); return; }
+          if (e.key === 'Delete') { e.preventDefault(); this.fileTreeDelete(); return; }
+          if (ctrl && !e.shiftKey && !e.altKey && !inEditor) {
+            const k = e.key.toLowerCase();
+            if (k === 'x') { e.preventDefault(); this.fileTreeCut(); return; }
+            if (k === 'c') { e.preventDefault(); this.fileTreeCopy(); return; }
+            if (k === 'v') { e.preventDefault(); this.fileTreePaste(); return; }
+          }
+          if (ctrl && e.altKey && !e.shiftKey && e.key.toLowerCase() === 'n') {
+            e.preventDefault();
+            if (this._fileTreeCtx.isDir) this.fileTreeNewFile();
+            return;
+          }
+          if (ctrl && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'n') {
+            e.preventDefault();
+            if (this._fileTreeCtx.isDir) this.fileTreeNewFolder();
+            return;
+          }
+        }
+      }
+
       if (/^F(1[0-2]|[1-9])$/.test(e.key)) {
         e.preventDefault();
         return;
@@ -5656,6 +5741,8 @@ class MarkdownEditor {
           await this.renderFolderLevel(entry.path, childContainer, depth + 1);
         }
         row.addEventListener('click', async () => {
+          // 左键点击也更新文件树选中目标，让 F2/Delete/Ctrl+C 等快捷键作用于当前点击项
+          this._fileTreeCtx = { path: entry.path, isDir: true, nodeEl: node };
           const isOpen = !childContainer.classList.contains('hidden');
           if (isOpen) {
             childContainer.classList.add('hidden');
@@ -5679,6 +5766,8 @@ class MarkdownEditor {
         icon.innerHTML = FILE;
         node.appendChild(row);
         row.addEventListener('click', () => {
+          // 左键点击也更新文件树选中目标，让 F2/Delete/Ctrl+C 等快捷键作用于当前点击项
+          this._fileTreeCtx = { path: entry.path, isDir: false, nodeEl: node };
           this.openFilePath(entry.path);
         });
       }
@@ -5701,6 +5790,273 @@ class MarkdownEditor {
         const row = node.querySelector('.tree-row');
         if (row) row.classList.add('active');
       }
+    });
+  }
+
+  // ====== 文件树右键菜单：状态更新 + 动作 ======
+
+  // 根据当前右键目标和剪贴板状态更新菜单项禁用状态
+  updateFileTreeMenuState() {
+    const menu = document.getElementById('context-menu-file-tree');
+    if (!menu) return;
+    const ctx = this._fileTreeCtx;
+    const isDir = ctx ? ctx.isDir : false;
+    const setDisabled = (action, disabled) => {
+      const item = menu.querySelector(`[data-action="${action}"]`);
+      if (item) item.classList.toggle('disabled', disabled);
+    };
+    setDisabled('file-new-file', !isDir);
+    setDisabled('file-new-folder', !isDir);
+    setDisabled('file-paste', !isDir || !this._fileClipboard);
+    if (!ctx) {
+      ['file-cut', 'file-copy', 'file-rename', 'file-copy-path', 'file-delete'].forEach(a => setDisabled(a, true));
+    }
+  }
+
+  // 通用输入对话框：返回用户输入的字符串（trim），取消返回 null
+  showPromptDialog({ title, message = '', value = '', placeholder = '', selectBase = false }) {
+    return new Promise((resolve) => {
+      const dialog = document.getElementById('prompt-dialog');
+      const titleEl = document.getElementById('prompt-dialog-title');
+      const msgEl = document.getElementById('prompt-dialog-message');
+      const input = document.getElementById('prompt-dialog-input');
+      const confirmBtn = document.getElementById('prompt-dialog-confirm');
+      const cancelBtn = document.getElementById('prompt-dialog-cancel');
+      if (!dialog || !input) { resolve(null); return; }
+      titleEl.textContent = title || '';
+      msgEl.textContent = message;
+      msgEl.style.display = message ? '' : 'none';
+      input.value = value;
+      input.placeholder = placeholder;
+      dialog.classList.remove('hidden');
+      input.focus();
+      if (selectBase && value) {
+        const dot = value.lastIndexOf('.');
+        if (dot > 0) input.setSelectionRange(0, dot);
+        else input.select();
+      } else {
+        input.select();
+      }
+      const cleanup = () => {
+        dialog.classList.add('hidden');
+        input.removeEventListener('keydown', onKey);
+        confirmBtn.removeEventListener('click', onConfirm);
+        cancelBtn.removeEventListener('click', onCancel);
+        dialog.removeEventListener('click', onOverlay);
+      };
+      const onConfirm = () => { const v = input.value.trim(); cleanup(); resolve(v || null); };
+      const onCancel = () => { cleanup(); resolve(null); };
+      const onKey = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+        else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+      };
+      const onOverlay = (e) => { if (e.target === dialog) onCancel(); };
+      input.addEventListener('keydown', onKey);
+      confirmBtn.addEventListener('click', onConfirm);
+      cancelBtn.addEventListener('click', onCancel);
+      dialog.addEventListener('click', onOverlay);
+    });
+  }
+
+  validateFileName(name) {
+    if (!name || !name.trim()) return this.t('nameEmpty');
+    if (/[\/\\:*?"<>|]/.test(name)) return this.t('nameInvalid');
+    return null;
+  }
+
+  joinPath(parent, name) {
+    if (!parent) return name;
+    return parent.replace(/[\/\\]+$/, '') + '/' + name;
+  }
+
+  parentPath(path) {
+    const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    return idx > 0 ? path.substring(0, idx) : '';
+  }
+
+  baseName(path) {
+    const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    return idx >= 0 ? path.substring(idx + 1) : path;
+  }
+
+  async pathExists(path) {
+    try {
+      const parent = this.parentPath(path);
+      const name = this.baseName(path);
+      if (!parent) return false;
+      const entries = await invoke('list_dir', { path: parent });
+      return entries.some(e => e.name === name);
+    } catch { return false; }
+  }
+
+  async fileTreeNewFile() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx || !ctx.isDir) return;
+    const name = await this.showPromptDialog({
+      title: this.t('fileNewFile'),
+      message: this.t('newFileNamePrompt'),
+      placeholder: 'note.md'
+    });
+    if (name === null) return;
+    const err = this.validateFileName(name);
+    if (err) { this.showToast(err, 'danger'); return; }
+    const newPath = this.joinPath(ctx.path, name);
+    if (await this.pathExists(newPath)) { this.showToast(this.t('nameExists'), 'danger'); return; }
+    try {
+      await invoke('write_file', { path: newPath, content: '' });
+      this.expandedFolders.add(ctx.path);
+      this.renderFolderTree();
+      this.setStatus(this.t('fileNewFile') + ': ' + name);
+    } catch (e) {
+      this.showToast(this.t('fileCreateFailed') + ': ' + e, 'danger');
+    }
+  }
+
+  async fileTreeNewFolder() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx || !ctx.isDir) return;
+    const name = await this.showPromptDialog({
+      title: this.t('fileNewFolder'),
+      message: this.t('newFolderNamePrompt'),
+      placeholder: 'new-folder'
+    });
+    if (name === null) return;
+    const err = this.validateFileName(name);
+    if (err) { this.showToast(err, 'danger'); return; }
+    const newPath = this.joinPath(ctx.path, name);
+    if (await this.pathExists(newPath)) { this.showToast(this.t('nameExists'), 'danger'); return; }
+    try {
+      await invoke('ensure_dir', { path: newPath });
+      this.expandedFolders.add(ctx.path);
+      this.renderFolderTree();
+      this.setStatus(this.t('fileNewFolder') + ': ' + name);
+    } catch (e) {
+      this.showToast(this.t('fileCreateFailed') + ': ' + e, 'danger');
+    }
+  }
+
+  async fileTreeRename() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx) return;
+    const oldName = this.baseName(ctx.path);
+    const newName = await this.showPromptDialog({
+      title: this.t('fileRename'),
+      message: this.t('renamePrompt'),
+      value: oldName,
+      selectBase: true
+    });
+    if (newName === null) return;
+    const err = this.validateFileName(newName);
+    if (err) { this.showToast(err, 'danger'); return; }
+    if (newName === oldName) return;
+    const parent = this.parentPath(ctx.path);
+    const newPath = this.joinPath(parent, newName);
+    if (await this.pathExists(newPath)) { this.showToast(this.t('nameExists'), 'danger'); return; }
+    try {
+      await invoke('rename_path', { from: ctx.path, to: newPath });
+      const tab = this.tabs.find(t => t.filePath === ctx.path);
+      if (tab) {
+        tab.filePath = newPath;
+        tab.name = newName;
+        this.updateTabBar();
+        this.saveSession();
+      }
+      this.renderFolderTree();
+      this.setStatus(this.t('fileRename') + ': ' + oldName + ' → ' + newName);
+    } catch (e) {
+      this.showToast(this.t('fileRenameFailed') + ': ' + e, 'danger');
+    }
+  }
+
+  async fileTreeDelete() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx) return;
+    const name = this.baseName(ctx.path);
+    const msg = ctx.isDir
+      ? this.t('confirmDeleteFolder', { name })
+      : this.t('confirmDeleteFile', { name });
+    const ok = await this.showConfirmDialog(this.t('fileDelete'), msg);
+    if (!ok) return;
+    try {
+      await invoke('remove_path', { path: ctx.path });
+      const tabIdx = this.tabs.findIndex(t => t.filePath === ctx.path);
+      if (tabIdx >= 0) await this.closeTab(tabIdx);
+      this.renderFolderTree();
+      this.setStatus(this.t('fileDelete') + ': ' + name);
+    } catch (e) {
+      this.showToast(this.t('fileDeleteFailed') + ': ' + e, 'danger');
+    }
+  }
+
+  fileTreeCut() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx) return;
+    this._fileClipboard = { op: 'cut', path: ctx.path, isDir: ctx.isDir };
+    this.setStatus(this.t('fileCutDone') + ': ' + this.baseName(ctx.path));
+  }
+
+  fileTreeCopy() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx) return;
+    this._fileClipboard = { op: 'copy', path: ctx.path, isDir: ctx.isDir };
+    this.setStatus(this.t('fileCopyDone') + ': ' + this.baseName(ctx.path));
+  }
+
+  async fileTreePaste() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx || !ctx.isDir || !this._fileClipboard) {
+      this.showToast(this.t('clipboardEmpty'), 'danger');
+      return;
+    }
+    const clip = this._fileClipboard;
+    // 安全检查：禁止把目录复制/移动到自身或自身子目录内，否则递归复制直到路径超长
+    const normClip = clip.path.replace(/[\/\\]+$/, '');
+    const normCtx = ctx.path.replace(/[\/\\]+$/, '');
+    if (normClip === normCtx
+        || normCtx.startsWith(normClip + '/')
+        || normCtx.startsWith(normClip + '\\')) {
+      this.showToast(this.t('pasteIntoSelf'), 'danger');
+      return;
+    }
+    const srcName = this.baseName(clip.path);
+    let dstPath = this.joinPath(ctx.path, srcName);
+    // 同名冲突时加 (n) 后缀
+    if (await this.pathExists(dstPath)) {
+      const dot = srcName.lastIndexOf('.');
+      const base = dot > 0 ? srcName.substring(0, dot) : srcName;
+      const ext = dot > 0 ? srcName.substring(dot) : '';
+      let i = 1;
+      while (await this.pathExists(this.joinPath(ctx.path, `${base} (${i})${ext}`))) i++;
+      dstPath = this.joinPath(ctx.path, `${base} (${i})${ext}`);
+    }
+    try {
+      if (clip.op === 'cut') {
+        await invoke('move_path', { from: clip.path, to: dstPath });
+        const tab = this.tabs.find(t => t.filePath === clip.path);
+        if (tab) {
+          tab.filePath = dstPath;
+          this.updateTabBar();
+          this.saveSession();
+        }
+        this._fileClipboard = null;
+      } else {
+        await invoke('copy_path', { from: clip.path, to: dstPath });
+      }
+      this.expandedFolders.add(ctx.path);
+      this.renderFolderTree();
+      this.setStatus(this.t('filePasteDone') + ': ' + this.baseName(dstPath));
+    } catch (e) {
+      this.showToast(this.t('filePasteDone') + ': ' + e, 'danger');
+    }
+  }
+
+  fileTreeCopyPath() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx) return;
+    navigator.clipboard.writeText(ctx.path).then(() => {
+      this.setStatus(this.t('fileCopyPath') + ': ' + ctx.path);
+    }).catch(() => {
+      this.showToast(this.t('fileCopyPath') + ' ' + this.t('failed'), 'danger');
     });
   }
 
@@ -8205,6 +8561,25 @@ input[type="checkbox"]:checked::after { display: none !important; }
     });
     observer.observe(document.getElementById('tab-bar'), { childList: true, subtree: true });
 
+    // 文件树右键菜单：事件委托到 #folder-tree，动态渲染的节点也能生效。
+    // stopPropagation 阻止冒泡到 document 级 contextmenu 监听，否则会 hideAllContextMenus 把刚弹出的菜单关掉。
+    const folderTree = document.getElementById('folder-tree');
+    if (folderTree) {
+      folderTree.addEventListener('contextmenu', (e) => {
+        const treeNode = e.target.closest('.tree-node');
+        if (!treeNode) return; // 右键空白处暂不弹菜单
+        const path = treeNode.dataset.path;
+        if (!path) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const isDir = treeNode.classList.contains('tree-folder');
+        this._fileTreeCtx = { path, isDir, nodeEl: treeNode };
+        this.hideAllContextMenus();
+        this.showContextMenu('context-menu-file-tree', e.clientX, e.clientY);
+        this.updateFileTreeMenuState();
+      });
+    }
+
     document.addEventListener('click', () => this.hideAllContextMenus());
     document.addEventListener('contextmenu', (e) => {
       if (e.target.closest('input:not([type="file"]):not([type="checkbox"]):not([type="radio"]), textarea, select') &&
@@ -8380,6 +8755,16 @@ input[type="checkbox"]:checked::after { display: none !important; }
       case 'tab-close-others': this.closeOtherTabs(this._contextTabIndex); break;
       case 'tab-close-all': this.closeAllTabs(); break;
       case 'tab-copy-path': this.copyTabPath(this._contextTabIndex); break;
+
+      // 文件树右键菜单动作
+      case 'file-new-file': this.fileTreeNewFile(); break;
+      case 'file-new-folder': this.fileTreeNewFolder(); break;
+      case 'file-cut': this.fileTreeCut(); break;
+      case 'file-copy': this.fileTreeCopy(); break;
+      case 'file-paste': this.fileTreePaste(); break;
+      case 'file-rename': this.fileTreeRename(); break;
+      case 'file-copy-path': this.fileTreeCopyPath(); break;
+      case 'file-delete': this.fileTreeDelete(); break;
     }
   }
 
