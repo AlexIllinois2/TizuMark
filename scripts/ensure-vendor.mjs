@@ -66,8 +66,8 @@ const MANIFEST = [
   ['highlight.js/styles/github.css', 'highlight.js/github.css'],
   ['highlight.js/styles/github-dark.min.css', 'highlight.js/github-dark.min.css'],
   ['highlight.js/styles/github-dark.css', 'highlight.js/github-dark.css'],
-  ['highlight.js/lib/common.js', 'highlight.js/common.js'],
-  ['highlight.js/lib/core.js', 'highlight.js/core.js'],
+  // 注意：不复制 highlight.js/lib/common.js、lib/core.js —— node_modules 无包根 ESM shim，
+  // 且全仓库无任何引用（index.html/app.js/测试均不用），避免生成错位内容。
   ['highlight.js/lib/languages', 'highlight.js/languages'],
 ];
 
