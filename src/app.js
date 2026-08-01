@@ -279,8 +279,8 @@ const I18N = {
     exportedHTML: '已导出 HTML',
     exportedPDF: '已导出 PDF',
     exportError: '导出失败',
-    printTip1: '可在<b>更多设置</b>中<b>取消勾选"页眉和页脚"</b>，去除 PDF 顶部的日期、标题等多余信息。',
-    printTip2: '如果代码高亮或背景色显示异常，请在<b>更多设置</b>中<b>勾选"背景图形"</b>。',
+    printTip1: '可在「更多设置」中「取消勾选"页眉和页脚"」，去除 PDF 顶部的日期、标题等多余信息。',
+    printTip2: '如果代码高亮或背景色显示异常，请在「更多设置」中「勾选"背景图形"」。',
     editor: '编辑器',
     previewSection: '预览',
     paneEdit: '编辑',
@@ -623,8 +623,8 @@ const I18N = {
     exportedHTML: 'Exported HTML',
     exportedPDF: 'PDF exported',
     exportError: 'Export failed',
-    printTip1: 'Go to <b>More settings</b> and <b>uncheck "Headers and footers"</b> to remove date, title and other extra info from the PDF.',
-    printTip2: 'If code highlighting or background colors look wrong, go to <b>More settings</b> and <b>check "Background graphics"</b>.',
+    printTip1: 'Go to "More settings" and uncheck "Headers and footers" to remove date, title and other extra info from the PDF.',
+    printTip2: 'If code highlighting or background colors look wrong, go to "More settings" and check "Background graphics".',
     editor: 'Editor',
     previewSection: 'Preview',
     paneEdit: 'Edit',
@@ -767,7 +767,15 @@ class MarkdownEditor {
     this.workspaceFolder = null;
     this.expandedFolders = new Set();
     this.debounceTimer = null;
-    this._imageURLCache = new Map();
+    this._imageURLCache = new Map(); // dataUri → Blob URL（LRU，上限 _imageURLCacheMax，超限 revoke）
+    this._imageURLCacheMax = 64;
+    // 滚动同步密集位置数组的失效标志：内容变化（updatePreview→rebuildScrollSync）时置位，
+    // 滚动热路径（_syncEditorToPreview/_syncPreviewToEditor）仅在 dirty 时重建，避免每次滚动全量重算
+    this._scrollSyncDirty = true;
+    // 布局指纹：预览 scrollHeight。图片/字体/mermaid 等异步加载会改变预览高度，
+    // 仅靠 dirty 感知不到（内容没变），须在滚动同步时比对高度，变了就强制重测
+    // （否则编辑行 ↔ 预览像素错位，2026-08-01 严重 bug 修复）
+    this._lastLayoutHeight = null;
     this._imageBase64Cache = new Map(); // key: 绝对路径 → value: base64 data URI，省去每次打字跨 IPC 读磁盘
     this._hljsCache = new Map();
     this._mermaidCache = new Map(); // key: themeKey+'::'+code → 渲染后的 SVG innerHTML，避免打字时全量重渲染 mermaid
@@ -1765,19 +1773,23 @@ class MarkdownEditor {
         this.cm.scrollIntoView({ line, ch: 0 }, 80);
       }
       // 预览区跳转（仅当该标题已渲染在预览中时）
-      const target = this.preview.querySelector(`#${CSS.escape(id)}`);
-      if (target) {
-        const previewHeight = this.preview.clientHeight;
-        const targetRect = target.getBoundingClientRect();
-        const previewRect = this.preview.getBoundingClientRect();
-        const top = targetRect.top - previewRect.top + this.preview.scrollTop
-                  - (previewHeight / 2) + (targetRect.height / 2);
-        this.preview.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
-      } else if (this.previewWindow) {
-        // 大文档窗口模式：目标标题尚未渲染在预览中，以该行为焦点重渲染预览窗口，使其落点
-        this._previewScrollDriven = false;
-        if (Number.isFinite(line)) this._previewFocusLine = line;
-        this.updatePreview();
+      // 守卫：纯符号标题（如 `# ===`）headingToId 会产出空串，querySelector('#') 抛
+      // SyntaxError（历史 bug），跳过预览跳转仅保留编辑区跳转
+      if (id) {
+        const target = this.preview.querySelector(`#${CSS.escape(id)}`);
+        if (target) {
+          const previewHeight = this.preview.clientHeight;
+          const targetRect = target.getBoundingClientRect();
+          const previewRect = this.preview.getBoundingClientRect();
+          const top = targetRect.top - previewRect.top + this.preview.scrollTop
+                    - (previewHeight / 2) + (targetRect.height / 2);
+          this.preview.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+        } else if (this.previewWindow) {
+          // 大文档窗口模式：目标标题尚未渲染在预览中，以该行为焦点重渲染预览窗口，使其落点
+          this._previewScrollDriven = false;
+          if (Number.isFinite(line)) this._previewFocusLine = line;
+          this.updatePreview();
+        }
       }
       outlineContent.querySelectorAll('.outline-item').forEach(el => el.classList.remove('active'));
       item.classList.add('active');
@@ -1982,7 +1994,7 @@ class MarkdownEditor {
     const name = font ? font.name : '';
     await this.showConfirmDialog(
       this.t('deleteFont'),
-      this.t('confirmDeleteFont', { name: `<b>${this.escapeHtml(name)}</b>` }),
+      this.t('confirmDeleteFont', { name }),
       async () => {
         this.settings.customFonts = (this.settings.customFonts || []).filter(f => f.id !== id);
         if (this.settings.editorFont === id) this.settings.editorFont = '';
@@ -3581,6 +3593,14 @@ class MarkdownEditor {
       this.updateSideButtons();
     });
 
+    // 应用退出时全量 revoke Blob URL，避免 WebView 存活期内泄漏（LRU 兜底外的一刀切）
+    window.addEventListener('beforeunload', () => {
+      if (this._imageURLCache && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+        for (const url of this._imageURLCache.values()) URL.revokeObjectURL(url);
+        this._imageURLCache.clear();
+      }
+    });
+
     document.addEventListener('keydown', (e) => {
       if (this.handleShortcutRecording(e)) return;
 
@@ -3815,38 +3835,21 @@ class MarkdownEditor {
       const useRegex = document.getElementById('find-regex').checked;
       const cursor = this.cm.getCursor();
       const text = this.cm.getValue();
-      
-      const posToOffset = (pos) => {
-        const lines = text.split('\n');
-        let offset = 0;
-        for (let i = 0; i < pos.line; i++) offset += lines[i].length + 1;
-        return offset + pos.ch;
-      };
-      
-      const offsetToPos = (offset) => {
-        const lines = text.split('\n');
-        let remaining = offset;
-        for (let i = 0; i < lines.length; i++) {
-          if (remaining <= lines[i].length) {
-            return { line: i, ch: remaining };
-          }
-          remaining -= lines[i].length + 1;
-        }
-        return { line: lines.length - 1, ch: 0 };
-      };
-      
-      const currentOffset = posToOffset(cursor);
+
+      // 用 CodeMirror 原生 indexFromPos/posFromIndex 做偏移换算：
+      // 历史实现每次调用都对全文 split('\n')，多匹配循环下近 O(n²)；原生 API 走行表，常数级。
+      const currentOffset = this.cm.indexFromPos(cursor);
       const flags = caseSensitive ? 'g' : 'gi';
       if (useRegex && !isSafeRegex(query)) return;
       const regex = useRegex
         ? new RegExp(query, flags)
         : new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
-      
+
       let lastMatch = null;
       let lastOverall = null;
       let m;
       while ((m = regex.exec(text)) !== null) {
-        const cand = { from: offsetToPos(m.index), to: offsetToPos(m.index + m[0].length) };
+        const cand = { from: this.cm.posFromIndex(m.index), to: this.cm.posFromIndex(m.index + m[0].length) };
         lastOverall = cand;
         if (m.index + m[0].length < currentOffset) {
           lastMatch = cand;
@@ -4020,10 +4023,12 @@ class MarkdownEditor {
         const nodeLen = node.nodeValue.length;
         if (charCount + nodeLen > target.start) {
           const startOffset = target.start - charCount;
-          const endOffset = target.end - charCount;
+          // 匹配可能跨多个文本节点（如 <strong> 边界），endOffset 在本节点内钳制，
+          // 避免 range.setEnd 越界抛 IndexSizeError（历史 bug：跨节点匹配直接崩掉高亮）
+          const endOffset = Math.min(target.end - charCount, nodeLen);
           const range = document.createRange();
           range.setStart(node, startOffset);
-          range.setEnd(node, endOffset);
+          range.setEnd(node, Math.max(endOffset, startOffset));
           const sel = window.getSelection();
           sel.removeAllRanges();
           sel.addRange(range);
@@ -5889,13 +5894,10 @@ ${clone.innerHTML}
   }
 
   async exportPDF() {
-    // Print tips before starting
+    // Print tips before starting（纯文本，确认框按 textContent 渲染）
     const proceed = await this.showConfirmDialog(
       this.t('exportPDF'),
-      `<div style="text-align:left;line-height:1.7;">
-        <p style="margin:0 0 8px;">${this.t('printTip1')}</p>
-        <p style="margin:0;">${this.t('printTip2')}</p>
-      </div>`
+      this.t('printTip1') + '\n\n' + this.t('printTip2')
     );
     if (!proceed) return;
 
@@ -6031,7 +6033,12 @@ input[type="checkbox"]:checked::after { display: none !important; }
   getCachedImageURL(dataUri) {
     if (!dataUri || !dataUri.startsWith('data:')) return dataUri;
     const cached = this._imageURLCache.get(dataUri);
-    if (cached) return cached;
+    if (cached) {
+      // LRU 刷新：命中项移到队尾（Map 插入序），保证淘汰的是最久未用的
+      this._imageURLCache.delete(dataUri);
+      this._imageURLCache.set(dataUri, cached);
+      return cached;
+    }
     try {
       const comma = dataUri.indexOf(',');
       const meta = dataUri.slice(0, comma);
@@ -6045,6 +6052,15 @@ input[type="checkbox"]:checked::after { display: none !important; }
       const blob = new Blob([bytes], { type: mime });
       const url = URL.createObjectURL(blob);
       this._imageURLCache.set(dataUri, url);
+      // 容量上限：超限 revoke 最旧 Blob URL，防止长会话多图内存持续增长（历史 bug：只增不减）
+      if (this._imageURLCache.size > this._imageURLCacheMax) {
+        const oldestKey = this._imageURLCache.keys().next().value;
+        const oldestUrl = this._imageURLCache.get(oldestKey);
+        this._imageURLCache.delete(oldestKey);
+        if (typeof URL !== 'undefined' && URL.revokeObjectURL) {
+          URL.revokeObjectURL(oldestUrl);
+        }
+      }
       return url;
     } catch (e) {
       return dataUri;
@@ -6175,7 +6191,19 @@ input[type="checkbox"]:checked::after { display: none !important; }
 
   // 构建逐行密集位置映射（纯线性插值，无速度限制）
   // 每个编辑器行都有精确的 previewTop 插值
-  _computedPosition() {
+  // force=true：显式重建（内容/布局变化后的权威调用点）；缺省：仅 dirty 或布局变化时重建，
+  // 滚动同步热路径重复调用直接命中缓存，避免每次滚动全量重算（P1-6 性能修复）
+  _computedPosition(force = false) {
+    // 布局指纹：图片/字体/mermaid 等异步加载会改变预览 scrollHeight（内容没变但布局变了），
+    // 位置表冻结在旧布局会导致编辑行 ↔ 预览像素错位（2026-08-01 严重 bug）。比对高度差异强制重测。
+    const curHeight = this.preview ? this.preview.scrollHeight : null;
+    const layoutChanged = curHeight !== null &&
+      this._lastLayoutHeight != null && curHeight !== this._lastLayoutHeight;
+    if (!force && !layoutChanged && !this._scrollSyncDirty && this._editorElementList) return;
+
+    // 本次实际执行测量：无论成功与否都记录当前布局高度（作为下次比对指纹）
+    this._lastLayoutHeight = curHeight;
+
     const allElements = this.preview.querySelectorAll('[data-source-line]');
     const anchors = [];
     const seenLines = new Set();
@@ -6249,12 +6277,13 @@ input[type="checkbox"]:checked::after { display: none !important; }
 
     this._editorElementList = editorList;
     this._previewElementList = rawPreviewList;
+    this._scrollSyncDirty = false; // 重建成功：清除失效标志（滚动热路径此后命中缓存）
   }
 
   // 返回预览视口顶部对应的源码行号（1-based）；测量失败返回 null。
   // 用于切换模式时把「预览像素位置」转成宽度无关的行锚点。
   _lineAtPreviewTop(pvTop) {
-    this._computedPosition();
+    this._computedPosition(true);
     const list = this._previewElementList;
     if (!list || list.length < 2) return null;
     // 二分找 previewList 中 <= pvTop 的最大行索引
@@ -6272,8 +6301,8 @@ input[type="checkbox"]:checked::after { display: none !important; }
     const content = this.cm.getValue();
     const totalLines = content.split('\n').length;
 
-    // 构建平行位置数组（使用 data-source-line）
-    this._computedPosition();
+    // 构建平行位置数组（使用 data-source-line）；内容已变，强制重建（force=true）
+    this._computedPosition(true);
 
     // 生成 _linePositions（兼容 updatePreview 滚动恢复）
     const allElements = Array.from(this.preview.querySelectorAll('[data-source-line]'));
@@ -7059,7 +7088,8 @@ input[type="checkbox"]:checked::after { display: none !important; }
           // 进入纯预览（100% 宽）：预览已重排，用锚点行在新布局下的预览位置定位
           let restored = false;
           if (anchor != null) {
-            this._computedPosition();
+            // 布局已变（宽度重排），强制重算位置映射
+            this._computedPosition(true);
             const list = this._previewElementList;
             if (list && anchor - 1 < list.length) {
               const pMax = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);

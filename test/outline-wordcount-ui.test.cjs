@@ -82,3 +82,16 @@ test('outline-ui: escapeHtml / escapeAttr / escapeMdText 转义', async () => wi
   assert.strictEqual(ed.escapeAttr('a"b<c>&d'), 'a&quot;b&lt;c&gt;&amp;d');
   assert.strictEqual(ed.escapeMdText('a]b\\c'), 'a\\]b\\\\c');
 }));
+
+test('outline-ui: 纯符号标题点击不抛 SyntaxError', async () => withEditor({ captureInitErr: true }, async (w, ed) => {
+  // headingToId('===') 产出空串；点击空 data-id 时 querySelector('#') 曾抛 SyntaxError
+  ed.cm.setValue('# ===\n\n## 正常标题');
+  ed.updateOutline();
+  const oc = w.document.getElementById('outline-content');
+  const symbolItem = [...oc.querySelectorAll('.outline-item')].find((i) => i.dataset.id === '');
+  assert.ok(symbolItem, '纯符号标题应渲染为空 data-id');
+  assert.doesNotThrow(() => {
+    symbolItem.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  }, '点击空 id 标题不得抛 SyntaxError');
+  assert.strictEqual(ed.cm.getCursor().line, 0, '光标应跳到标题行');
+}));

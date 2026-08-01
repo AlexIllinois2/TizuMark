@@ -136,3 +136,38 @@ test('clearCrossSearchHighlights: 打开跨文件搜索弹框应清除上一次�
   assert.strictEqual(ed.crossSearchMarks.length, 0, '打开跨文件搜索应清空上一次跨文件高亮');
   cleanup(w);
 });
+
+test('highlightPreviewMatch: 跨文本节点匹配不抛 IndexSizeError（历史 bug）', async () => {
+  const { w } = await buildEnv();
+  await delay(300);
+  try {
+    const ed = w.editor;
+    // jsdom 未实现 scrollIntoView，stub 掉（生产 WebView 存在）
+    w.Element.prototype.scrollIntoView = () => {};
+    // text nodes: "hello "（6）+ "world"（5）+ " end"（4）；目标 "world end" 跨 <strong> 边界
+    ed.preview.innerHTML = '<p>hello <strong>world</strong> end</p>';
+    assert.doesNotThrow(() => {
+      ed.highlightPreviewMatch({ start: 6, end: 14 });
+    }, 'endOffset 超出首个文本节点长度时不得抛 IndexSizeError');
+    const sel = w.getSelection();
+    assert.ok(sel.rangeCount >= 1, '应产生选区');
+  } finally {
+    cleanup(w);
+  }
+});
+
+test('highlightPreviewMatch: 单文本节点内匹配选区精确', async () => {
+  const { w } = await buildEnv();
+  await delay(300);
+  try {
+    const ed = w.editor;
+    w.Element.prototype.scrollIntoView = () => {};
+    ed.preview.innerHTML = '<p>hello world</p>';
+    assert.doesNotThrow(() => ed.highlightPreviewMatch({ start: 0, end: 5 }));
+    const sel = w.getSelection();
+    assert.ok(sel.rangeCount >= 1);
+    assert.strictEqual(sel.getRangeAt(0).toString(), 'hello', '应精确选中 hello');
+  } finally {
+    cleanup(w);
+  }
+});
