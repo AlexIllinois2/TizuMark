@@ -48,6 +48,21 @@ test('render: 脚注', async () => {
   assert.ok(html.includes('footnote') || html.includes('id="fn'), '应渲染脚注区块');
 });
 
+test('render: 脚注定义注入被净化（XSS）', async () => {
+  // 脚注定义原文不得拼入 HTML（历史 bug：sanitize 后直接拼接 raw 源文本）
+  const html = render('正文[^1]\n\n[^1]: <img src=x onerror=alert(1)> 内容');
+  assert.ok(!html.includes('onerror'), '脚注定义中的事件处理器应被剥离');
+  assert.ok(!html.includes('alert(1)'), '脚注定义中的脚本不应出现');
+  assert.ok(html.includes('id="fn-'), '应仍渲染脚注区块');
+});
+
+test('render: 脚注定义内 markdown 语法正常渲染', async () => {
+  // 附带修复：定义内 **bold** 渲染为 <strong> 而非字面量
+  const html = render('正文[^1]\n\n[^1]: 定义含 **加粗** 与 [链接](https://x.com)');
+  assert.ok(html.includes('<strong>加粗</strong>'), '脚注定义内 **bold** 应渲染');
+  assert.ok(html.includes('href="https://x.com"'), '脚注定义内链接应渲染');
+});
+
 test('render: 定义列表', async () => {
   const html = render('术语\n: 解释');
   assert.ok(html.includes('<dl') || html.includes('<dt') || html.includes('<dd'),
