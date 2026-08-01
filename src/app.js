@@ -184,6 +184,7 @@ const I18N = {
     schemeNord: '极夜风',
     schemeDusk: '暮紫风',
     schemeSunset: '暖橙风',
+    defaultView: '默认视图',
     scrollSync: '滚动同步',
     softBreaks: '软换行（回车即换行）',
     softBreaksHint: '开启后，段落内单个回车直接换行（与「空格+空格+回车」一致），更符合日常写作习惯，也便于从其他笔记软件迁移。关闭则恢复 CommonMark 标准（回车视为空格）。',
@@ -529,6 +530,7 @@ const I18N = {
     schemeNord: 'Nord',
     schemeDusk: 'Dusk',
     schemeSunset: 'Sunset',
+    defaultView: 'Default View',
     scrollSync: 'Scroll Sync',
     softBreaks: 'Soft Line Break (Enter = newline)',
     softBreaksHint: 'When enabled, a single Enter inside a paragraph creates a line break (same as "two spaces + Enter"), matching everyday writing and easing migration from other note apps. When disabled, CommonMark standard applies (Enter is treated as a space).',
@@ -1023,7 +1025,8 @@ class MarkdownEditor {
     setRowLabel('set-preview-font-size', t('previewFontSize'));
     setRowLabel('set-line-height', t('lineHeight'));
     setRowLabel('set-max-width', t('maxWidth'));
-    setSectionTitle('set-scroll-sync', t('behavior'));
+    setSectionTitle('set-default-view', t('behavior'));
+    setRowLabel('set-default-view', t('defaultView'));
     setRowLabel('set-scroll-sync', t('scrollSync'));
     setRowLabel('set-soft-breaks', t('softBreaks'));
     const softBreaksHint = document.querySelector('#setting-soft-breaks-hint .hint-text');
@@ -1301,6 +1304,12 @@ class MarkdownEditor {
       themeSel.options[1].text = t('themeDark');
       themeSel.options[2].text = t('followSystem');
     }
+    // Default view
+    const viewSel = document.getElementById('set-default-view');
+    if (viewSel) {
+      viewSel.options[0].text = t('preview');
+      viewSel.options[1].text = t('edit');
+    }
     // Tab size
     const tabSizeSel = document.getElementById('set-tab-size');
     if (tabSizeSel) {
@@ -1429,6 +1438,7 @@ class MarkdownEditor {
     document.getElementById('set-theme-mode').value = s.themeMode;
     document.getElementById('set-color-scheme').value = s.colorScheme || 'default';
     document.getElementById('set-font-scheme').value = s.fontScheme || 'system-sans';
+    document.getElementById('set-default-view').value = s.defaultView;
     document.getElementById('set-scroll-sync').checked = s.scrollSync;
     document.getElementById('set-code-line-numbers').checked = s.codeLineNumbers;
     document.getElementById('set-code-wrap').checked = s.codeWrap;
@@ -1503,6 +1513,10 @@ class MarkdownEditor {
     document.getElementById('set-font-scheme').addEventListener('change', (e) => {
       this.settings.fontScheme = e.target.value;
       this.applyFontScheme();
+      this.saveSettings();
+    });
+    document.getElementById('set-default-view').addEventListener('change', (e) => {
+      this.settings.defaultView = e.target.value;
       this.saveSettings();
     });
     document.getElementById('set-scroll-sync').addEventListener('change', (e) => {
@@ -2157,6 +2171,7 @@ class MarkdownEditor {
     document.getElementById('set-theme-mode').value = defaults.themeMode;
     document.getElementById('set-color-scheme').value = defaults.colorScheme;
     document.getElementById('set-font-scheme').value = defaults.fontScheme;
+    document.getElementById('set-default-view').value = defaults.defaultView;
     document.getElementById('set-scroll-sync').checked = defaults.scrollSync;
     document.getElementById('set-soft-breaks').checked = defaults.softBreaks !== false;
     document.getElementById('set-language').value = defaults.language;

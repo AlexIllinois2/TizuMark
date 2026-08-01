@@ -595,8 +595,7 @@ body {
 }
 
 .view-mode-tabs {
-  /* display: flex; */
-  display: none;
+  display: flex;
 }
 
 .view-mode-tab {
