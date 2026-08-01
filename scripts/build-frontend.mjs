@@ -1,17 +1,14 @@
-// 前端 release 产物编排（ADR-4 的安全落地版本）。
+// 前端 release 产物编排（ADR-4 完整落地）。
 //
-// 背景 / 为何这样实现：
-//   ADR-4 的目标是让 release 输出到 dist/、dev 仍走 src/，从而 release 产物可独立于
-//   源码树，并在打包后移除 CSP 的 unsafe-eval。但本项目当前前端是「经典 <script> 全局模式」
-//   （src/app.js 等以普通 <script> 加载，依赖 window.CodeMirror / window.hljs / window.katex
-//   等浏览器全局，并非 ESM 模块图），且 Tauri 没有 dev server —— 在未配置 devUrl 时，
-//   Tauri v2 的 dev 与 release 共用 build.frontendDist（当前为 ../src）。
-//
-//   因此「release 用 dist/ 且 dev 仍 src/」的真正切换，必须先引入 dev server + 前端 ESM 化，
-//   这是超出本次范围的更大重构。本脚本采用零架构风险的「资源聚合拷贝」：把 src/ 整棵前端树
-//   （含已生成的 unified-bundle.js 与 vendor 库）聚合到 dist/，作为 release 产物目录。
-//   tauri.conf.json 的 frontendDist 本次保持不变（仍 ../src），确保现有 dev/release 链路
-//   行为零改动；后续若要做完整 ADR-4 切换，只需把 frontendDist 指向 ../dist 并补 dev server。
+// 背景 / 实现方式：
+//   ADR-4 目标：dev 走 src/（源码即运行）、release 走 dist/（独立产物目录）。
+//   经典 <script> 全局模式（src/app.js 等普通 <script>，依赖 window.CodeMirror /
+//   window.hljs / window.katex 等浏览器全局，非 ESM 模块图）在 dev server 下完全可用，
+//   因此完整切换不需要 ESM 化。本脚本做「资源聚合拷贝」：把 src/ 整棵前端树
+//   （含已生成的 unified-bundle.js 与 vendor 库）+ 顶层 assets 聚合到 dist/。
+//   tauri.conf.json：frontendDist = ../dist（release 加载本目录）；
+//   devUrl = http://localhost:1420 + beforeDevCommand 起 scripts/dev-server.mjs
+//   （serve src/，改完即刷）。ESM 化/压缩属后续可选项，不做也不影响分离机制。
 //
 // 前置：必须先 npm run build:renderer（生成 src/lib/unified-bundle.js），否则预览渲染会白屏。
 import fs from 'node:fs';
@@ -63,6 +60,5 @@ if (fs.existsSync(assetsDir)) {
 
 console.log(
   `✓ 前端已编排到 dist/（拷贝 ${copied} 个文件，含已生成的 unified-bundle.js 与 vendor 库）。\n` +
-    '  当前 tauri.conf.json 的 frontendDist 仍为 ../src（dev/release 行为不变）。\n' +
-    '  若要做完整 ADR-4 切换，把 frontendDist 改为 ../dist 并补 dev server 即可。'
+    '  tauri.conf.json frontendDist = ../dist（release 加载本目录）；dev 走 devUrl 静态 server（src/）。'
 );

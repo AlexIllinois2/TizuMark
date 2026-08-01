@@ -7,6 +7,11 @@ const { buildEnv, cleanup, waitForEditor } = require('./helpers/app-env.cjs');
 async function makeEnv() {
   const { w } = await buildEnv({ captureInitErr: true });
   const ed = await waitForEditor(w);
+  // harness 初始化会打开「Untitled1 + 使用说明.md」两个 tab 且 activeTabIndex=1；
+  // 测试 9 的「切回 tab0 字号保留」依赖 tab0 为初始缩放目标，故重置为 [tab0]+activeTabIndex=0。
+  ed.tabs.length = 1;
+  ed.activeTabIndex = 0;
+  ed.activeTab = ed.tabs[0];
   return { w, ed };
 }
 

@@ -13,6 +13,12 @@ async function makeEditor() {
   const { w } = await buildEnv();
   loadUnifiedRenderer(w);
   const ed = await waitForEditor(w);
+  // harness 初始化会打开「Untitled1 + 使用说明.md」两个 tab 且 activeTabIndex=1；
+  // 本测试需要 [tab0] + activeTabIndex=0 的干净前提（switchTab 切到新 push 的 tab1），
+  // 否则 switchTab(1) 会因 index===activeTabIndex 直接 return，滚动恢复断言全部失效。
+  ed.tabs.length = 1;
+  ed.activeTabIndex = 0;
+  ed.activeTab = ed.tabs[0];
   return { w, ed };
 }
 

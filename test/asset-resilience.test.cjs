@@ -52,12 +52,14 @@ test('P0-0c: index.html 在首个业务 script 之前注册了全局 error 兜�
 });
 
 // ---------- d ----------
-test('P0-0d: app.js 调用 UnifiedRenderer 前有 typeof 守卫并抛可操作错误', () => {
-  const src = read('src/app.js');
+test('P0-0d: 调用 UnifiedRenderer 前有 typeof 守卫并抛可操作错误', () => {
+  // P2-1 后 updatePreview 迁入 PreviewController（Strangler），UnifiedRenderer 守卫与调用
+  // 同在 preview-controller.js，不再出现在 app.js（app.js 仅保留薄委托）。
+  const src = read('src/controllers/preview-controller.js');
   const guard = src.indexOf("typeof UnifiedRenderer === 'undefined'");
-  assert.ok(guard > -1, 'app.js 应有 UnifiedRenderer 存在性守卫');
+  assert.ok(guard > -1, 'preview-controller 应有 UnifiedRenderer 存在性守卫');
   const call = src.indexOf('UnifiedRenderer.renderMarkdown(');
-  assert.ok(call > -1);
+  assert.ok(call > -1, 'preview-controller 应有 UnifiedRenderer.renderMarkdown 调用');
   assert.ok(guard < call, '守卫必须在调用之前');
   const between = src.slice(guard, call);
   assert.match(between, /npm run build:renderer/, '错误文案必须给出可执行的修复命令');
@@ -142,7 +144,7 @@ test('P0-0: 六件套均已落地（a/b/c/d/e/f）', () => {
     a: !!pkg.scripts.pretest,
     b: /existsSync\(BUNDLE\)/.test(runner),
     c: read('src/index.html').includes("addEventListener('error'"),
-    d: read('src/app.js').includes("typeof UnifiedRenderer === 'undefined'"),
+    d: read('src/controllers/preview-controller.js').includes("typeof UnifiedRenderer === 'undefined'"),
     e: fs.existsSync(path.join(ROOT, 'test', 'helpers', 'load-bundle.cjs')),
     f: /process\.argv\.slice\(2\)/.test(runner),
   };

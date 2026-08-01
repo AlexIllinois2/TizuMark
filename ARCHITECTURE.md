@@ -4,7 +4,7 @@
 > IPC 收敛契约、构建链路与耦合护栏。它是「优化方案」（`docs/architecture-optimization-plan.md`）
 > 执行后的权威落地说明，与代码现状保持一致。
 >
-> 最近一次架构优化：P0 全系列 + P1-1~P1-9 + P2-1~P2-3（见 `git log --oneline`）。
+> 最近一次架构优化：P0 全系列 + P1-1~P1-9 + P2-1~P2-4 + highlight.js 升级（见 `git log --oneline`）。
 
 ---
 
@@ -58,7 +58,8 @@ app 侧字段/方法统一经 `this.app` 访问，控制器自有方法走 `this
 - `unified-bundle.js`：由 `build:renderer` 生成，gitignore。
 - `codemirror/` `katex/` `mermaid/` `html2canvas.min.js` `markdown-it.min.js`：
   由 `ensure-vendor` 从 `node_modules` 确定性再生，gitignore（ADR-8）。
-- `highlight.js/`（整套）：**保持 Git 追踪、钉死 11.9.0**（见 §8 偏差说明）。
+- `highlight.js/`（整套）：由 `ensure-vendor` 从 node_modules 再生（esbuild 三路兼容打包
+  11.11.1 + 样式/语言子目录），gitignore（2026-08-01 起，见 §8）。
 
 ### 2.4 `src-tauri/` —— Rust 后端
 `generate_handler!` 注册 20 个命令。IPC 契约由 ADR-1 前端侧收敛 + Rust 侧反向锁定。
@@ -90,9 +91,13 @@ app 侧字段/方法统一经 `this.app` 访问，控制器自有方法走 `this
   首批（P2-1）只收编 `updatePreview` + 5 虚拟窗口方法，保留薄委托。
 
 ### ADR-4：ESM 仅用于 release 打包，dev 保持源码即运行
-- **Status**：部分落地（见 §8 偏差）
-- **决策**：`scripts/build-frontend.mjs` 把前端聚合到 `dist/`（release 产物目录）；
-  dev 仍走 `src/`。**当前实现为「资源聚合拷贝」而非 ESM 重写**（原因见 §8）。
+- **Status**：完整落地（2026-08-01）
+- **决策**：`scripts/build-frontend.mjs` 把前端聚合到 `dist/`（release 产物目录，资源聚合拷贝）；
+  `tauri.conf.json` 设 `devUrl = http://localhost:1420` + `beforeDevCommand` 起
+  `scripts/dev-server.mjs`（静态 serve `src/`），`frontendDist = ../dist`。
+  经典 `<script>` 全局模式在 dev server 下完全可用，**不需要 ESM 化**即可实现
+  dev/release 分离；ESM 化/压缩属后续可选项，不做也不影响分离机制。
+  注：CSP 的 `unsafe-eval` 未移除（需先确认 CM/mermaid 无 eval 依赖，属独立改动）。
 
 ### ADR-5：构建产物「缺失即可见」，而非静默降级
 - **Status**：Accepted
@@ -117,10 +122,10 @@ app 侧字段/方法统一经 `this.app` 访问，控制器自有方法走 `this
 
 ### ADR-8：vendor 锁定（沿用 `5f5b23e` 范式）
 - **Status**：Accepted
-- **决策**：`scripts/ensure-vendor.mjs` 从 `node_modules` 确定性再生 5 个库
-  （codemirror / katex / mermaid / html2canvas / markdown-it），接入 `prepare`，
+- **决策**：`scripts/ensure-vendor.mjs` 从 `node_modules` 确定性再生 6 个库
+  （codemirror / highlight.js / katex / mermaid / html2canvas / markdown-it），接入 `prepare`，
   对应子目录加 `.gitignore`。比「删 src/lib 改 npm 导入」更可逆。
-  `highlight.js` **例外**：整套保持追踪、钉 11.9.0（见 §8）。
+  `highlight.js` 与其余 5 库同规再生（11.11.1，esbuild 三路兼容），不再例外（2026-08-01）。
 
 ---
 
@@ -144,8 +149,9 @@ app 侧字段/方法统一经 `this.app` 访问，控制器自有方法走 `this
 | 步骤 | 脚本 / 命令 | 产物 | 触发 |
 |------|------------|------|------|
 | 渲染 bundle | `npm run build:renderer` → `build-renderer.mjs` | `src/lib/unified-bundle.js` | `dev`/`build`/`pretest`/`prepare` |
-| vendor 再生 | `npm run prepare` 串 `ensure-vendor.mjs` | `src/lib/{codemirror,katex,mermaid,...}` | `npm install`（prepare 钩子） |
+| vendor 再生 | `npm run prepare` 串 `ensure-vendor.mjs` | `src/lib/{codemirror,katex,mermaid,highlight.js,...}` | `npm install`（prepare 钩子） |
 | 前端聚合 | `npm run build-frontend` → `build-frontend.mjs` | `dist/`（release 产物目录） | `beforeBuildCommand`（tauri build 前） |
+| dev server | `scripts/dev-server.mjs`（静态 serve `src/`） | — | `beforeDevCommand`（`tauri dev` 前，devUrl=localhost:1420） |
 | 全量守护 | `npm run check` | — | 本地 + CI |
 | 测试 | `npm test`（`pretest` 先 `build:renderer`）→ `run-tests.cjs` | — | 本地 + CI |
 
@@ -157,7 +163,8 @@ app 侧字段/方法统一经 `this.app` 访问，控制器自有方法走 `this
 "test": "node scripts/run-tests.cjs",
 "check": "node scripts/check-globals.cjs && node scripts/coupling-report.cjs && node test/entry-scripts.test.cjs && node test/tauri-api.test.cjs"
 ```
-`tauri.conf.json`：`frontendDist: "../src"`，`beforeBuildCommand: "npm run build:renderer && npm run build-frontend"`。
+`tauri.conf.json`：`beforeDevCommand: "node scripts/dev-server.mjs"`，`devUrl: "http://localhost:1420"`，
+`beforeBuildCommand: "npm run build:renderer && npm run build-frontend"`，`frontendDist: "../dist"`。
 
 ---
 
@@ -201,17 +208,15 @@ app 侧字段/方法统一经 `this.app` 访问，控制器自有方法走 `this
 
 ## 8. 已知偏差与待办
 
-1. **ADR-4 未完整切换（重要）**：当前前端是经典 `<script>` 全局模式（非 ESM 模块图），
-   且 Tauri 无 dev server——未设 `devUrl` 时 dev/release 共用 `frontendDist`。
-   因此「release 用 `dist/` 且 dev 仍 `src/`」的真正切换需：(a) 引入 dev server（如 vite/静态 server）
-   并设 `devUrl`；(b) 前端 ESM 化（把 `app.js` 改 ESM 入口、vendor 全局改 `external`）。
-   属更大重构，建议另立项。本次已交付 `build-frontend.mjs` + `beforeBuildCommand` 串接，
-   `dist/` 可生成但 `frontendDist` 仍 `../src`（行为零改动）。
-2. **highlight.js 钉 11.9.0**：`node_modules` 已 11.11.1，但不发布浏览器 UMD 版，esbuild 现打
-   11.11.1 会让 `code-block` 4 个高亮断言退化（已 A/B 验证：11.9.0 → 10/10，11.11.1 → 6/10）。
-   故整套保持追踪、不进 `ensure-vendor`。升级须先修高亮断言或换官方 UMD 源。
-3. **Rust 侧 4 个 dead_code 警告**（pre-existing，非本次引入）：`count_backtick_prefix` /
-   `contains_html_tag` / `process_inline_markdown` / `parse_alert` 现无调用方，不阻断。
+1. ~~ADR-4 未完整切换~~ **已完整落地（2026-08-01）**：dev server（`scripts/dev-server.mjs` + `devUrl`）
+   + `frontendDist = ../dist` 已生效。经典 `<script>` 全局模式在 dev server 下无需 ESM 化即可分离；
+   CSP 的 `unsafe-eval` 未移除（需先确认 CM/mermaid 无 eval 依赖，属独立改动）。
+2. **highlight.js 已升级 11.11.1（2026-08-01）**：纳入 `ensure-vendor` 再生（esbuild 三路兼容
+   window/globalThis/module.exports），A/B 验证 10 种语言 9 种输出完全一致、typescript 为增强、
+   语言覆盖 +8；历史「4 例退化」根因是打包形状与 loadHljs 不兼容而非版本差异（详见 git log）。
+3. ~~Rust 侧 4 个 dead_code 警告~~ **已清理（2026-08-01）**：`count_backtick_prefix` /
+   `contains_html_tag` / `process_inline_markdown` / `parse_alert` 为 P1-7 退役僵尸渲染时
+   漏删的辅助链，已从 `lib.rs` 移除（1472→1114 行），`cargo check --no-default-features` 零警告。
 4. **全量测试策略**：无 CI 前的全量靠手动 `npm test`；P1-8 CI 已建，可在 push/PR 时自动门禁。
 
 ---

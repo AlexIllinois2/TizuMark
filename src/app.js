@@ -10,11 +10,14 @@ const PREVIEW_WINDOW_LINES = 1200;  // 窗口源码行数上限
 const PREVIEW_WINDOW_LEAD = 200;    // 焦点行前预留行数（让焦点不至于贴顶）
 
 async function dialogOpen(options = {}) {
-  return await TauriApi.dialogOpen({ options });
+  // 注意：tauriApi.dialogOpen 内部已包一层 { options }（Tauri dialog 插件约定
+  // 底层的 IPC 命令 'plugin:dialog|open' 收 { options }），这里必须透传，
+  // 不能再包一层——否则双重嵌套会让 Rust 侧解析不到参数。
+  return await TauriApi.dialogOpen(options);
 }
 
 async function dialogSave(options = {}) {
-  return await TauriApi.dialogSave({ options });
+  return await TauriApi.dialogSave(options);
 }
 
 class Tab {
