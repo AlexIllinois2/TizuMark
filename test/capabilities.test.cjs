@@ -54,6 +54,11 @@ test('capabilities: 核心权限仍在位（dialog/shell/updater/window-state）
   ]) {
     assert.ok(perms.includes(expect), `应保留权限：${expect}`);
   }
+  // dialog 全能力集：open/save/confirm/ask/message 必须齐（confirm/ask 缺一即
+  // window.confirm / dialog.ask 调用报 "not allowed"，历史 bug；可用性优先）
+  for (const expect of ['dialog:allow-confirm', 'dialog:allow-ask']) {
+    assert.ok(perms.includes(expect), `dialog 能力不可缺：${expect}`);
+  }
   // 明确排除：不允许 shell:allow-execute / allow-spawn（任意命令执行）
   assert.ok(!perms.includes('shell:allow-execute') && !perms.includes('shell:allow-spawn'),
     '不得出现 shell 任意命令执行权限');

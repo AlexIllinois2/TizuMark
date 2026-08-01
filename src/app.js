@@ -2289,6 +2289,34 @@ class MarkdownEditor {
     };
   }
 
+  // 预览方案：把预置键位加载到 this.shortcuts 并渲染列表（供用户「随意切换」查看），
+  // 不持久化、不应用 CM（编辑器实际键位不变）；点快捷键对话框「确认」按钮才正式生效。
+  previewShortcutScheme(name) {
+    if (name === 'custom') {
+      // 自定义方案：预览已保存/编辑中的自定义键位（不含其他方案的临时预览值）
+      this.shortcuts = this.loadShortcuts();
+      this.shortcutScheme = 'custom';
+      this.renderShortcutsList();
+      return;
+    }
+    const defaults = this.getDefaultShortcuts();
+    let next;
+    if (name === 'default') {
+      next = JSON.parse(JSON.stringify(defaults)); // 整体恢复默认键位
+    } else {
+      const preset = this.getShortcutPresets()[name];
+      if (!preset) return;
+      next = {};
+      for (const [aid, def] of Object.entries(defaults)) {
+        const k = preset[aid];
+        next[aid] = { key: (k != null ? k : ''), label: def.label };
+      }
+    }
+    this.shortcuts = next;
+    this.shortcutScheme = name;
+    this.renderShortcutsList();
+  }
+
   applyShortcutScheme(name) {
     if (name === 'custom') {
       this.shortcutScheme = 'custom';
@@ -2566,8 +2594,19 @@ class MarkdownEditor {
     });
     document.getElementById('shortcuts-reset').addEventListener('click', () => this.resetShortcuts());
     document.getElementById('shortcuts-save-btn').addEventListener('click', () => {
-      this.saveShortcuts();
-      this.applyShortcuts();
+      // 「确认」按钮：方案切换与按键编辑在此正式生效（切换下拉只预览不生效）
+      const sel = document.getElementById('shortcuts-scheme');
+      const name = sel ? sel.value : this.shortcutScheme;
+      if (name === 'custom') {
+        // 自定义：以当前编辑后的键位为准，持久化并应用到 CM
+        this.shortcutScheme = 'custom';
+        this.saveShortcuts();
+        this.saveShortcutScheme('custom');
+        this.applyShortcuts();
+      } else {
+        // 预置方案：加载键位 + 持久化 + 应用到 CM
+        this.applyShortcutScheme(name);
+      }
       this.hideShortcutsDialog();
     });
 
@@ -2576,18 +2615,10 @@ class MarkdownEditor {
     if (schemeSel) {
       schemeSel.addEventListener('change', (e) => {
         const name = e.target.value;
-        if (name === 'custom') {
-          this.shortcutScheme = 'custom';
-          this.saveShortcutScheme('custom');
-          return;
-        }
-        // 预置方案（含默认）：均为整体覆盖，一律先确认
-        if (window.confirm(this.t('schemeOverrideConfirm'))) {
-          this.applyShortcutScheme(name);
-          e.target.value = this.shortcutScheme;
-        } else {
-          e.target.value = this.shortcutScheme; // 取消则回退
-        }
+        // 随意切换：仅把键位加载到列表预览（不应用 CM、不持久化），点「确认」按钮才正式生效。
+        // 历史实现：change 即弹 window.confirm 并立即生效，Tauri 下 confirm 依赖
+        // dialog:allow-confirm 权限（缺失报 "dialog.confirm not allowed"），且交互不符直觉。
+        this.previewShortcutScheme(name);
       });
     }
     this.populateSchemeSelect();
@@ -8336,7 +8367,11 @@ window.addEventListener('DOMContentLoaded', async () => {
       const bar = document.createElement('div');
       bar.className = 'fatal-error-bar';
       bar.textContent = '编辑器初始化失败，请重启应用。如反复出现，请将此界面截图反馈给开发者。';
-      document.body.insertBefore(bar, document.body.firstChild);
+      // 固定底部条，不遮挡 Tauri 标题栏/窗口控制按钮/工具栏菜单
+      bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:100000;' +
+        'background:#b00020;color:#fff;font:12px/1.5 system-ui,-apple-system,sans-serif;' +
+        'padding:8px 14px;box-shadow:0 -2px 6px rgba(0,0,0,.25);';
+      document.body.appendChild(bar);
     } catch (_) {}
   } finally {
     clearTimeout(loadingSafetyTimer);

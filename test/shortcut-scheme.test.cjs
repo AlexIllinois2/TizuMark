@@ -35,6 +35,7 @@ function extractMethod(needle) {
 const getDefaultShortcuts = extractMethod('getDefaultShortcuts() {');
 const getShortcutPresets = extractMethod('getShortcutPresets() {');
 const applyShortcutScheme = extractMethod('applyShortcutScheme(name) {');
+const previewShortcutScheme = extractMethod('previewShortcutScheme(name) {');
 const loadShortcutScheme = extractMethod('loadShortcutScheme() {');
 const resetShortcuts = extractMethod('resetShortcuts() {');
 const handleShortcutRecording = extractMethod('handleShortcutRecording(e) {');
@@ -191,6 +192,57 @@ test('E3 脏 scheme 值被白名单过滤（回退差异探测）', async () => 
   localStorage.setItem('tizumark-shortcuts', JSON.stringify(def));
   const s = { shortcuts: def, getDefaultShortcuts };
   assert.strictEqual(loadShortcutScheme.call(s), 'default');
+});
+
+// ============================================================
+// G. previewShortcutScheme：切换预览，不生效不持久化（22:39 需求）
+// ============================================================
+
+function makePreviewStub() {
+  const calls = { render: 0, saveShortcuts: 0, saveScheme: 0, apply: 0, loadShortcuts: 0 };
+  const s = {
+    shortcuts: null,
+    shortcutScheme: null,
+    getDefaultShortcuts,
+    getShortcutPresets,
+    loadShortcuts() { calls.loadShortcuts++; return { bold: { key: 'Ctrl+Z', label: '加粗' } }; },
+    saveShortcuts() { calls.saveShortcuts++; },
+    saveShortcutScheme() { calls.saveScheme++; },
+    renderShortcutsList() { calls.render++; },
+    applyShortcuts() { calls.apply++; },
+  };
+  return { s, calls };
+}
+
+test('G1 previewShortcutScheme("typora") 加载键位+渲染列表，但不持久化、不应用 CM', async () => {
+  const { s, calls } = makePreviewStub();
+  previewShortcutScheme.call(s, 'typora');
+  assert.strictEqual(Object.keys(s.shortcuts).length, DEFAULT_COUNT, '应加载方案键位');
+  assert.strictEqual(s.shortcuts.insertH1.key, 'Ctrl+1');
+  assert.strictEqual(s.shortcutScheme, 'typora');
+  assert.strictEqual(calls.render, 1, '应渲染列表供预览');
+  assert.strictEqual(calls.saveShortcuts, 0, '预览不得持久化键位');
+  assert.strictEqual(calls.saveScheme, 0, '预览不得持久化方案名');
+  assert.strictEqual(calls.apply, 0, '预览不得应用 CM（切换不生效）');
+});
+
+test('G2 previewShortcutScheme("custom") 加载自定义键位预览，同样不生效', async () => {
+  const { s, calls } = makePreviewStub();
+  previewShortcutScheme.call(s, 'custom');
+  assert.strictEqual(calls.loadShortcuts, 1, 'custom 应加载已保存键位');
+  assert.strictEqual(s.shortcuts.bold.key, 'Ctrl+Z', '应展示自定义键位');
+  assert.strictEqual(s.shortcutScheme, 'custom');
+  assert.strictEqual(calls.saveShortcuts, 0);
+  assert.strictEqual(calls.apply, 0);
+});
+
+test('G3 切换只预览：预览后 shortcutScheme 已变但未持久化（确认按钮才落盘）', async () => {
+  localStorage.removeItem('tizumark-shortcut-scheme');
+  const { s } = makePreviewStub();
+  previewShortcutScheme.call(s, 'vscode');
+  assert.strictEqual(s.shortcutScheme, 'vscode');
+  assert.strictEqual(localStorage.getItem('tizumark-shortcut-scheme'), null,
+    '预览不得写入 localStorage（确认后才持久化）');
 });
 
 // ============================================================
