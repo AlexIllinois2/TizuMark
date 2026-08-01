@@ -3722,13 +3722,17 @@ class MarkdownEditor {
   }
 
   applyPreviewPaneWidth() {
+    const container = document.querySelector('.editor-container');
+    if (!container) return;
+    // 纯预览 / 编辑器折叠 / 预览折叠 由 CSS 类控制布局，禁止用用户分屏宽度覆盖，否则占不满且留空白
+    if (container.classList.contains('preview-mode')
+        || container.classList.contains('editor-collapsed')
+        || container.classList.contains('preview-collapsed')) return;
     const pw = this.settings.previewPaneWidth;
     if (!pw) return;
     const editorPane = document.getElementById('editor-pane');
     const previewPane = document.getElementById('preview-pane');
     if (!editorPane || !previewPane) return;
-    const container = document.querySelector('.editor-container');
-    if (!container) return;
     const outlineSidebar = document.getElementById('outline-sidebar');
     const resizer = document.getElementById('resizer');
     const outlineWidth = outlineSidebar && outlineSidebar.classList.contains('hidden') ? 0 : (outlineSidebar ? outlineSidebar.offsetWidth : 0);
