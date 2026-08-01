@@ -7,12 +7,14 @@
 // 接入点：
 //   - package.json "prepare"：npm install / npm ci 后自动重建 vendor（CI 用完整安装）。
 //
-// 重要例外 —— highlight.js：
-//   node_modules 的 highlight.js 包【不发布浏览器 UMD 版 highlight.min.js】（全局 hljs），
-//   且当前 vendored 的 highlight.min.js 是 v11.9.0 的官网全量构建；用 esbuild 从 node_modules
-//   现打包会得到 11.11.1 且行为差异导致 code-block 测试 4 例退化。故 highlight.js 整套
-//   （highlight.min.js + common.js/core.js/languages/styles）保持 git 追踪、钉死在可用版本，
-//   不纳入本脚本再生，避免静默破坏高亮。其版本一致性由 package.json 的声明约束。
+// highlight.js 纳入再生（2026-08-01 升级 11.11.1）：
+//   node_modules 的 highlight.js 包不发布浏览器 UMD 版 highlight.min.js（全局 hljs），
+//   故用 esbuild 从 node_modules 现打包；入口必须【三路兼容】（window / globalThis /
+//   module.exports）：浏览器 <script> 走 window.hljs，而测试 loadHljs 走
+//   new Function('window','self','module','exports', code) 读 module.exports ——
+//   历史 code-block「4 例退化」的根因即只设 globalThis.hljs 导致 loadHljs 拿到空对象，
+//   并非 11.9.0→11.11.1 的高亮输出差异（已 A/B 验证）。styles/languages/common/core
+//   从 node_modules 精确复制，版本与 package.json 声明（^11.10.0，实际 11.11.1）对齐。
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -58,7 +60,39 @@ const MANIFEST = [
   ['html2canvas/dist/html2canvas.min.js', 'html2canvas.min.js'],
   // markdown-it（单文件）
   ['markdown-it/dist/markdown-it.min.js', 'markdown-it.min.js'],
+  // highlight.js：highlight.min.js 用 esbuild 打包（见 buildHighlightMin），
+  // 其余伴随文件从 node_modules 精确复制（styles/languages/common/core）
+  ['highlight.js/styles/github.min.css', 'highlight.js/github.min.css'],
+  ['highlight.js/styles/github.css', 'highlight.js/github.css'],
+  ['highlight.js/styles/github-dark.min.css', 'highlight.js/github-dark.min.css'],
+  ['highlight.js/styles/github-dark.css', 'highlight.js/github-dark.css'],
+  ['highlight.js/lib/common.js', 'highlight.js/common.js'],
+  ['highlight.js/lib/core.js', 'highlight.js/core.js'],
+  ['highlight.js/lib/languages', 'highlight.js/languages'],
 ];
+
+// highlight.min.js：esbuild 现打包一个全局 hljs（三路兼容，见头部说明）。
+async function buildHighlightMin() {
+  const esbuild = await import('esbuild');
+  const outfile = path.join(LIB, 'highlight.js', 'highlight.min.js');
+  const contents = [
+    "import hljs from 'highlight.js';",
+    "if (typeof window !== 'undefined') window.hljs = hljs;",
+    "if (typeof globalThis !== 'undefined') globalThis.hljs = hljs;",
+    "if (typeof module !== 'undefined' && module.exports) module.exports = hljs;",
+  ].join('\n');
+  await esbuild.build({
+    stdin: { contents, resolveDir: ROOT, loader: 'js' },
+    bundle: true,
+    format: 'iife',
+    minify: true,
+    outfile,
+    logLevel: 'silent',
+  });
+  console.log('[ensure-vendor] 打包 highlight.min.js（三路兼容 global hljs）完成');
+}
+
+await buildHighlightMin();
 
 let missing = 0;
 for (const [relSrc, relDest] of MANIFEST) {
@@ -77,4 +111,4 @@ if (missing > 0) {
   process.exit(1);
 }
 
-console.log('[ensure-vendor] vendor 同步完成：src/lib（codemirror/katex/mermaid/html2canvas/markdown-it；highlight.js 保持追踪）');
+console.log('[ensure-vendor] vendor 同步完成：src/lib（codemirror/katex/mermaid/html2canvas/markdown-it/highlight.js）');
