@@ -769,13 +769,6 @@ class MarkdownEditor {
     this.debounceTimer = null;
     this._imageURLCache = new Map(); // dataUri → Blob URL（LRU，上限 _imageURLCacheMax，超限 revoke）
     this._imageURLCacheMax = 64;
-    // 滚动同步密集位置数组的失效标志：内容变化（updatePreview→rebuildScrollSync）时置位，
-    // 滚动热路径（_syncEditorToPreview/_syncPreviewToEditor）仅在 dirty 时重建，避免每次滚动全量重算
-    this._scrollSyncDirty = true;
-    // 布局指纹：预览 scrollHeight。图片/字体/mermaid 等异步加载会改变预览高度，
-    // 仅靠 dirty 感知不到（内容没变），须在滚动同步时比对高度，变了就强制重测
-    // （否则编辑行 ↔ 预览像素错位，2026-08-01 严重 bug 修复）
-    this._lastLayoutHeight = null;
     this._imageBase64Cache = new Map(); // key: 绝对路径 → value: base64 data URI，省去每次打字跨 IPC 读磁盘
     this._hljsCache = new Map();
     this._mermaidCache = new Map(); // key: themeKey+'::'+code → 渲染后的 SVG innerHTML，避免打字时全量重渲染 mermaid
@@ -6222,19 +6215,10 @@ input[type="checkbox"]:checked::after { display: none !important; }
 
   // 构建逐行密集位置映射（纯线性插值，无速度限制）
   // 每个编辑器行都有精确的 previewTop 插值
-  // force=true：显式重建（内容/布局变化后的权威调用点）；缺省：仅 dirty 或布局变化时重建，
-  // 滚动同步热路径重复调用直接命中缓存，避免每次滚动全量重算（P1-6 性能修复）
-  _computedPosition(force = false) {
-    // 布局指纹：图片/字体/mermaid 等异步加载会改变预览 scrollHeight（内容没变但布局变了），
-    // 位置表冻结在旧布局会导致编辑行 ↔ 预览像素错位（2026-08-01 严重 bug）。比对高度差异强制重测。
-    const curHeight = this.preview ? this.preview.scrollHeight : null;
-    const layoutChanged = curHeight !== null &&
-      this._lastLayoutHeight != null && curHeight !== this._lastLayoutHeight;
-    if (!force && !layoutChanged && !this._scrollSyncDirty && this._editorElementList) return;
-
-    // 本次实际执行测量：无论成功与否都记录当前布局高度（作为下次比对指纹）
-    this._lastLayoutHeight = curHeight;
-
+  // 无缓存：每次调用全量重建，与 legacy-master 行为一致（用户报告精准匹配）。
+  // 3dac68c 引入的 dirty 缓存 + 布局指纹会造成某些场景下位置表过期（编辑器布局变化但
+  // preview scrollHeight 未变时缓存命中 → 用旧表插值），此版本回退到 legacy 行为。
+  _computedPosition() {
     const allElements = this.preview.querySelectorAll('[data-source-line]');
     const anchors = [];
     const seenLines = new Set();
@@ -6308,13 +6292,12 @@ input[type="checkbox"]:checked::after { display: none !important; }
 
     this._editorElementList = editorList;
     this._previewElementList = rawPreviewList;
-    this._scrollSyncDirty = false; // 重建成功：清除失效标志（滚动热路径此后命中缓存）
   }
 
   // 返回预览视口顶部对应的源码行号（1-based）；测量失败返回 null。
   // 用于切换模式时把「预览像素位置」转成宽度无关的行锚点。
   _lineAtPreviewTop(pvTop) {
-    this._computedPosition(true);
+    this._computedPosition();
     const list = this._previewElementList;
     if (!list || list.length < 2) return null;
     // 二分找 previewList 中 <= pvTop 的最大行索引
@@ -6332,8 +6315,8 @@ input[type="checkbox"]:checked::after { display: none !important; }
     const content = this.cm.getValue();
     const totalLines = content.split('\n').length;
 
-    // 构建平行位置数组（使用 data-source-line）；内容已变，强制重建（force=true）
-    this._computedPosition(true);
+    // 构建平行位置数组（使用 data-source-line）
+    this._computedPosition();
 
     // 生成 _linePositions（兼容 updatePreview 滚动恢复）
     const allElements = Array.from(this.preview.querySelectorAll('[data-source-line]'));
@@ -7119,8 +7102,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
           // 进入纯预览（100% 宽）：预览已重排，用锚点行在新布局下的预览位置定位
           let restored = false;
           if (anchor != null) {
-            // 布局已变（宽度重排），强制重算位置映射
-            this._computedPosition(true);
+            this._computedPosition();
             const list = this._previewElementList;
             if (list && anchor - 1 < list.length) {
               const pMax = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
@@ -7611,6 +7593,17 @@ input[type="checkbox"]:checked::after { display: none !important; }
     // 同时取消任何已排队的防抖重建（如打字 / setValue 触发的待执行 300ms 定时器）：
     // 否则勾选后那个遗留定时器仍会到期并整篇重建 preview，覆盖即时勾选并引发跳动/“看似没反应”。
     clearTimeout(this.debounceTimer);
+    // 取消任何在途的滚动同步调度：用户刚滚动到勾选框、点击间隔 < 100ms 时，
+    // 上一次滚动留下的 throttle 尾随 _syncPreviewToEditor / debounce _resumeScroll 会在
+    // 本函数设的抑制窗口外补跑，越权把编辑器滚到别处。一并清掉，避免越权同步。
+    this._scrollThrottleTimer = null;
+    this._scrollThrottlePending = null;
+    clearTimeout(this._scrollDebounceTimer);
+    this._scrollDebounceTimer = null;
+    // 记录编辑器滚动位置：cm.replaceRange/cm.setCursor 在某些 WebView 下会让 CodeMirror
+    // 内部滚动编辑器（即便 setCursor scroll:false）。_canScroll 双标志只挡「滚动同步」、
+    // 挡不住 CM 自身滚动，表现为「点完勾选框编辑器跳到别处」。故显式捕获并在变更后还原。
+    const edScrollTop = this.cm.getScrollInfo().top;
     // 临时关闭滚动同步：cm.replaceRange/cm.setCursor 可能让编辑器自动滚动，
     // 触发 _syncEditorToPreview 把预览滚到光标行（任务列表某行），导致上方 H3「任务列表」
     // 被滚出视野顶部——表现为「点完之后预览框根本没有渲染出来」。
@@ -7620,13 +7613,23 @@ input[type="checkbox"]:checked::after { display: none !important; }
     this._canScroll.preview = false;
     this.cm.replaceRange(newLine, { line: lineNum, ch: 0 }, { line: lineNum, ch: lineText.length });
     this.cm.setCursor(cursor, { scroll: false });  // 保持光标位置不跳动且不让编辑器自动滚动
+    if (typeof edScrollTop === 'number') {
+      this.cm.scrollTo(0, edScrollTop); // 立即还原编辑器滚动，消除 CM 内部滚动导致的跳动
+      // 兜住 CM 在 operation 收尾时的异步滚动（下一帧），避免长时间错位闪烁
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => { if (typeof edScrollTop === 'number') this.cm.scrollTo(0, edScrollTop); });
+      }
+    }
     setTimeout(() => {
+      // 安全网：若 CM 在变更后异步（rAF/operation 收尾）调整了编辑器滚动，再还原一次；
+      // 此时 _canScroll.editor 仍为 false，scrollTo 触发的滚动事件被同步处理器忽略，不会联动预览。
+      if (typeof edScrollTop === 'number') this.cm.scrollTo(0, edScrollTop);
       if (this._canScroll) {
         this._canScroll.editor = prevCanScroll.editor;
         this._canScroll.preview = prevCanScroll.preview;
       }
     }, 120);
-    // activeTab.content 由 change 事件同步；预览 DOM 已就地更新，无需重渲染。
+    // activeTab.content 由 change 事件同步；预览 DOM 已就地更新，无需重渲染.
   }
 
   insertLinePrefix(prefix, ordered = false) {
