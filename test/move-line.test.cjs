@@ -79,3 +79,34 @@ test('快捷键注册：moveLineUp/Down 在 editorMap 且经 applyShortcuts 绑�
   extraKeys['Ctrl-J'](ed.cm); // 上移「B」
   assert.strictEqual(ed.cm.getLine(0), 'B', '经快捷键 handler 触发上移应生效');
 }));
+
+test('方向键录制：DOM e.key=ArrowUp 须规范化为 CM5 的 Up，否则 extraKeys 键名不匹配', async () => withEditor({ captureInitErr: true }, async (w, ed) => {
+  // 复现用户报告：录 Alt+ArrowUp（移动行的直觉键位）后不生效。
+  // 根因：handleShortcutRecording 存 DOM e.key='ArrowUp'，但 CM5 keyName() 用
+  // keyNames[keyCode] 产出 'Up'。toCmKey 须把 ArrowUp→Up，否则 extraKeys
+  // 注册 'Alt-ArrowUp' 而 CM 查找 'Alt-Up'，handler 永不触发。
+  ed.shortcuts.moveLineUp.key = 'Alt+ArrowUp';
+  ed.shortcuts.moveLineDown.key = 'Alt+ArrowDown';
+  ed.applyShortcuts();
+  const extraKeys = ed.cm.getOption('extraKeys');
+  assert.strictEqual(typeof extraKeys['Alt-Up'], 'function',
+    'Alt+ArrowUp 应规范化为 Alt-Up 注册到 extraKeys（而非 Alt-ArrowUp）');
+  assert.strictEqual(typeof extraKeys['Alt-Down'], 'function',
+    'Alt+ArrowDown 应规范化为 Alt-Down 注册到 extraKeys');
+  assert.strictEqual(extraKeys['Alt-ArrowUp'], undefined, '不应残留未规范化的 Alt-ArrowUp 键');
+  // 触发验证：经规范化键名调用 handler，行真的上移
+  ed.cm.setValue('A\nB\nC');
+  ed.cm.setCursor({ line: 1, ch: 0 });
+  extraKeys['Alt-Up'](ed.cm);
+  assert.strictEqual(ed.cm.getLine(0), 'B', 'Alt+ArrowUp 经规范化后应能触发上移');
+}));
+
+test('Ctrl+Shift+方向键录制：修饰键顺序与方向键规范化同时正确', async () => withEditor({ captureInitErr: true }, async (w, ed) => {
+  ed.shortcuts.moveLineUp.key = 'Ctrl+Shift+ArrowUp';
+  ed.applyShortcuts();
+  const extraKeys = ed.cm.getOption('extraKeys');
+  // CM5 addModifierNames 顺序：Alt, Ctrl, Cmd, Shift(最后) → 'Shift-Ctrl-Up'
+  assert.strictEqual(typeof extraKeys['Shift-Ctrl-Up'], 'function',
+    'Ctrl+Shift+ArrowUp 应规范化并按 CM5 修饰键顺序注册为 Shift-Ctrl-Up');
+  assert.strictEqual(extraKeys['Shift-Ctrl-ArrowUp'], undefined, '不应残留未规范化键名');
+}));

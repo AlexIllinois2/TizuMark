@@ -2745,7 +2745,14 @@ class MarkdownEditor {
 
     const toCmKey = (k) => {
       const parts = k.split('+');
-      const key = parts.pop();
+      let key = parts.pop();
+      // CM5 的 keyName() 用 keyNames[keyCode] 映射表产出键名，与 DOM e.key 有差异：
+      // ArrowUp→Up、ArrowDown→Down、ArrowLeft→Left、ArrowRight→Right、Escape→Esc、Delete→Del。
+      // 录制时 handleShortcutRecording 存的是 DOM e.key（如 'ArrowUp'），若不规范化，
+      // extraKeys 注册的键名（'Alt-ArrowUp'）与 CM 查找的键名（'Alt-Up'）不匹配，
+      // handler 永不触发（移动行快捷键用方向键时即踩中此 bug）。
+      key = { ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+              Escape: 'Esc', Delete: 'Del' }[key] || key;
       const order = { Shift: 0, Ctrl: 1, Alt: 2, Cmd: 3, Meta: 3 };
       parts.sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99));
       return parts.concat([key]).join('-');
