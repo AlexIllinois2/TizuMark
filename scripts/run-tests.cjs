@@ -14,9 +14,10 @@
 // 于是日常做法是绕过运行器直跑 `node --test test/x.test.cjs` —— 也就绕过了这里的全部前置
 // 守护（产物检查等）。加上过滤后，日常入口重新回到守护之内。
 
-const { spawnSync } = require('child_process');
+const { spawnSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 
 const ROOT = path.join(__dirname, '..');
 const TEST_DIR = path.join(ROOT, 'test');
@@ -125,13 +126,81 @@ function summarize(results) {
   console.log('✓ 全部测试文件通过');
 }
 
-function runSequential(files) {
+// ---------- 浏览器测试（真实 Chrome）支持 ----------
+// 浏览器测试位于 test/browser/，是自治脚本（自起 puppeteer + process.exit），
+// 不能用 `node --test` 收集，且依赖 dev-server(1420) 提供页面 + NODE_PATH 指向 puppeteer-core。
+function isBrowserTest(file) {
+  return path.relative(TEST_DIR, file).split(path.sep).includes('browser');
+}
+
+function resolvePuppeteerModules() {
+  // 优先级：显式 env > 当前 NODE_PATH > 本机固定路径
+  return process.env.PUPPETEER_MODULES || process.env.NODE_PATH || 'C:/Users/admin/node_modules';
+}
+
+function waitForDevServer(timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const tryOnce = () => {
+      const req = http.get('http://localhost:1420/', (res) => { res.resume(); resolve(res.statusCode); });
+      req.on('error', () => {
+        if (Date.now() > deadline) reject(new Error('dev-server 未就绪（超时）'));
+        else setTimeout(tryOnce, 400);
+      });
+      req.setTimeout(800, () => { req.destroy(); if (Date.now() > deadline) reject(new Error('dev-server 超时')); });
+    };
+    tryOnce();
+  });
+}
+
+let _devServer = null;
+async function ensureDevServer() {
+  if (_devServer) return _devServer;
+  const child = spawn(process.execPath, ['scripts/dev-server.mjs'], {
+    cwd: path.join(__dirname, '..'),
+    stdio: ['ignore', 'ignore', 'ignore'],
+  });
+  _devServer = child;
+  await waitForDevServer(20000);
+  return child;
+}
+function killDevServer() {
+  if (!_devServer) return;
+  try { _devServer.kill('SIGKILL'); } catch {}
+  _devServer = null;
+}
+
+function runBrowserOne(file) {
+  const env = { ...process.env, NODE_PATH: resolvePuppeteerModules() };
+  const res = spawnSync(process.execPath, [file], {
+    cwd: path.join(__dirname, '..'),
+    stdio: ['ignore', 'pipe', 'pipe'],
+    encoding: 'utf8',
+    timeout: PER_FILE_TIMEOUT * 1000,
+    killSignal: 'SIGKILL',
+    env,
+  });
+  const out = (res.stdout || '') + (res.stderr || '');
+  const passCount = (out.match(/✅\s*PASS/g) || []).length;
+  const failCount = (out.match(/❌\s*FAIL/g) || []).length;
+  const tests = passCount + failCount;
+  return {
+    file: path.relative(TEST_DIR, file),
+    status: res.status,
+    tests, pass: passCount, fail: failCount,
+    timedOut: !!(res.error && res.error.code === 'ETIMEDOUT'),
+    failed: failCount > 0 || res.status !== 0,
+    output: out,
+  };
+}
+
+function runBatch(files, total, runner, idxStart) {
   const results = [];
-  let i = 0;
+  let i = idxStart;
   for (const f of files) {
     i++;
-    process.stdout.write(`[${i}/${files.length}] ${path.basename(f)} ... `);
-    const r = runOne(f);
+    process.stdout.write(`[${i}/${total}] ${path.relative(TEST_DIR, f)} ... `);
+    const r = runner(f);
     const tag = r.timedOut ? 'TIMEOUT' : (r.failed ? 'FAIL' : 'ok');
     const detail = r.tests != null ? `${r.pass}/${r.tests}` : (r.timedOut ? 'timeout' : `exit=${r.status}`);
     console.log(`${tag} (${detail})`);
@@ -154,10 +223,28 @@ function main() {
     }
     process.exit(1);
   }
+  const browserFiles = files.filter(isBrowserTest);
+  const normalFiles = files.filter((f) => !isBrowserTest(f));
   const scope = filters.length ? `（过滤：${filters.join(', ')}）` : '';
-  console.log(`运行 ${files.length} 个测试文件${scope}（每文件独立进程，串行）...\n`);
-  const results = runSequential(files);
-  summarize(results);
+  console.log(`运行 ${files.length} 个测试文件${scope}（jsdom ${normalFiles.length} + 浏览器 ${browserFiles.length}）...\n`);
+
+  const results = [];
+  results.push(...runBatch(normalFiles, files.length, runOne, 0));
+  if (browserFiles.length) {
+    ensureDevServer()
+      .then(() => {
+        results.push(...runBatch(browserFiles, files.length, runBrowserOne, results.length));
+        killDevServer();
+        summarize(results);
+      })
+      .catch((e) => {
+        console.error('启动 dev-server 失败：', e.message);
+        killDevServer();
+        process.exit(1);
+      });
+  } else {
+    summarize(results);
+  }
 }
 
 main();
