@@ -86,7 +86,7 @@ test('B3 预置方案仅引用合法 actionId', async () => {
 // ============================================================
 
 // 默认设置项总数以 getDefaultShortcuts 为准（历史上曾为 44：含 findReplace/previewFind，
-// 二者与 find 同一功能已合并移除，现为 42）
+// 二者与 find 同一功能已合并移除，现为 42；2026-08-02 新增 moveLineUp/moveLineDown，现为 44）
 const DEFAULT_COUNT = Object.keys(getDefaultShortcuts()).length;
 
 test('C1 applyShortcutScheme("typora") 覆盖全部默认项且不重复', async () => {

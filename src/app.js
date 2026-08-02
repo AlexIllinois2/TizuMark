@@ -271,7 +271,7 @@ const I18N = {
     noUnauthorized: '欢迎自由使用、修改和分发，衍生作品须延续 GPL v3 协议。',
     shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', fileSearch: '文件搜索',
     globalSearch: '全局搜索',
-    toggleSidebar: '显示/隐藏侧边栏', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要' },
+    toggleSidebar: '显示/隐藏侧边栏', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要', moveLineUp: '上移行/选区', moveLineDown: '下移行/选区' },
     shortcutGroup: { file: '文件', search: '查找与搜索', tabView: '标签页与视图', format: '文本格式', insert: '插入', heading: '标题', callout: '提示块' },
     shortcutScheme: '快捷键方案',
     shortcutList: '快捷键',
@@ -639,7 +639,7 @@ const I18N = {
     noUnauthorized: 'Free to use, modify, and distribute. Derivative works must remain under GPL v3.',
     shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', fileSearch: 'File Search',
     globalSearch: 'Global Search',
-    toggleSidebar: 'Toggle Sidebar', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important' },
+    toggleSidebar: 'Toggle Sidebar', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important', moveLineUp: 'Move Line/Selection Up', moveLineDown: 'Move Line/Selection Down' },
     shortcutGroup: { file: 'File', search: 'Find & Search', tabView: 'Tabs & View', format: 'Text Format', insert: 'Insert', heading: 'Headings', callout: 'Callouts' },
     shortcutScheme: 'Shortcut Scheme',
     shortcutList: 'Shortcuts',
@@ -2325,6 +2325,9 @@ class MarkdownEditor {
       insertCalloutWarning: { key: '', label: 'Warning 警告' },
       insertCalloutCaution: { key: '', label: 'Caution 注意' },
       insertCalloutImportant: { key: '', label: 'Important 重要' },
+      // 行/选区移动：CM 原生 moveLineUp/Down，无选区移当前行，有选区移选中范围内的所有行
+      moveLineUp: { key: '', label: '上移行/选区' },
+      moveLineDown: { key: '', label: '下移行/选区' },
     };
   }
 
@@ -2549,7 +2552,7 @@ class MarkdownEditor {
       { key: 'file', ids: ['newFile', 'openFile', 'saveFile', 'saveAs', 'closeTab', 'exportPDF'] },
       { key: 'search', ids: ['find', 'crossSearch', 'fileSearch', 'globalSearch'] },
       { key: 'tabView', ids: ['nextTab', 'prevTab', 'toggleView', 'toggleTheme', 'toggleSidebar'] },
-      { key: 'format', ids: ['bold', 'italic', 'strikethrough', 'inlineCode', 'highlight', 'insertSuperscript', 'insertSubscript'] },
+      { key: 'format', ids: ['bold', 'italic', 'strikethrough', 'inlineCode', 'highlight', 'insertSuperscript', 'insertSubscript', 'moveLineUp', 'moveLineDown'] },
       { key: 'insert', ids: ['insertLink', 'insertImage', 'insertTable', 'insertUl', 'insertOl', 'insertTask', 'insertHr', 'codeBlock', 'blockquote', 'insertMathBlock', 'insertMermaid', 'insertToc'] },
       { key: 'heading', ids: ['insertH1', 'insertH2', 'insertH3', 'insertH4', 'insertH5', 'insertH6'] },
       { key: 'callout', ids: ['insertCalloutNote', 'insertCalloutTip', 'insertCalloutWarning', 'insertCalloutCaution', 'insertCalloutImportant'] },
@@ -2780,6 +2783,10 @@ class MarkdownEditor {
       insertCalloutWarning: () => this.executeMenuAction('insert-callout-warning'),
       insertCalloutCaution: () => this.executeMenuAction('insert-callout-caution'),
       insertCalloutImportant: () => this.executeMenuAction('insert-callout-important'),
+      // 行/选区移动：CM5 核心无 moveLineUp/Down 命令，自实现 _moveLine
+      // 无选区移当前行，有选区移选中范围内的所有行
+      moveLineUp: () => this._moveLine(-1),
+      moveLineDown: () => this._moveLine(1),
     };
 
     // Global actions (work anywhere via document keydown handler)
@@ -2835,6 +2842,57 @@ class MarkdownEditor {
     }
 
     this.updateShortcutHints();
+  }
+
+  // 上下移动当前行/选中行块（CM5 核心无 moveLineUp/Down 命令，自实现）。
+  // dir=-1：与上一行交换块（上移）；dir=+1：与下一行交换块（下移）。
+  // 无选区移当前单行；有选区移选中范围内所有行；块到达文档边界时 no-op。
+  // 选区/光标的 ch 与方向跟随整体平移，保持原有选择语义。
+  _moveLine(dir) {
+    const cm = this.cm;
+    if (!cm) return;
+    const sel = cm.listSelections()[0];
+    if (!sel) return;
+    const fromLine = Math.min(sel.anchor.line, sel.head.line);
+    const toLine = Math.max(sel.anchor.line, sel.head.line);
+    const last = cm.lastLine();
+    if (dir < 0 && fromLine === 0) return;        // 已在第一行
+    if (dir > 0 && toLine === last) return;       // 已在最后一行
+    cm.operation(() => {
+      // 取出待移动块（fromLine..toLine）的文本
+      const block = [];
+      for (let i = fromLine; i <= toLine; i++) block.push(cm.getLine(i));
+      const blockText = block.join('\n');
+      if (dir < 0) {
+        // 上移：与上一行交换。替换范围 [fromLine-1, 0] .. [toLine, 行尾]
+        // 替换为 block + '\n' + 上一行 → 块整体上移一行，原上一行落到块尾
+        const aboveText = cm.getLine(fromLine - 1);
+        cm.replaceRange(
+          blockText + '\n' + aboveText,
+          { line: fromLine - 1, ch: 0 },
+          { line: toLine, ch: cm.getLine(toLine).length }
+        );
+        // 块新位置 fromLine-1..toLine-1：选区整体上移一行
+        cm.setSelection(
+          { line: sel.anchor.line - 1, ch: sel.anchor.ch },
+          { line: sel.head.line - 1, ch: sel.head.ch }
+        );
+      } else {
+        // 下移：与下一行交换。替换范围 [fromLine, 0] .. [toLine+1, 行尾]
+        // 替换为 下一行 + '\n' + block → 块整体下移一行，原下一行升到块首
+        const belowText = cm.getLine(toLine + 1);
+        cm.replaceRange(
+          belowText + '\n' + blockText,
+          { line: fromLine, ch: 0 },
+          { line: toLine + 1, ch: cm.getLine(toLine + 1).length }
+        );
+        // 块新位置 fromLine+1..toLine+1：选区整体下移一行
+        cm.setSelection(
+          { line: sel.anchor.line + 1, ch: sel.anchor.ch },
+          { line: sel.head.line + 1, ch: sel.head.ch }
+        );
+      }
+    });
   }
 
   get activeTab() {
