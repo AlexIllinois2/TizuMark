@@ -1760,10 +1760,27 @@ class MarkdownEditor {
       // Label click → jump
       const id = item.dataset.id;
       const line = parseInt(item.dataset.line, 10);
+      // 跳转期间关闭滚动同步：setCursor/scrollIntoView 与 preview.scrollTo 都会触发各自的
+      // scroll 事件，若不抑制，滚动同步会把对方刚设好的目标位置覆盖掉，表现为「点完大纲
+      // 编辑区/预览仍停在顶部、光标却跳到了标题行」。先取消在途同步调度，再双标志锁住，
+      // 跳转完成 120ms 后恢复（与 handleTaskCheckboxToggle 同一做法）。
+      this._scrollThrottleTimer = null;
+      this._scrollThrottlePending = null;
+      clearTimeout(this._scrollDebounceTimer);
+      this._scrollDebounceTimer = null;
+      // 取消可能晚到的「视图模式恢复滚动」定时器（applyViewMode 50ms），
+      // 否则它会在本次跳转之后把编辑器/预览又拉回旧位置。
+      clearTimeout(this._viewModeRestoreTimer);
+      this._viewModeRestoreTimer = null;
+      this._canScroll.editor = false;
+      this._canScroll.preview = false;
       // 编辑区始终跳转到该标题行（与文档大小无关，大文件预览只渲染头部时也能跳）
       if (!isNaN(line)) {
         this.cm.setCursor({ line, ch: 0 });
-        this.cm.scrollIntoView({ line, ch: 0 }, 80);
+        // 显式滚动到标题行顶部留 80px 余量：scrollIntoView 在某些 WebView 下不触发实际滚动，
+        // 导致「光标到了标题行、可视区仍停在顶部」；scrollTo 直接生效且不受上方 _canScroll 抑制影响。
+        const targetTop = this.cm.heightAtLine(line, 'local') - 80;
+        this.cm.scrollTo(0, Math.max(0, targetTop));
       }
       // 预览区跳转（仅当该标题已渲染在预览中时）
       // 守卫：纯符号标题（如 `# ===`）headingToId 会产出空串，querySelector('#') 抛
@@ -1784,6 +1801,14 @@ class MarkdownEditor {
           this.updatePreview();
         }
       }
+      // 安全网：120ms 后恢复滚动同步（此时两个面板均已停在标题位置，无在途滚动事件）。
+      // 直接还原为可用状态，避免把上一轮滚动同步残留的 false 标志固化下来。
+      setTimeout(() => {
+        if (this._canScroll) {
+          this._canScroll.editor = true;
+          this._canScroll.preview = true;
+        }
+      }, 120);
       outlineContent.querySelectorAll('.outline-item').forEach(el => el.classList.remove('active'));
       item.classList.add('active');
     };
@@ -7085,7 +7110,10 @@ input[type="checkbox"]:checked::after { display: none !important; }
       sideRight.title = this.t('collapsePreview');
     }
 
-    setTimeout(() => {
+    // 存句柄：大纲跳转等用户操作可在本定时器到期前 clearTimeout 取消，
+    // 避免「视图模式恢复滚动」在跳转之后晚到、把编辑器/预览又拉回旧位置。
+    clearTimeout(this._viewModeRestoreTimer);
+    this._viewModeRestoreTimer = setTimeout(() => {
       this.cm.refresh();
       this.updateSideButtons();
       // 切换视图模式后，若虚拟滚动状态与新模式不一致则按新模式重建预览
@@ -7130,6 +7158,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
         }
       }
       requestAnimationFrame(() => this._resumeScroll());
+      this._viewModeRestoreTimer = null;
     }, 50);
   }
 
