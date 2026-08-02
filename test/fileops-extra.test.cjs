@@ -46,7 +46,7 @@ test('fileops-extra: openFilePath 打开新文件（read_file + 新标签 + 预�
     assert.strictEqual(ed.tabs.length, before + 1, '应新增标签');
     assert.strictEqual(ed.activeTab.filePath, 'C:/docs/x.md');
     assert.strictEqual(ed.activeTab.content, '# 新文档\n第二行', 'CRLF 应归一化为 LF');
-    assert.strictEqual(ed.viewMode, 'preview', '打开文件默认进入预览模式');
+    assert.strictEqual(ed.viewMode, 'edit', '打开文件默认进入编辑模式');
     assert.ok(calls.some((c) => c.cmd === 'read_file' && c.args.path === 'C:/docs/x.md'));
   } finally { cleanup(w); }
 });
@@ -98,6 +98,9 @@ test('fileops-extra: closeTab 未保存标签——cancel 不关闭 / discard �
 test('fileops-extra: closeOtherTabs 仅保留指定标签', async () => {
   const { w, ed } = await makeEditor();
   try {
+    // harness 初始化的某些 tab 可能处于已修改状态，closeOtherTabs 会弹保存对话框；
+    // 这里模拟用户选择 discard（对话框是事件驱动，不点按钮会永久挂起）。
+    ed.showSaveDialog = async () => 'discard';
     await ed.addTab('a.md', 'A', 'C:/t/a.md');
     await ed.addTab('b.md', 'B', 'C:/t/b.md');
     const keep = ed.tabs.findIndex((t) => t.filePath === 'C:/t/a.md');
@@ -111,6 +114,7 @@ test('fileops-extra: closeOtherTabs 仅保留指定标签', async () => {
 test('fileops-extra: closeAllTabs 关闭全部并留一个空白标签', async () => {
   const { w, ed } = await makeEditor();
   try {
+    ed.showSaveDialog = async () => 'discard';
     await ed.addTab('a.md', 'A', 'C:/t/a.md');
     await ed.addTab('b.md', 'B', 'C:/t/b.md');
     await ed.closeAllTabs();

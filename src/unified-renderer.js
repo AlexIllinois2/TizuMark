@@ -1166,14 +1166,67 @@ function renderFootnotes(html, definitions) {
   // Build footnote section
   let section = '\n<hr class="footnotes-sep">\n<section class="footnotes">\n<ol>\n';
   for (const fn of fnIds) {
-    section += '<li id="fn-' + fn.elementId + '" class="footnote-definition">\n';
-    section += '<p>' + fn.definition;
-    section += ' <a href="#fnref-' + fn.elementId + '" class="footnote-backref" title="返回文中">↩</a>';
-    section += '</p>\n</li>\n';
+    // 定义走最小管线渲染 + sanitize（修复：原实现把 raw 源文本直接拼入 <p>，
+    // `[^1]: <img onerror=...>` 可注入未净化 HTML 造成 XSS；顺带让定义内的
+    // **bold** / [链接](url) 等 markdown 语法正常渲染而非显示为字面量）。
+    let defHtml = unifiedToHtml(fn.definition);
+    const backref = ' <a href="#fnref-' + fn.elementId + '" class="footnote-backref" title="返回文中">↩</a>';
+    if (defHtml.startsWith('<p') && defHtml.endsWith('</p>')) {
+      // 段落级输出：backref 挂在段落末尾内，保持与旧结构一致
+      defHtml = defHtml.slice(0, -4) + backref + '</p>';
+    } else {
+      defHtml += backref;
+    }
+    section += '<li id="fn-' + fn.elementId + '" class="footnote-definition">\n' + defHtml + '\n</li>\n';
   }
   section += '</ol>\n</section>';
 
   return result + section;
+}
+
+// 统一的 rehype-sanitize 扩展 schema：放开常用原生 HTML 标签与内联 style
+//（危险 CSS 由下游 sanitizeHTML -> sanitizeStyleValue 兜底过滤）、img 尺寸、
+// file: scheme（demo.md 声明支持 file:// 写法）。主管线片段渲染共用。
+function buildSanitizeSchema() {
+  const base = rehypeSanitize.defaultSchema;
+  return {
+    ...base,
+    // 放开常用原生 HTML 标签：demo.md 与用户文档里会用到的 <u>/<center>/<progress>/
+    // <mark>/<figure>/<figcaption> 等。注意 <mark> 也由 convertHighlights（==高亮==）
+    // 在净化之后生成，这里放开原始 <mark> 不影响那条路径。
+    tagNames: [...(base.tagNames || []), 'u', 'center', 'progress', 'mark', 'figure', 'figcaption'],
+    attributes: {
+      ...base.attributes,
+      // 放开内联 style：具体危险 CSS 由下游 sanitizeHTML -> sanitizeStyleValue 兜底过滤
+      '*': [...(base.attributes['*'] || []), 'style'],
+      img: [...(base.attributes.img || ['src', 'alt', 'title']), 'width', 'height', 'srcset', 'loading'],
+      progress: ['value', 'max'],
+    },
+    allowedSchemes: [...(base.allowedSchemes || ['http', 'https', 'mailto', 'tel']), 'file'],
+  };
+}
+
+// 最小安全渲染管线：把脚注定义等片段渲染为 HTML 并完成 sanitize。
+// 与 renderMarkdown 主管线区分：不做 extractFootnotes/convertAlerts 等预处理
+// （防嵌套递归），不注入 data-source-line，按默认软换行规则渲染。
+function unifiedToHtml(md) {
+  let html;
+  try {
+    const processor = unified()
+      .use(remarkParse)
+      .use(remarkGfm, { singleTilde: false })
+      .use(remarkRehype, { allowDangerousHtml: true })
+      .use(rehypeRaw);
+    if (rehypeSanitize && rehypeSanitize.defaultSchema) {
+      processor.use(rehypeSanitize, buildSanitizeSchema());
+    }
+    processor.use(rehypeStringify, { allowDangerousHtml: true });
+    html = processor.processSync(md).toString();
+  } catch (e) {
+    console.error('Unified fragment rendering error:', e);
+    return '<pre>' + escapeHTML(md) + '</pre>';
+  }
+  return sanitizeHTML(html);
 }
 
 function renderMarkdown(content, options) {
@@ -1230,23 +1283,7 @@ function renderMarkdown(content, options) {
     // 若 rehype-sanitize 可用，用扩展 schema：保留 img 的 width/height/srcset（让「指定显示尺寸」生效），
     // 并允许 file: scheme（demo.md 声明支持 file:// 写法）。缺失时跳过，由下方 sanitizeHTML 兜底净化。
     if (rehypeSanitize && rehypeSanitize.defaultSchema) {
-      const base = rehypeSanitize.defaultSchema;
-      const schema = {
-        ...base,
-        // 放开常用原生 HTML 标签：demo.md 与用户文档里会用到的 <u>/<center>/<progress>/
-        // <mark>/<figure>/<figcaption> 等。注意 <mark> 也由 convertHighlights（==高亮==）
-        // 在净化之后生成，这里放开原始 <mark> 不影响那条路径。
-        tagNames: [...(base.tagNames || []), 'u', 'center', 'progress', 'mark', 'figure', 'figcaption'],
-        attributes: {
-          ...base.attributes,
-          // 放开内联 style：具体危险 CSS 由下游 sanitizeHTML -> sanitizeStyleValue 兜底过滤
-          '*': [...(base.attributes['*'] || []), 'style'],
-          img: [...(base.attributes.img || ['src', 'alt', 'title']), 'width', 'height', 'srcset', 'loading'],
-          progress: ['value', 'max'],
-        },
-        allowedSchemes: [...(base.allowedSchemes || ['http', 'https', 'mailto', 'tel']), 'file'],
-      };
-      processor.use(rehypeSanitize, schema);
+      processor.use(rehypeSanitize, buildSanitizeSchema());
     }
     processor.use(rehypeHeadingIds);
     processor.use(rehypeInlineBacktickMath);

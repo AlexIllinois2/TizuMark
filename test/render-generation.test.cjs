@@ -9,16 +9,12 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const path = require('path');
 const { buildEnv, cleanup, waitForEditor } = require('./helpers/app-env.cjs');
+const { loadUnifiedRenderer } = require('./helpers/load-bundle.cjs');
 
 // 浏览器里 unified-bundle.js 以 <script> 挂全局 UnifiedRenderer；jsdom 测试需手动 eval，
 // 否则 updatePreview 内 UnifiedRenderer.renderMarkdown 抛错（渲染失败退化为“预览错误”）。
-const _bundle = fs.readFileSync(path.resolve(__dirname, '..', 'src/lib/unified-bundle.js'), 'utf8');
-function loadUnifiedRenderer(w) {
-  w.eval(_bundle.replace('var UnifiedRenderer =', 'window.UnifiedRenderer ='));
-}
+// 产物加载统一走 helpers/load-bundle.cjs（P0-0e）：缺失时给可操作指引而非 ENOENT 堆栈。
 
 test('渲染代际计数器随每次 updatePreview 自增', async () => {
   const { w } = await buildEnv();

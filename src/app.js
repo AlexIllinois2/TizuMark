@@ -1,4 +1,7 @@
-const { invoke } = window.__TAURI__.core;
+// 延迟求值 invoke：每次调用读取最新的 window.__TAURI__.core.invoke，
+// 避免顶层解构缓存导致后续对 __TAURI__.core.invoke 的替换（如测试 stub）失效。
+// 与 src/modules/tauri-api.js 的 getInvoke 策略一致，是 ADR-1 IPC 边界的前置条件。
+const invoke = (...args) => window.__TAURI__.core.invoke(...args);
 
 // 超大文档预览保护阈值：超过则预览只渲染头部，避免整篇同步解析/渲染卡死主线程
 const MAX_PREVIEW_LINES = 5000;
@@ -817,12 +820,20 @@ class MarkdownEditor {
     this._fileTreeCtx = null;
     this._fileClipboard = null;
     this.debounceTimer = null;
-    this._imageURLCache = new Map();
+    this._imageURLCache = new Map(); // dataUri → Blob URL（LRU，上限 _imageURLCacheMax，超限 revoke）
+    this._imageURLCacheMax = 64;
     this._imageBase64Cache = new Map(); // key: 绝对路径 → value: base64 data URI，省去每次打字跨 IPC 读磁盘
     this._hljsCache = new Map();
     this._mermaidCache = new Map(); // key: themeKey+'::'+code → 渲染后的 SVG innerHTML，避免打字时全量重渲染 mermaid
     this._renderGeneration = 0;
     this._mermaidGeneration = 0;
+    // 滚动同步密集位置数组的失效标志：内容变化（updatePreview→rebuildScrollSync）时置位，
+    // 滚动热路径（_syncEditorToPreview/_syncPreviewToEditor）仅在 dirty 时重建，避免每次滚动全量重算
+    this._scrollSyncDirty = true;
+    // 布局指纹：预览 scrollHeight。图片/字体/mermaid 等异步加载会改变预览高度，
+    // 仅靠 dirty 感知不到（内容没变），须在滚动同步时比对高度，变了就强制重测
+    // （否则编辑行 ↔ 预览像素错位，2026-08-01 严重 bug 修复）
+    this._lastLayoutHeight = null;
     this.previewWindow = null;       // 大文档窗口模式：{start, end}（0-based 源码行），普通文档为 null
     this._previewVirtual = false;    // 纯预览模式 + 大文档：虚拟滚动（spacer 撑高，可拖到任意位置）
     this._avgLineHeight = null;      // 虚拟滚动平均行高（首次渲染后校准一次，之后恒定）
@@ -2377,6 +2388,34 @@ class MarkdownEditor {
     this.applyShortcuts();
   }
 
+  // 预览方案：把预置键位加载到 this.shortcuts 并渲染列表（供用户「随意切换」查看），
+  // 不持久化、不应用 CM（编辑器实际键位不变）；点快捷键对话框「确认」按钮才正式生效。
+  previewShortcutScheme(name) {
+    if (name === 'custom') {
+      // 自定义方案：预览已保存/编辑中的自定义键位（不含其他方案的临时预览值）
+      this.shortcuts = this.loadShortcuts();
+      this.shortcutScheme = 'custom';
+      this.renderShortcutsList();
+      return;
+    }
+    const defaults = this.getDefaultShortcuts();
+    let next;
+    if (name === 'default') {
+      next = JSON.parse(JSON.stringify(defaults)); // 整体恢复默认键位
+    } else {
+      const preset = this.getShortcutPresets()[name];
+      if (!preset) return;
+      next = {};
+      for (const [aid, def] of Object.entries(defaults)) {
+        const k = preset[aid];
+        next[aid] = { key: (k != null ? k : ''), label: def.label };
+      }
+    }
+    this.shortcuts = next;
+    this.shortcutScheme = name;
+    this.renderShortcutsList();
+  }
+
   loadShortcuts() {
     const defaults = this.getDefaultShortcuts();
     try {
@@ -2405,8 +2444,13 @@ class MarkdownEditor {
     const VALID = ['default', 'vscode', 'typora', 'sublime', 'custom'];
     const stored = localStorage.getItem('tizumark-shortcut-scheme');
     if (stored && VALID.includes(stored)) return stored; // 白名单校验，防脏数据
-    // 没有保存的方案时，默认使用 VSCode 方案
-    return 'vscode';
+    // 旧数据无 scheme：与默认逐项比对，有差异视为自定义（保留用户旧自定义数据）
+    const def = this.getDefaultShortcuts();
+    const cur = this.shortcuts || def;
+    for (const [aid, d] of Object.entries(def)) {
+      if ((cur[aid] && cur[aid].key || '') !== (d.key || '')) return 'custom';
+    }
+    return 'default';
   }
 
   saveShortcutScheme(name) {
@@ -3654,6 +3698,14 @@ class MarkdownEditor {
       this.updateSideButtons();
     });
 
+    // 退出时全量 revoke Blob URL，避免长会话累积的 dataUri→blob 映射泄漏内存
+    window.addEventListener('beforeunload', () => {
+      if (this._imageURLCache && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+        for (const url of this._imageURLCache.values()) URL.revokeObjectURL(url);
+        this._imageURLCache.clear();
+      }
+    });
+
     document.addEventListener('keydown', (e) => {
       if (this.handleShortcutRecording(e)) return;
 
@@ -4162,10 +4214,12 @@ class MarkdownEditor {
         const nodeLen = node.nodeValue.length;
         if (charCount + nodeLen > target.start) {
           const startOffset = target.start - charCount;
-          const endOffset = target.end - charCount;
+          // 匹配可能跨多个文本节点（如 <strong> 边界），endOffset 在本节点内钳制，
+          // 避免 range.setEnd 越界抛 IndexSizeError（历史 bug：跨节点匹配直接崩掉高亮）
+          const endOffset = Math.min(target.end - charCount, nodeLen);
           const range = document.createRange();
           range.setStart(node, startOffset);
-          range.setEnd(node, endOffset);
+          range.setEnd(node, Math.max(endOffset, startOffset));
           const sel = window.getSelection();
           sel.removeAllRanges();
           sel.addRange(range);
@@ -6482,7 +6536,12 @@ input[type="checkbox"]:checked::after { display: none !important; }
   getCachedImageURL(dataUri) {
     if (!dataUri || !dataUri.startsWith('data:')) return dataUri;
     const cached = this._imageURLCache.get(dataUri);
-    if (cached) return cached;
+    if (cached) {
+      // LRU 刷新：命中项移到队尾（Map 插入序），保证淘汰的是最久未用的
+      this._imageURLCache.delete(dataUri);
+      this._imageURLCache.set(dataUri, cached);
+      return cached;
+    }
     try {
       const comma = dataUri.indexOf(',');
       const meta = dataUri.slice(0, comma);
@@ -6496,6 +6555,15 @@ input[type="checkbox"]:checked::after { display: none !important; }
       const blob = new Blob([bytes], { type: mime });
       const url = URL.createObjectURL(blob);
       this._imageURLCache.set(dataUri, url);
+      // 容量上限：超限 revoke 最旧 Blob URL，防止长会话多图内存持续增长（历史 bug：只增不减）
+      if (this._imageURLCache.size > this._imageURLCacheMax) {
+        const oldestKey = this._imageURLCache.keys().next().value;
+        const oldestUrl = this._imageURLCache.get(oldestKey);
+        this._imageURLCache.delete(oldestKey);
+        if (typeof URL !== 'undefined' && URL.revokeObjectURL) {
+          URL.revokeObjectURL(oldestUrl);
+        }
+      }
       return url;
     } catch (e) {
       return dataUri;
@@ -6626,7 +6694,19 @@ input[type="checkbox"]:checked::after { display: none !important; }
 
   // 构建逐行密集位置映射（纯线性插值，无速度限制）
   // 每个编辑器行都有精确的 previewTop 插值
-  _computedPosition() {
+  // force=true：显式重建（内容/布局变化后的权威调用点）；缺省：仅 dirty 或布局变化时重建，
+  // 滚动同步热路径重复调用直接命中缓存，避免每次滚动全量重算（P1-6 性能修复）
+  _computedPosition(force = false) {
+    // 布局指纹：图片/字体/mermaid 等异步加载会改变预览 scrollHeight（内容没变但布局变了），
+    // 位置表冻结在旧布局会导致编辑行 ↔ 预览像素错位（2026-08-01 严重 bug）。比对高度差异强制重测。
+    const curHeight = this.preview ? this.preview.scrollHeight : null;
+    const layoutChanged = curHeight !== null &&
+      this._lastLayoutHeight != null && curHeight !== this._lastLayoutHeight;
+    if (!force && !layoutChanged && !this._scrollSyncDirty && this._editorElementList) return;
+
+    // 本次实际执行测量：无论成功与否都记录当前布局高度（作为下次比对指纹）
+    this._lastLayoutHeight = curHeight;
+
     const allElements = this.preview.querySelectorAll('[data-source-line]');
     const anchors = [];
     const seenLines = new Set();
@@ -6700,12 +6780,13 @@ input[type="checkbox"]:checked::after { display: none !important; }
 
     this._editorElementList = editorList;
     this._previewElementList = rawPreviewList;
+    this._scrollSyncDirty = false; // 重建成功：清除失效标志（滚动热路径此后命中缓存）
   }
 
   // 返回预览视口顶部对应的源码行号（1-based）；测量失败返回 null。
   // 用于切换模式时把「预览像素位置」转成宽度无关的行锚点。
   _lineAtPreviewTop(pvTop) {
-    this._computedPosition();
+    this._computedPosition(true);
     const list = this._previewElementList;
     if (!list || list.length < 2) return null;
     // 二分找 previewList 中 <= pvTop 的最大行索引
@@ -6723,8 +6804,8 @@ input[type="checkbox"]:checked::after { display: none !important; }
     const content = this.cm.getValue();
     const totalLines = content.split('\n').length;
 
-    // 构建平行位置数组（使用 data-source-line）
-    this._computedPosition();
+    // 构建平行位置数组（使用 data-source-line）；内容已变，强制重建（force=true）
+    this._computedPosition(true);
 
     // 生成 _linePositions（兼容 updatePreview 滚动恢复）
     const allElements = Array.from(this.preview.querySelectorAll('[data-source-line]'));
@@ -7885,7 +7966,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
           // 进入纯预览（100% 宽）：预览已重排，用锚点行在新布局下的预览位置定位
           let restored = false;
           if (anchor != null) {
-            this._computedPosition();
+            this._computedPosition(true);
             const list = this._previewElementList;
             if (list && anchor - 1 < list.length) {
               const pMax = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);

@@ -56,11 +56,32 @@ test('showSaveDialog 设置文案后 cleanup 还原原始文案', async () => {
 test('showConfirmDialog 取消返回 false', async () => {
   const { d } = buildDom();
   const p = showConfirmDialog({ title: '确认?', message: '<b>内容</b>', doc: d, t });
-  assert.strictEqual(d.getElementById('confirm-dialog-message').innerHTML, '<b>内容</b>');
+  assert.strictEqual(d.getElementById('confirm-dialog-message').textContent, '<b>内容</b>',
+    'message 按纯文本渲染');
+  assert.strictEqual(d.getElementById('confirm-dialog-message').innerHTML, '&lt;b&gt;内容&lt;/b&gt;',
+    '不得把 message 当 HTML 解析');
   d.getElementById('confirm-dialog-cancel').click();
   const r = await p;
   assert.strictEqual(r, false);
   assert.ok(d.getElementById('confirm-dialog').classList.contains('hidden'));
+});
+
+test('showConfirmDialog message 含恶意 HTML 不执行（XSS）', async () => {
+  const { d } = buildDom();
+  const events = [];
+  const win = d.defaultView;
+  const p = showConfirmDialog({
+    title: '切换?',
+    message: '路径 <img src=x onerror="window.__xss=1"> 内容',
+    doc: d, t,
+  });
+  const msgEl = d.getElementById('confirm-dialog-message');
+  assert.strictEqual(msgEl.children.length, 0, '不得产生子元素');
+  assert.ok(msgEl.textContent.includes('<img src=x onerror="window.__xss=1">'),
+    '恶意文本按字面量显示');
+  assert.strictEqual(win.__xss, undefined, 'onerror 不得执行');
+  d.getElementById('confirm-dialog-cancel').click();
+  await p;
 });
 
 test('showConfirmDialog 确认无 action 返回 true', async () => {

@@ -58,7 +58,9 @@ function showConfirmDialog(opts) {
     const confirmBtn = doc.getElementById('confirm-dialog-confirm');
     const cancelBtn = doc.getElementById('confirm-dialog-cancel');
     doc.getElementById('confirm-dialog-title').textContent = opts.title || t('confirm');
-    doc.getElementById('confirm-dialog-message').innerHTML = opts.message || '';
+    // 安全：message 一律按纯文本渲染（历史 bug：innerHTML 会让含 <img onerror> 的
+    // 目录路径 / 用户文本在确认框执行，跨平台路径注入 XSS）。需要换行用 \n + pre-line。
+    doc.getElementById('confirm-dialog-message').textContent = opts.message || '';
     dialog.classList.remove('hidden');
 
     const cleanup = () => {

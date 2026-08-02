@@ -4,19 +4,21 @@
 // 使用真实渲染（eval unified-bundle.js 到 window.UnifiedRenderer），走真实 switchTab 链路。
 const test = require('node:test');
 const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
 const { buildEnv, cleanup, delay, waitForEditor } = require('./helpers/app-env.cjs');
+const { loadUnifiedRenderer } = require('./helpers/load-bundle.cjs');
 
-const _bundle = fs.readFileSync(path.resolve(__dirname, '..', 'src/lib/unified-bundle.js'), 'utf8');
-function loadUnifiedRenderer(w) {
-  w.eval(_bundle.replace('var UnifiedRenderer =', 'window.UnifiedRenderer ='));
-}
+// 产物加载统一走 helpers/load-bundle.cjs（P0-0e）：缺失时给可操作指引而非 ENOENT 堆栈。
 
 async function makeEditor() {
   const { w } = await buildEnv();
   loadUnifiedRenderer(w);
   const ed = await waitForEditor(w);
+  // harness 初始化会打开「Untitled1 + 使用说明.md」两个 tab 且 activeTabIndex=1；
+  // 本测试需要 [tab0] + activeTabIndex=0 的干净前提（switchTab 切到新 push 的 tab1），
+  // 否则 switchTab(1) 会因 index===activeTabIndex 直接 return，滚动恢复断言全部失效。
+  ed.tabs.length = 1;
+  ed.activeTabIndex = 0;
+  ed.activeTab = ed.tabs[0];
   return { w, ed };
 }
 

@@ -296,7 +296,8 @@ async function processMermaid(preview, opts) {
     mermaid.initialize({
       startOnLoad: false,
       theme: isDark ? 'dark' : 'default',
-      securityLevel: 'loose',
+      // strict：转义图内嵌 HTML 标签/click 事件（loose 允许 <img onerror> 在预览执行，XSS 面）
+      securityLevel: 'strict',
       fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-preview').trim() || '-apple-system, sans-serif',
     });
     await mermaid.run({ nodes: toRender.map(x => x.container) });

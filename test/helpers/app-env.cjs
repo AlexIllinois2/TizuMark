@@ -113,14 +113,17 @@ async function buildEnv(options = {}) {
         if (cmd === 'app_data_dir') return PROCESS_DATA_DIR;
         return r;
       },
+      // P1-5 前置：Channel 构造器占位（事件订阅相关测试用）
+      Channel: function Channel() { this.onmessage = null; },
     },
+    app: { getVersion: async () => '1.1.0' },
     event: {
       listen: async (name, cb) => {
         (tauriListeners[name] ||= []).push(cb);
         return () => {};
       },
     },
-    window: { getCurrentWindow: () => ({ unminimize: async () => {}, show: async () => {}, setFocus: async () => {}, isMaximized: async () => false }) },
+    window: { getCurrentWindow: () => ({ unminimize: async () => {}, show: async () => {}, setFocus: async () => {}, isMaximized: async () => false, minimize: async () => {}, hide: async () => {} }) },
     path: { resourceDir: async () => '' },
     shell: { open: async () => {} },
   };
@@ -150,6 +153,7 @@ async function buildEnv(options = {}) {
   const CRITICAL_MODULES = new Set([
     'code-block.js', 'preview-post.js', 'word-count.js', 'outline.js',
     'dialogs.js', 'find-replace.js', 'tauri-api.js', 'preview-window.js',
+    'image-processor.js',
   ]);
 
   const priority = allModuleFiles.filter((f) => PRIORITY_MODULES.includes(f));
@@ -170,6 +174,20 @@ async function buildEnv(options = {}) {
       }
       // 非关键模块：保留原"吞掉"行为，仅告警
       console.warn(`[harness] 模块 ${f} 加载失败（非关键，已忽略）：${e && e.message}`);
+    }
+  }
+
+  // P2-1：加载 src/controllers/*.js（PreviewController facade），必须在 eval app.js 之前，
+  // 否则 app.js 构造期 `new PreviewController(this)` 会 ReferenceError。
+  const controllersDir = path.join(ROOT, 'src', 'controllers');
+  if (fs.existsSync(controllersDir)) {
+    for (const f of fs.readdirSync(controllersDir).filter((x) => x.endsWith('.js') && fs.statSync(path.join(controllersDir, x)).isFile())) {
+      const full = path.join(controllersDir, f);
+      try {
+        w.eval(fs.readFileSync(full, 'utf8'));
+      } catch (e) {
+        throw new Error(`[harness] 控制器 ${f} 加载失败，终止初始化（原错误：${e && e.stack ? e.stack : e}）`);
+      }
     }
   }
 

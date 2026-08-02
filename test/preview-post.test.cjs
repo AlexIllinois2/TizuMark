@@ -112,6 +112,21 @@ test('mermaid 未加载时跳过不抛错', async () => {
   assert.doesNotThrow(async () => { await PP.processMermaid(preview, opts); });
 });
 
+test('mermaid initialize 使用 strict securityLevel（XSS 防护）', async () => {
+  const { preview, window } = createPreviewDom();
+  let initArgs = null;
+  window.mermaid = {
+    initialize: (cfg) => { initArgs = cfg; },
+    run: async () => {},
+  };
+  global.mermaid = window.mermaid;
+  preview.innerHTML = '<pre><code class="language-mermaid">graph TD;A-->B;</code></pre>';
+  await PP.processMermaid(preview, { isDark: false, mermaidCache: null });
+  assert.ok(initArgs, '应调用 mermaid.initialize');
+  assert.strictEqual(initArgs.securityLevel, 'strict', 'securityLevel 应为 strict（loose 允许图内嵌 HTML 执行）');
+  delete global.mermaid;
+});
+
 test('集成：完整 markdown 经 unified 渲染 + 后处理后结构正常', async () => {
   const { preview } = createPreviewDom();
   const md = '# 标题 Hello\n\n正文 :star: 测试\n\n' + B + B + B + 'js\nconst a = 1;\n' + B + B + B;

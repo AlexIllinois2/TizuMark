@@ -81,6 +81,15 @@ function harnessFn() {
   clearToast(); ed.reportError('E_INIT', { toast: false });
   results.push(['toast:false 走 setStatus', statusText && statusText.includes('编辑器初始化失败') && container.querySelectorAll('.toast').length === 0]);
 
+  // 把 MarkdownEditor 实例工厂暴露到 window，供文件底部的 C16 异步端到端用例使用
+  // （class 不跨脚本作用域共享，只能由脚本内部导出）
+  window.__mkEditor = function () {
+    const e = Object.create(MarkdownEditor.prototype);
+    e.settings = { language: 'zh' };
+    e.setStatus = function () {};
+    return e;
+  };
+
   window.__results = results;
 }
 const harness = '(' + harnessFn.toString() + ')();';
@@ -118,6 +127,13 @@ const { window } = dom;
 window.console.error = () => {}; // 屏蔽 reportError 的诊断输出，保持测试静默（真实运行时仍输出到 console）
 window.__TAURI__ = { core: { invoke: () => Promise.resolve('') }, path: {}, app: {}, event: {}, shell: {} };
 
+// app.js 的 IPC 全部经 TauriApi（P0-2b），必须先把模块注入同一 window，
+// 否则 readFileNormalized 等方法会 ReferenceError。
+const tauriApiSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'tauri-api.js'), 'utf8');
+const sm = window.document.createElement('script');
+sm.textContent = tauriApiSrc;
+window.document.body.appendChild(sm);
+
 const combined = appjs + '\n;\n' + harness;
 const s = window.document.createElement('script');
 s.textContent = combined;
@@ -127,3 +143,108 @@ const results = (window.__results || []).concat(encodingCases());
 for (const [label, ok] of results) {
   test(label, () => { assert.ok(ok, label); });
 }
+
+// ====== C16 验收门（P0-2b / N21）：IPC 错误【端到端】原样透传 ======
+// 目的：证明 tauri-api 这层是语义空操作。若它 try/catch、包装 Error（如 new Error('[read_file] '+e)）
+// 或做会抛的参数校验，Rust 原始 JSON 就 parse 不出 kind，5 类文件错误会静默塌缩成 E_IO。
+// 必须走端到端路径：stub core.invoke reject → TauriApi.readFile → readFileNormalized → _mapReadFileError。
+// 直调 _mapReadFileError（上面第 2-6 条用例）查不出这类退化。
+const KIND_CASES = [
+  ['NotFound', 'E_NOT_FOUND'],
+  ['PermissionDenied', 'E_PERMISSION'],
+  ['Locked', 'E_LOCKED'],
+  ['PathTooLong', 'E_PATH_TOO_LONG'],
+  ['InvalidEncoding', 'E_ENCODING'],
+];
+
+test('C16 前置：tauri-api 模块已挂载到同一 window', () => {
+  assert.ok(window.TauriApi, 'window.TauriApi 应存在');
+  assert.strictEqual(typeof window.TauriApi.readFile, 'function');
+  assert.ok(typeof window.__mkEditor === 'function', 'harness 应导出 __mkEditor');
+});
+
+for (const [kind, code] of KIND_CASES) {
+  test(`C16 端到端 ${kind} -> ${code}（错误原样透传，未被包装）`, async () => {
+    const ed = window.__mkEditor();
+    const p = 'C:/a/测试.md';
+    const calls = [];
+    const prev = window.__TAURI__.core.invoke;
+    window.__TAURI__.core.invoke = (cmd, args) => {
+      calls.push([cmd, args]);
+      return Promise.reject(`{"kind":"${kind}","path":"${p}","message":"rust side"}`);
+    };
+    try {
+      let err = null;
+      try { await ed.readFileNormalized(p); } catch (e) { err = e; }
+      assert.ok(err, '应抛出错误');
+      assert.strictEqual(err.code, code, `${kind} 必须映射为 ${code}，塌缩成 ${err.code} 说明 IPC 层包装了错误`);
+      assert.strictEqual(err.path, p);
+      assert.strictEqual(calls.length, 1, '应恰好透传一次 invoke');
+      assert.strictEqual(calls[0][0], 'read_file', '命令名必须原样');
+      // 注意：args 对象诞生于 jsdom realm，其原型不是本 realm 的 Object.prototype，
+      // 用 deepStrictEqual 会因原型不等而误报；这里做字段级断言。
+      const args = calls[0][1];
+      assert.ok(args && typeof args === 'object', '参数应为对象');
+      assert.strictEqual(args.path, p, '参数必须原样');
+      assert.deepStrictEqual(Object.keys(args), ['path'], '不得追加/丢失参数字段');
+    } finally {
+      window.__TAURI__.core.invoke = prev;
+    }
+  });
+}
+
+test('C16 端到端 非结构化错误 -> E_IO（回退分支仍成立）', async () => {
+  const ed = window.__mkEditor();
+  const prev = window.__TAURI__.core.invoke;
+  window.__TAURI__.core.invoke = () => Promise.reject('plain io error string');
+  try {
+    let err = null;
+    try { await ed.readFileNormalized('x.md'); } catch (e) { err = e; }
+    assert.ok(err);
+    assert.strictEqual(err.code, 'E_IO');
+  } finally {
+    window.__TAURI__.core.invoke = prev;
+  }
+});
+
+test('C16 端到端 resolve 原样透传（仅 app 层做换行归一化）', async () => {
+  const ed = window.__mkEditor();
+  const prev = window.__TAURI__.core.invoke;
+  window.__TAURI__.core.invoke = () => Promise.resolve('a\r\nb\rc\nd');
+  try {
+    const out = await ed.readFileNormalized('x.md');
+    assert.strictEqual(out, 'a\nb\nc\nd');
+  } finally {
+    window.__TAURI__.core.invoke = prev;
+  }
+});
+
+test('C16 端到端 Error 实例形态（message 承载 Rust JSON）同样可解', async () => {
+  // Tauri 在部分场景把 reject 值包成 Error；_mapReadFileError 已兼容 e.message，
+  // 这里锁定 IPC 层不得把它再包一层（否则 message 会变成 "[read_file] Error: {...}"）
+  const ed = window.__mkEditor();
+  const prev = window.__TAURI__.core.invoke;
+  window.__TAURI__.core.invoke = () => Promise.reject(new Error('{"kind":"Locked","path":"y.md"}'));
+  try {
+    let err = null;
+    try { await ed.readFileNormalized('y.md'); } catch (e) { err = e; }
+    assert.ok(err);
+    assert.strictEqual(err.code, 'E_LOCKED');
+  } finally {
+    window.__TAURI__.core.invoke = prev;
+  }
+});
+
+test('C16 边界：invoke 返回 null -> E_EMPTY（不被误判为 IO 错误）', async () => {
+  const ed = window.__mkEditor();
+  const prev = window.__TAURI__.core.invoke;
+  window.__TAURI__.core.invoke = () => Promise.resolve(null);
+  try {
+    let err = null;
+    try { await ed.readFileNormalized('z.md'); } catch (e) { err = e; }
+    assert.ok(err);
+    assert.strictEqual(err.code, 'E_EMPTY');
+  } finally {
+    window.__TAURI__.core.invoke = prev;
+  }
+});

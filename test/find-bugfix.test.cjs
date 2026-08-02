@@ -84,8 +84,7 @@ test('find: clearFindHighlights 清除所有高亮 mark', async () => {
       const findInput = w.document.getElementById('find-input');
       findInput.value = 'hello';
       findInput.dispatchEvent(new w.Event('input'));
-      setTimeout(() => {
-        assert.ok(w.editor.findMarks.length > 0, '应已有高亮 mark');
+      setTimeout(() => {        assert.ok(w.editor.findMarks.length > 0, '应已有高亮 mark');
         w.editor.clearFindHighlights();
         assert.strictEqual(w.editor.findMarks.length, 0, '清除后应无 mark');
         cleanup(w);
@@ -184,3 +183,23 @@ test('crossSearch: 标题栏拖动改变面板位置', async () => {
 
 // 废弃：跨文件搜索不再包含「循环查找」勾选框（需求1），循环查找逻辑已迁移到
 // 「文件中查找」，由 test/search-enhance.test.cjs 覆盖。
+
+test('find-prev: 500+ 行大文本定位前一匹配（posFromIndex 优化，O(n²) 历史实现）', async () => {
+  const { w } = await buildEnv({ captureInitErr: true });
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const ed = w.editor;
+      const cm = ed.cm;
+      const lines = Array.from({ length: 500 }, (_, i) => (i === 100 || i === 300) ? 'needle here' : 'line ' + i);
+      cm.setValue(lines.join('\n'));
+      const findInput = w.document.getElementById('find-input');
+      findInput.value = 'needle';
+      cm.setCursor({ line: 350, ch: 0 });
+      w.document.getElementById('find-prev').click();
+      assert.strictEqual(cm.getSelection(), 'needle', '应选中前一匹配');
+      assert.strictEqual(cm.getCursor().line, 300, '光标应跳到第 300 行的匹配');
+      cleanup(w);
+      resolve();
+    }, 300);
+  });
+});

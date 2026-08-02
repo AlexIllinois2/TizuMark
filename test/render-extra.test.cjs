@@ -6,14 +6,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { renderMarkdown } = require('../src/unified-renderer.js');
 const { buildEnv, cleanup, delay, waitForEditor } = require('./helpers/app-env.cjs');
+const { loadUnifiedRenderer } = require('./helpers/load-bundle.cjs');
 
 // 浏览器里 unified-bundle.js 以 <script> 挂全局 UnifiedRenderer；jsdom 测试需手动 eval，
 // 否则 updatePreview 内 UnifiedRenderer.renderMarkdown 抛错、preview 渲染失败（无 checkbox）。
 // 之前“勾选”测试用游离 fakeCheckbox 绕过了真实预览渲染，漏掉了防抖重建覆盖这类真实 bug。
-const _bundle = fs.readFileSync(path.resolve(__dirname, '..', 'src/lib/unified-bundle.js'), 'utf8');
-function loadUnifiedRenderer(w) {
-  w.eval(_bundle.replace('var UnifiedRenderer =', 'window.UnifiedRenderer ='));
-}
+// 产物加载统一走 helpers/load-bundle.cjs（P0-0e）：缺失时给可操作指引而非 ENOENT 堆栈。
 
 // ---------- Alert 块 ----------
 

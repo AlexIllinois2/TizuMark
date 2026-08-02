@@ -7,6 +7,10 @@ const assert = require('node:assert');
 const { JSDOM } = require('jsdom');
 
 const appjs = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+// P1-5：app.js 运行时依赖 window.TauriApi，须先注入 tauri-api.js（同生产 index.html 顺序）。
+const tauriApiSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'modules', 'tauri-api.js'), 'utf8');
+// P2-1：app.js 构造期 new PreviewController(this) 需要本 facade 先注入（同生产 index.html 顺序）。
+const previewControllerSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'controllers', 'preview-controller.js'), 'utf8');
 
 const HTML = `<!DOCTYPE html><html><body>
   <div class="editor-container">
@@ -253,7 +257,7 @@ const harnessFn = function () {
   })();
 };
 
-const combined = appjs + '\n;window.__harnessPromise = (' + harnessFn.toString() + ')();';
+const combined = tauriApiSrc + '\n;\n' + previewControllerSrc + '\n;\n' + appjs + '\n;window.__harnessPromise = (' + harnessFn.toString() + ')();';
 const s = dom.window.document.createElement('script');
 s.textContent = combined;
 dom.window.document.body.appendChild(s);

@@ -6,8 +6,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const path = require('path');
-const fs = require('fs');
+const { loadUnifiedRenderer } = require('./helpers/load-bundle.cjs');
 const { JSDOM } = require('jsdom');
 
 // 渲染包在浏览器里以 <script> 加载，定义全局 UnifiedRenderer（不走 module.exports），
@@ -18,10 +17,8 @@ global.window = _w;
 global.document = _w.document;
 global.navigator = _w.navigator;
 
-const _bundleSrc = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'lib', 'unified-bundle.js'), 'utf8');
-// jsdom 的 window.eval 不会把顶层 var 挂到 window 全局，改成显式挂到 window 上。
-_w.eval(_bundleSrc.replace('var UnifiedRenderer =', 'window.UnifiedRenderer ='));
-const renderMarkdown = _w.UnifiedRenderer.renderMarkdown;
+// 产物加载统一走 helpers/load-bundle.cjs（P0-0e）：缺失时给可操作指引而非 ENOENT 堆栈。
+const renderMarkdown = loadUnifiedRenderer(_w).renderMarkdown;
 
 function render(md, opts = { softBreaks: false }) {
   return renderMarkdown(md, opts);
@@ -49,6 +46,21 @@ test('render: 删除线 ~~x~~', async () => {
 test('render: 脚注', async () => {
   const html = render('正文有脚注[^1]\n\n[^1]: 脚注内容');
   assert.ok(html.includes('footnote') || html.includes('id="fn'), '应渲染脚注区块');
+});
+
+test('render: 脚注定义注入被净化（XSS）', async () => {
+  // 脚注定义原文不得拼入 HTML（历史 bug：sanitize 后直接拼接 raw 源文本）
+  const html = render('正文[^1]\n\n[^1]: <img src=x onerror=alert(1)> 内容');
+  assert.ok(!html.includes('onerror'), '脚注定义中的事件处理器应被剥离');
+  assert.ok(!html.includes('alert(1)'), '脚注定义中的脚本不应出现');
+  assert.ok(html.includes('id="fn-'), '应仍渲染脚注区块');
+});
+
+test('render: 脚注定义内 markdown 语法正常渲染', async () => {
+  // 附带修复：定义内 **bold** 渲染为 <strong> 而非字面量
+  const html = render('正文[^1]\n\n[^1]: 定义含 **加粗** 与 [链接](https://x.com)');
+  assert.ok(html.includes('<strong>加粗</strong>'), '脚注定义内 **bold** 应渲染');
+  assert.ok(html.includes('href="https://x.com"'), '脚注定义内链接应渲染');
 });
 
 test('render: 定义列表', async () => {
@@ -91,4 +103,48 @@ test('render: 有序/无序列表', async () => {
 test('render: 引用块', async () => {
   const html = render('> 引用内容');
   assert.ok(html.includes('<blockquote'), '应渲染 blockquote');
+});
+
+// C12（P1-7）：承接 Rust render_markdown 退役用例的 XSS 语义 —— 前端 unified-renderer 是
+// 唯一生产渲染路径，其 sanitizeHTML/sanitizeTagAttributes 必须挡住同类注入。
+test('render: XSS 标题内 script 被剥离但文本保留', async () => {
+  const html = render('# <script>alert(1)</script>');
+  assert.ok(!html.includes('<script>'), '标题内 script 标签必须被剥离');
+  assert.ok(html.includes('alert(1)'), '脚本文本内容应作为纯文本保留');
+});
+
+test('render: 文本内 img onerror 被剥离但 img 保留', async () => {
+  const html = render('Hello <img src=x onerror=alert(1)>');
+  assert.ok(!html.includes('onerror'), '内联 onerror 事件处理器必须被剥离');
+  assert.ok(html.includes('<img'), 'img 标签本身应保留');
+});
+
+test('render: 裸 script 标签被剥离', async () => {
+  const html = render('Text <script>document.cookie</script> more');
+  assert.ok(!html.includes('<script>'), 'script 开标签必须被剥离');
+  assert.ok(!html.includes('</script>'), 'script 闭标签必须被剥离');
+  assert.ok(html.includes('Text') && html.includes('more'), '前后文本应保留');
+});
+
+test('render: iframe 被剥离', async () => {
+  const html = render('Text <iframe src="evil.com"></iframe> more');
+  assert.ok(!html.includes('<iframe'), 'iframe 开标签必须被剥离');
+  assert.ok(!html.includes('</iframe>'), 'iframe 闭标签必须被剥离');
+});
+
+test('render: 图片 src 保留', async () => {
+  const html = render('![alt](https://example.com/img.png)');
+  assert.ok(html.includes('<img'), '应渲染 img 标签');
+  assert.ok(html.includes('src='), '图片 src 属性应保留');
+});
+
+test('render: 数字实体编码的 javascript: 绕过被拦截', async () => {
+  const html = render('<a href="&#x6A;avascript:alert(1)">click</a>');
+  assert.ok(!html.includes('javascript:'), '数字实体解码后的 javascript: 必须被拦截');
+  assert.ok(html.includes('click'), '链接文本应保留');
+});
+
+test('render: 明文 javascript: 链接被拦截', async () => {
+  const html = render('<a href="javascript:alert(1)">x</a>');
+  assert.ok(!html.includes('javascript:'), '明文 javascript: 必须被拦截');
 });

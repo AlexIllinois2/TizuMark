@@ -10,6 +10,15 @@ out/
 # Regenerate with `npm run build:renderer` (also auto-run on `npm install` via the `prepare` script). Do NOT edit by hand.
 src/lib/unified-bundle.js
 
+# P2-3 vendor 锁定：以下 6 个库由 scripts/ensure-vendor.mjs 从 node_modules 确定性再生
+# （接入 package.json "prepare"，CI 用完整 npm ci 自动重建）。请勿手改、勿提交。
+src/lib/codemirror/
+src/lib/katex/
+src/lib/mermaid/
+src/lib/html2canvas.min.js
+src/lib/markdown-it.min.js
+src/lib/highlight.js/
+
 # Tauri
 src-tauri/target/
 src-tauri/WixTools/

@@ -122,9 +122,11 @@ test('普通本地 md 缺图：不应回退到 read_bundled_image_as_base64（is
 
 test('打包 demo 打开：应通过专用 read_bundled_file 命令读取，dev/prod 统一', () => {
   const app = read('src/app.js');
-  // 必须用专用 read_bundled_file 命令（Rust 端做 dev/prod 回退），不再用 readFileNormalized(resourceDir + href)
-  assert.match(app, /invoke\('read_bundled_file',\s*\{\s*filename:\s*normHref\s*\}\)/,
-    '链接处理应调用 read_bundled_file 而不是手拼 resourceDir + path');
+  // 链接处理应走专用命令 read_bundled_file（Rust 端做 dev/prod 回退），不再手拼 resourceDir + path。
+  // 调用形式接受两种：master 收敛后的 TauriApi.readBundledFile({filename})，或 dev2 保留的 invoke('read_bundled_file', {filename})。
+  const re = /(?:TauriApi\.readBundledFile\(\s*\{\s*filename:\s*normHref\s*\}\s*\)|invoke\(['"]read_bundled_file['"]\s*,\s*\{\s*filename:\s*normHref\s*\}\s*\))/;
+  assert.match(app, re,
+    '链接处理应调用 read_bundled_file 命令而不是手拼 resourceDir + path');
   // 截取「无活动文件」分支（相对打包资源打开段）单独检查：不能在该段用 fetch(href)
   // （dev 模式 webview 根目录无 demo.md，fetch 必 404；http(s) 分支的 fetch 是另一段、不在此检查范围）
   const section = app.match(/无活动文件[\s\S]{0,1200}?\/\/ 相对打包资源[\s\S]{0,1500}?\}\s*catch \(err\)\s*\{[\s\S]{0,400}?\}\s*\}/);

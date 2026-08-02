@@ -596,6 +596,11 @@ body {
 
 .view-mode-tabs {
   display: flex;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 3px;
+  gap: 0;
 }
 
 .view-mode-tab {

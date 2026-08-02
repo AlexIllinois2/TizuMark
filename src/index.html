@@ -25,17 +25,17 @@
             bar = document.createElement('div');
             bar.id = 'fatal-error-bar';
             bar.setAttribute('role', 'alert');
-            // 插入 #app 内部最顶部，不遮挡 Tauri 标题栏和窗口控制按钮
-            var app = document.getElementById('app');
-            if (app) { app.insertBefore(bar, app.firstChild); }
-            else { (document.body || document.documentElement).appendChild(bar); }
+            // 固定底部条，不遮挡 Tauri 标题栏/窗口控制按钮/工具栏菜单/格式工具栏
+            // （顶部位置会压住 max/min/close 与菜单栏，改为 fixed bottom 后只占底部一条）
+            (document.body || document.documentElement).appendChild(bar);
           }
           var bg = level === 'warn' ? '#d97706' : '#b00020';
           var prefix = level === 'warn' ? '⚠️ 警告：' : '❌ 错误：';
-          bar.style.cssText = 'display:block;' +
-            'background:' + bg + ';color:#fff;font:12px/1.5 system-ui,-apple-system,sans-serif;' +
+          bar.style.cssText = 'display:block;position:fixed;left:0;right:0;bottom:0;' +
+            'z-index:100000;background:' + bg + ';color:#fff;' +
+            'font:12px/1.5 system-ui,-apple-system,sans-serif;' +
             'padding:8px 36px 8px 14px;white-space:pre-wrap;word-break:break-all;' +
-            'box-shadow:0 2px 6px rgba(0,0,0,.25);position:relative;';
+            'box-shadow:0 -2px 6px rgba(0,0,0,.25);';
           bar.innerHTML = '<span>' + prefix + escapeHtml(msg) + '</span>' +
             '<button onclick="this.parentElement.style.display=\'none\'"' +
             ' style="position:absolute;right:8px;top:50%;transform:translateY(-50%);' +
@@ -43,6 +43,8 @@
           bar.style.display = 'block';
         } catch (e) { /* 兜底自身失败不再抛 */ }
       }
+      // 测试用内部导出（无运行时副作用，仅供 jsdom 单测直接调用验证位置策略）
+      window.__errorBar = showErrorBar;
       function escapeHtml(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       }
@@ -679,7 +681,7 @@
         <h2 id="confirm-dialog-title">确认</h2>
       </div>
       <div class="dialog-content">
-        <p id="confirm-dialog-message">确定要恢复默认设置吗？</p>
+        <p id="confirm-dialog-message" style="white-space: pre-line;">确定要恢复默认设置吗？</p>
       </div>
       <div class="dialog-footer">
         <button id="confirm-dialog-cancel" class="dialog-btn">取消</button>
@@ -1220,6 +1222,10 @@
 <script src="modules/find-replace.js"></script>
 <script src="modules/file-search.js"></script>
 <script src="modules/global-search.js"></script>
+<script src="modules/preview-window.js"></script>
+<script src="modules/tauri-api.js"></script>
+<script src="modules/image-processor.js"></script>
+<script src="controllers/preview-controller.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

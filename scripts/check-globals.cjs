@@ -27,6 +27,9 @@ const KNOWN_GLOBALS = new Set([
   'WordCount',
   'FindReplace',
   'PreviewPost',
+  'PreviewWindow',
+  'TauriApi',
+  'ImageProcessor', // P1-1 新增：processImages 抽离为纯模块
 ]);
 
 // 不锚行首：\bwindow\.[A-Z][A-Za-z]*\s*=

@@ -4,6 +4,10 @@ const path = require('path');
 const { VERSION, notesLines } = require('./release-notes');
 
 const TOKEN = process.env.GITEE_TOKEN;
+if (!TOKEN) {
+  console.error('缺少 GITEE_TOKEN 环境变量：请先设置（PowerShell: $env:GITEE_TOKEN="xxx"）');
+  process.exit(1);
+}
 
 const releaseBody = {
   tag_name: 'v' + VERSION,
@@ -69,11 +73,13 @@ function uploadFile(releaseId, filePath) {
 (async () => {
   const release = await apiRequest('POST', '', releaseBody);
   console.log('Created release #' + release.id);
+  // 附件路径基于脚本位置解析（历史：硬编码 D:/project/... 绝对路径，换机器即坏）
+  const releaseDir = path.resolve(__dirname, '..', 'release');
   const files = [
-    `D:/project/tizu-mark/release/TizuMark_${VERSION}_x64-setup.exe`,
-    `D:/project/tizu-mark/release/TizuMark_${VERSION}_x64_en-US.msi`,
-    `D:/project/tizu-mark/release/TizuMark_${VERSION}_x64.exe`,
-    `D:/project/tizu-mark/release/update-windows-x86_64.json`,
+    path.join(releaseDir, `TizuMark_${VERSION}_x64-setup.exe`),
+    path.join(releaseDir, `TizuMark_${VERSION}_x64_en-US.msi`),
+    path.join(releaseDir, `TizuMark_${VERSION}_x64.exe`),
+    path.join(releaseDir, 'update-windows-x86_64.json'),
   ];
   for (const f of files) {
     if (!fs.existsSync(f)) { console.error('MISSING FILE: ' + f); continue; }
