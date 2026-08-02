@@ -4,6 +4,12 @@
 // 无法按环境分离。设置 devUrl 后 dev 模式加载本 server 提供的 src/ 源码
 // （改完即刷、无需打包），release 仍加载 frontendDist（../dist 打包产物）。
 //
+// 增强（热加载 + 端口自愈）：
+//  - LiveReload：用 SSE（/__livereload，纯 HTTP 流，无需 ws 依赖、无需改 CSP）
+//    监听 src/ 文件变化，自动刷新 webview。比重构前多了真·热加载。
+//  - 端口自愈：若 1420 被「残留的旧 dev-server」占用（上次关应用没杀干净），
+//    自动 taskkill 该进程后重试监听，避免静默连上旧 server 导致「跑旧代码」。
+//
 // 用法：tauri.conf.json build.beforeDevCommand = "node scripts/dev-server.mjs"
 // 端口：PORT 环境变量可覆盖，默认 1420（Tauri 官方模板惯例）。
 import http from 'node:http';
@@ -15,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', 'src');
 const PORT = Number(process.env.PORT || 1420);
+const LIVERELOAD_PATH = '/__livereload';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -32,6 +39,31 @@ const MIME = {
   '.webp': 'image/webp',
 };
 
+// ---- LiveReload：SSE 客户端集合 + 文件监听 ----
+const sseClients = new Set();
+let reloadTimer = null;
+function broadcastReload() {
+  for (const res of sseClients) {
+    try { res.write('data: reload\n\n'); } catch { /* 已断开，下次清理 */ }
+  }
+}
+function scheduleReload() {
+  if (reloadTimer) return; // 合并编辑器连写
+  reloadTimer = setTimeout(() => { reloadTimer = null; broadcastReload(); }, 60);
+}
+try {
+  fs.watch(ROOT, { recursive: true }, (event, filename) => {
+    if (filename && /(^|[\\/])\.|~$/.test(filename)) return; // 跳过临时文件
+    scheduleReload();
+  });
+} catch (e) {
+  console.error('[dev-server] 文件监听失败（热加载将不可用）：', e && e.message);
+}
+// 心跳保活（防止中间层超时断开 SSE）
+setInterval(() => { for (const res of sseClients) { try { res.write(': ping\n\n'); } catch {} } }, 15000);
+
+const LIVERELOAD_SNIPPET = `<script>(function(){try{var es=new EventSource('${LIVERELOAD_PATH}');es.onmessage=function(){location.reload();};es.onerror=function(){};}catch(e){}})();</script>`;
+
 const server = http.createServer((req, res) => {
   let urlPath;
   try {
@@ -41,6 +73,20 @@ const server = http.createServer((req, res) => {
     res.end('bad request');
     return;
   }
+
+  // LiveReload SSE 端点（虚拟路由，不参与文件遍历守卫）
+  if (urlPath === LIVERELOAD_PATH) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Connection': 'keep-alive',
+    });
+    res.write('retry: 1000\n\n');
+    sseClients.add(res);
+    req.on('close', () => sseClients.delete(res));
+    return;
+  }
+
   if (urlPath === '/') urlPath = '/index.html';
 
   const file = path.normalize(path.join(ROOT, urlPath));
@@ -57,6 +103,19 @@ const server = http.createServer((req, res) => {
       return;
     }
     const ext = path.extname(file).toLowerCase();
+    // HTML：注入 LiveReload 客户端（src/index.html 本身保持生产干净，仅 dev 注入）
+    if (ext === '.html') {
+      let html = data.toString('utf8');
+      if (html.includes('</head>')) html = html.replace('</head>', LIVERELOAD_SNIPPET + '</head>');
+      else if (html.includes('</body>')) html = html.replace('</body>', LIVERELOAD_SNIPPET + '</body>');
+      else html += LIVERELOAD_SNIPPET;
+      res.writeHead(200, {
+        'Content-Type': MIME[ext] || 'application/octet-stream',
+        'Cache-Control': 'no-store',
+      });
+      res.end(Buffer.from(html, 'utf8'));
+      return;
+    }
     res.writeHead(200, {
       'Content-Type': MIME[ext] || 'application/octet-stream',
       'Cache-Control': 'no-store',
@@ -65,26 +124,8 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`[dev-server] serving ${ROOT} at http://localhost:${PORT}`);
-});
-
-// 端口被占用时的可操作报错：解析出占用进程 PID/名字，给出可直接复制的 taskkill 命令。
-// 典型场景：上一次 npm run dev 被中断，dev server 进程残留，端口仍被 LISTENING。
-server.on('error', (err) => {
-  if (err && err.code === 'EADDRINUSE') {
-    const owner = findPortOwner(PORT);
-    console.error(`[dev-server] 端口 ${PORT} 已被占用${owner ? `（PID ${owner.pid}：${owner.name}）` : ''}`);
-    console.error('[dev-server] 这通常是上一次 dev 退出后遗留的进程，请先执行：');
-    if (owner) console.error(`[dev-server]   taskkill /F /PID ${owner.pid}`);
-    console.error('[dev-server] 然后重新运行 npm run dev。');
-  } else {
-    console.error('[dev-server] 启动失败：', err && err.message);
-  }
-  process.exit(1);
-});
-
-function findPortOwner(port) {
+// 端口自愈：残留旧 dev-server 占住 1420 时自动清理并重试，避免静默连旧代码
+function getPortOwnerCmd(port) {
   try {
     const net = spawnSync('netstat', ['-ano'], { encoding: 'utf8' }).stdout || '';
     const line = net.split(/\r?\n/).find((l) => l.includes(`:${port}`) && l.includes('LISTENING'));
@@ -92,10 +133,37 @@ function findPortOwner(port) {
     const pid = line.trim().split(/\s+/).pop();
     if (!pid || !/^\d+$/.test(pid)) return null;
     const tl = spawnSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8' }).stdout || '';
-    // CSV 列序：Image Name, PID, Session Name, Session#, Mem Usage → 名字在第 0 列
     const name = (tl.split(',')[0] || '').replace(/^"|"$/g, '') || 'unknown';
-    return { pid, name };
+    const wmic = spawnSync('wmic', ['process', 'where', `ProcessId=${pid}`, 'get', 'CommandLine', '/VALUE'], { encoding: 'utf8' }).stdout || '';
+    const cmd = (wmic.split('CommandLine=')[1] || '').trim();
+    return { pid, name, cmd };
   } catch (_) {
     return null;
   }
 }
+
+let listenRetries = 0;
+function start() {
+  server.listen(PORT, () => {
+    console.log(`[dev-server] serving ${ROOT} at http://localhost:${PORT}  (LiveReload: SSE ${LIVERELOAD_PATH})`);
+  });
+}
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE' && listenRetries < 1) {
+    const owner = getPortOwnerCmd(PORT);
+    if (owner && /dev-server\.mjs/.test(owner.cmd || '')) {
+      listenRetries++;
+      console.error(`[dev-server] 端口 ${PORT} 被残留的旧 dev-server 占用（PID ${owner.pid}），自动清理后重试...`);
+      spawnSync('taskkill', ['/F', '/PID', String(owner.pid)], { stdio: 'ignore' });
+      setTimeout(start, 1000);
+    } else {
+      console.error(`[dev-server] 端口 ${PORT} 被占用（${owner ? owner.name + ' PID ' + owner.pid : 'unknown'}），且非本 dev-server，无法自动清理。`);
+      console.error(`[dev-server] 请手动结束占用进程后重试：` + (owner ? ` taskkill /F /PID ${owner.pid}` : ''));
+      process.exit(1);
+    }
+  } else {
+    console.error('[dev-server] 启动失败：', err && err.message);
+    process.exit(1);
+  }
+});
+start();
