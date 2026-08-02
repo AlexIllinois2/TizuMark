@@ -1678,7 +1678,20 @@ body.is-resizing .side-btn {
 :where(.preview-content) ol ol ol ol { list-style-type: circled-decimal; }
 
 /* Task list items */
-.preview-content ul:has(input[type="checkbox"]) { list-style: none; padding-left: 0; }
+.preview-content ul:has(input[type="checkbox"]),
+.preview-content ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+/* 混合列表：任务列表后未空行时 remark-gfm 会把普通项也塞进同一个 <ul class="contains-task-list">，
+   导致普通项失去 marker。给这些非 task-list-item 的 li 单独恢复 disc，避免黑块/黑点丢失。 */
+.preview-content ul:has(input[type="checkbox"]) > li:not(.task-list-item),
+.preview-content ul.contains-task-list > li:not(.task-list-item) {
+  list-style: disc;
+  padding-left: 24px;
+}
+
 .preview-content li input[type="checkbox"] {
   -webkit-appearance: none;
   appearance: none;

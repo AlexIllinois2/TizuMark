@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', 'src');
@@ -47,14 +48,59 @@ function broadcastReload() {
     try { res.write('data: reload\n\n'); } catch { /* 已断开，下次清理 */ }
   }
 }
-function scheduleReload() {
+
+// 渲染器是预打包 bundle（src/lib/unified-bundle.js），dev/webview 实际加载的是它，
+// 不是 src/unified-renderer.js 源码。因此源码改动后必须「重新打包」才能让热加载生效——
+// 否则刷新后还是旧 bundle（这正是之前「改渲染器不动」的根因）。这里在 watcher 里
+// 自动重打包，开发期改源码即热更新，无需手动 npm run build:renderer。
+const RENDERER_ENTRY = path.join(ROOT, 'unified-renderer.js');
+const BUNDLE_OUT = path.join(ROOT, 'lib', 'unified-bundle.js');
+const isRendererSource = (f) => /[\\/]unified-renderer\.js$/.test(f);
+const isBundle = (f) => /[\\/]unified-bundle\.js$/.test(f);
+
+async function rebuildRendererBundle(reason) {
+  try {
+    await build({
+      entryPoints: [RENDERER_ENTRY],
+      outfile: BUNDLE_OUT,
+      bundle: true,
+      format: 'iife',
+      globalName: 'UnifiedRenderer',
+      platform: 'browser',
+      target: ['es2020'],
+      legalComments: 'none',
+      logLevel: 'silent',
+    });
+    console.log('[dev-server] 渲染器已重打包（' + reason + '）→ 即将热更新');
+  } catch (e) {
+    console.error('[dev-server] 渲染器打包失败：', e && e.message);
+  }
+}
+
+let pendingExtra = null;
+function scheduleReload(extra) {
+  if (extra) pendingExtra = extra;
   if (reloadTimer) return; // 合并编辑器连写
-  reloadTimer = setTimeout(() => { reloadTimer = null; broadcastReload(); }, 60);
+  reloadTimer = setTimeout(async () => {
+    reloadTimer = null;
+    if (pendingExtra) {
+      try { await pendingExtra(); } catch (_) { /* 失败已记录，仍刷新以免卡死 */ }
+      pendingExtra = null;
+    }
+    broadcastReload();
+  }, 60);
 }
 try {
   fs.watch(ROOT, { recursive: true }, (event, filename) => {
-    if (filename && /(^|[\\/])\.|~$/.test(filename)) return; // 跳过临时文件
-    scheduleReload();
+    if (!filename) return;
+    if (/(^|[\\/])\.|~$/.test(filename)) return; // 跳过临时文件
+    if (isBundle(filename)) return; // 忽略我们自己产出的 bundle，避免重复刷新
+    if (isRendererSource(filename)) {
+      // 渲染器源码改动：先重新打包 bundle，再热加载 webview
+      scheduleReload(() => rebuildRendererBundle(filename));
+    } else {
+      scheduleReload();
+    }
   });
 } catch (e) {
   console.error('[dev-server] 文件监听失败（热加载将不可用）：', e && e.message);

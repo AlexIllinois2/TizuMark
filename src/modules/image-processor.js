@@ -35,6 +35,11 @@ function fail(img) {
 // 已可显示的内联 / 远程资源，直接跳过（与原 app.js 一致）
 const SKIP_PREFIXES = ['data:', 'http://', 'https://', 'blob:'];
 
+// 1×1 透明像素：在异步读取磁盘图片之前，先同步把 img.src 替换为此占位，
+// 阻止浏览器对相对路径（如 screenshots/*.png）发起 HTTP 请求到 dev server，
+// 避免 dev 模式下大量 404 噪音（dev-server 仅 serve src/，不含 screenshots/）。
+const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
 async function processImages(preview, deps) {
   const {
     activeTab,
@@ -69,6 +74,11 @@ async function processImages(preview, deps) {
     if (!src) return;
     // 已可显示的内联 / 远程资源直接跳过
     if (SKIP_PREFIXES.some((p) => src.startsWith(p))) return;
+
+    // ★ 同步占位：在任何 await 之前立即替换 src，阻止浏览器对原始相对/绝对路径
+    // 发起 HTTP 请求（dev 模式下 dev-server 仅 serve src/，screenshots/ 等会 404；
+    // file:// 则被 CSP 拦截）。原始值已存入局部变量 src / rawSrc，后续不受影响。
+    img.src = TRANSPARENT_PIXEL;
 
     // 代际检查 #3（重新捕获）：每个 img 处理前再快照，避免长列表下前序 IO 期间已被重渲染。
     const gen = getRenderGeneration();
@@ -139,9 +149,9 @@ async function processImages(preview, deps) {
 // 浏览器：作为独立 <script> 加载，挂到全局 ImageProcessor（与 CodeBlock 一致）。
 // 注意：模块加载顺序无关，仅依赖注入的 deps，不读任何全局状态。
 if (typeof window !== 'undefined' && typeof module === 'undefined') {
-  window.ImageProcessor = { processImages, mimeOf, fail };
+  window.ImageProcessor = { processImages, mimeOf, fail, TRANSPARENT_PIXEL };
 }
 // Node（测试 / 构建）：CommonJS 导出
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { processImages, mimeOf, fail };
+  module.exports = { processImages, mimeOf, fail, TRANSPARENT_PIXEL };
 }
