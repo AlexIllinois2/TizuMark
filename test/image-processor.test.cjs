@@ -5,7 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { JSDOM } = require('jsdom');
 
-const { processImages } = require('../src/modules/image-processor.js');
+const { processImages, TRANSPARENT_PIXEL } = require('../src/modules/image-processor.js');
 
 // 构造一个带 #preview 容器的 jsdom window；URL.createObjectURL 在 Node 不存在，
 // 这里只测绝对/相对/isBundled 三路径（均不进入「无 filePath 的 fetch 分支」），
@@ -110,8 +110,9 @@ test('代际过期：IO 进行中代际变化，提前返回不写 DOM', async (
     return 'XXXX';
   };
   await processImages(preview, deps);
-  // 写完前 gen 已不等于快照 → 提前 return，img.src 应保持原始相对路径未被改写
-  assert.equal(preview.querySelector('img').getAttribute('src'), 'pic.png', '代际过期应提前返回，不写 DOM');
+  // 写完前 gen 已不等于快照 → 提前 return；src 已被同步占位为透明像素（非过期 data URI），
+  // 新一次渲染会替换 innerHTML，无视觉影响。关键是「不写入过期的 data URI」。
+  assert.equal(preview.querySelector('img').getAttribute('src'), TRANSPARENT_PIXEL, '代际过期应提前返回，不写入过期 data URI');
   assert.equal(preview.querySelector('img').getAttribute('alt'), 'p', '不应被标记加载失败');
 });
 

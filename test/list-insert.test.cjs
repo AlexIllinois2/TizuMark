@@ -8,9 +8,12 @@
 //   2. 列表嵌套/代码块边界用项目真实解析器 remark-gfm 断言。
 //   3. CSS / HTML / 翻译接线用静态 + jsdom 解析断言。
 //
-// CommonMark 已知限制（务必保留、不要“修”）：有序列表 marker `1. ` 占 3 列，
-// 子列表缩进须 ≥3 空格；tabSize=8 时缩进过深会被解析为代码块而非子列表（属规范，非缺陷）。
-// 因此本套测试把“8 空格不嵌套”也当作期望行为锁定，防止未来误改。
+// CommonMark 原生语义：有序列表 marker `1. ` 占 3 列，子列表缩进须 ≥3 空格；
+// tabSize=8 时缩进过深会被解析为代码块而非子列表（属规范，非缺陷）。
+// 注：renderMarkdown 已内置 normalizeListIndentation，把「每 tabSize 空格升一级」的
+// 直观模型转换为合规列对齐，并对“非 1 起始的有序嵌套项”前插空行——用户在编辑器里
+// 按 4 空格步长书写即可正确嵌套，无需手动对齐列或补空行。本套测试仅锁定解析器底层语义，
+// 不用于断言归一化后的最终呈现。
 
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
@@ -136,6 +139,16 @@ test('B3 无序三级 ul ul ul：list-style-type: square', async () => {
 
 test('B4 无序四级 ul ul ul ul：回到 disc（循环）', async () => {
   assert.ok(/:where\(\.preview-content\)\s+ul\s+ul\s+ul\s+ul\s*\{\s*list-style-type:\s*disc;/.test(CSS));
+});
+
+// 回归：任务列表后未空行时，remark-gfm 会把后续普通项也放进同一个 contains-task-list，
+// 导致普通项失去 marker。CSS 需给 li:not(.task-list-item) 恢复 disc。
+test('B5 混合任务/普通列表：普通项恢复 disc marker', async () => {
+  assert.ok(CSS.includes('li:not(.task-list-item)'), 'CSS 应含 li:not(.task-list-item) 选择器');
+  assert.ok(/\.preview-content\s+ul\.contains-task-list\s*>\s*li:not\(\.task-list-item\)/.test(CSS),
+    '普通项选择器应针对 contains-task-list');
+  assert.ok(/li:not\(\.task-list-item\)\s*\{[^}]*list-style:\s*disc;/.test(CSS),
+    '普通项应恢复 list-style: disc');
 });
 
 // ============================================================
@@ -303,6 +316,36 @@ test('F1~F5 列表嵌套由真实解析器断言（4/2 空格与 8 空格边界�
   assert.strictEqual(nested('1. a\n' + sp(2) + '1. b\n1. c'), false, 'OL 2 空格不嵌套（需 ≥3）');
   // 8 空格超过 marker 上限，CommonMark 解析为代码块而非子列表 —— 属规范，非缺陷
   assert.strictEqual(nested('1. a\n' + sp(8) + '1. b\n1. c'), false, 'OL 8 空格不嵌套（CommonMark 限制）');
+});
+
+test('F6 有序列表三级嵌套缩进阈值（CommonMark 列对齐规则）', async () => {
+  const { unified } = await import('unified');
+  const remarkParse = (await import('remark-parse')).default;
+  const remarkGfm = (await import('remark-gfm')).default;
+  const processor = unified().use(remarkParse).use(remarkGfm);
+
+  // 辅助：分析第二级第二个 listItem（5.）下的内容形态
+  const classify = (md) => {
+    const tree = processor.parse(md);
+    const l2 = tree.children[0]?.children[2]?.children?.find((c) => c.type === 'list');
+    if (!l2) return 'none';
+    const item5 = l2.children[1];
+    if (!item5) return 'none';
+    const childList = item5.children.find((c) => c.type === 'list');
+    const childCode = item5.children.find((c) => c.type === 'code');
+    if (childList) return 'list';
+    if (childCode) return 'code';
+    return 'none';
+  };
+
+  const sp = (n) => ' '.repeat(n);
+  const md = (n6) => '1. 345678\n2. 5678\n3. 45678\n\n' + sp(3) + '4. 4567\n' + sp(3) + '5. 3456\n\n' + sp(n6) + '6. 4567';
+
+  // 第 2 级 marker 在列 3，内容从列 6 开始；第 3 级 marker 必须 ≥ 列 6 才算嵌套
+  assert.strictEqual(classify(md(5)), 'none', '5 空格：第 3 级仍与 4/5 同级');
+  assert.strictEqual(classify(md(6)), 'list', '6 空格：第 3 级正确嵌套在 5 下');
+  assert.strictEqual(classify(md(9)), 'list', '9 空格：第 3 级仍正确嵌套');
+  assert.strictEqual(classify(md(10)), 'code', '10 空格：过深，被解析为代码块');
 });
 
 // ============================================================

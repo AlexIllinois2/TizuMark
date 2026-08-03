@@ -1229,15 +1229,124 @@ function unifiedToHtml(md) {
   return sanitizeHTML(html);
 }
 
+// ============================================================
+// 列表缩进归一化（让「每 tabSize 空格 / 1 个 Tab = 缩进一级」的直观模型成立）
+// ------------------------------------------------------------
+// CommonMark 的有序列表缩进是「按 marker 宽度对齐的列」模型，而不是「固定步长」模型：
+//   - 无序列表 marker 占 2 列（- / * / + 后跟空格），子列表 marker 落在第 2 列即可，
+//     所以「每 4 空格升一级」天然成立；
+//   - 有序列表 marker 占 3 列（如 "1. "），子列表 marker 需落在父项文本起始列（第 3 列），
+//     因此第二级是 3 空格、第三级是 6 空格……与「4 空格升一级」错位，
+//     且缩进过头（≥ 父项文本列 + 4）会被 CommonMark 当成代码块。
+// 本项目 Tab 默认 4 空格，用户一直按「4 空格升一级」书写，于是有序列表深层嵌套会乱套、
+// 并无故变成代码块。
+//
+// 此函数把源码的视觉缩进（按 tabSize 折算成「层级」）rewrite 成 CommonMark 要求的精确列，
+// 使有序列表也能像无序列表一样按固定步长缩进，并消除过缩进导致的代码块。
+// 处理时跳过围栏代码块（``` / ~~~）内部，避免改动其中内容。
+// 对已是 CommonMark 合规缩进的文档结果幂等。
+// ============================================================
+function normalizeListIndentation(content, tabSize) {
+  const ts = tabSize && tabSize > 0 ? tabSize : 4;
+  const lines = content.split('\n');
+  const out = [];
+  // lineMap[i] = 规范后第 i+1 行对应的「原始源码行号（1-based）」。
+  // 渲染后所有 data-source-line 都基于此映射还原，使点击勾选框能正确回写源码——
+  // 即便嵌套有序非 1 项前插入了空行使行数变化，行号也不会整体偏移。
+  const lineMap = [];
+  const emit = (text, origLine) => { out.push(text); lineMap.push(origLine); };
+  // 栈：每个打开的列表项 { indent: 视觉缩进（空格数）, contentColumn: 文本起始列, delta }
+  const stack = [];
+  // 匹配列表项起始：前导空白 + 无序(-*+/+) 或 有序(\d+[.)]) + 分隔空白
+  const itemRe = /^(\s*)(?:([-*+])|(\d+[.)]))(\s+)/;
+  let inFence = false;
+  let fenceMarker = '';
+  let prevEmittedDepth = 0; // 上一个已输出列表项的嵌套深度（0 = 无）
+
+  const expand = (s) => s.replace(/\t/g, ' '.repeat(ts));
+
+  let origLine = 1; // 当前输入行对应的原始行号（1-based）
+  for (const line of lines) {
+    // —— 围栏代码块：进入/离开均跳过归一化 ——
+    const fenceMatch = line.match(/^(\s*)(`{3,}|~{3,})/);
+    if (fenceMatch) {
+      const marker = fenceMatch[2][0];
+      const len = fenceMatch[2].length;
+      if (!inFence) {
+        inFence = true;
+        fenceMarker = marker + len;
+      } else if (marker === fenceMarker[0] && len >= fenceMarker[1]) {
+        inFence = false;
+        fenceMarker = '';
+      }
+      emit(line, origLine++);
+      continue;
+    }
+    if (inFence) {
+      emit(line, origLine++);
+      continue;
+    }
+
+    const m = line.match(itemRe);
+    if (!m) {
+      // 非列表行：按当前最深层列表项的 delta 平移前导空白（保持与 marker 的相对位置），
+      // 以兼容多行列表项 / 代码块等延续行；无列表上下文则原样保留。
+      if (stack.length) {
+        const delta = stack[stack.length - 1].delta;
+        if (delta !== 0) {
+          const lead = line.match(/^ */)[0];
+          const rest = line.slice(lead.length);
+          if (lead === expand(lead)) {
+            emit(' '.repeat(Math.max(0, lead.length + delta)) + rest, origLine++);
+            continue;
+          }
+        }
+      }
+      emit(line, origLine++);
+      continue;
+    }
+
+    // —— 列表项行 ——
+    const leading = m[1];
+    const indent = expand(leading).length;
+    const isOrdered = m[3] !== undefined;
+    const markerText = isOrdered ? m[3] : m[2];
+    const startNum = isOrdered ? parseInt(markerText, 10) : 1;
+    const markerWidth = markerText.length + 1; // +1 = 分隔空格
+    // 弹出同级或更浅的项
+    while (stack.length && indent <= stack[stack.length - 1].indent) stack.pop();
+    const contentColumn = stack.length ? stack[stack.length - 1].contentColumn : 0;
+    const myDepth = stack.length + 1;
+    // CommonMark：有序列表项若起始数字 ≠ 1，且紧跟在父项内容之后（无空行），
+    // 会被当成父项段落的“惰性延续”而非嵌套列表。此处对其前插空行，使其被正确识别为
+    // 嵌套列表（保留原起始数字，如 4/5/6 不会被重排成 1）。仅在「刚进入更深一层」时插入，
+    // 避免兄弟项之间重复空行。插入的空行不改变 lineMap 的正确性（映射到当前项原行）。
+    if (isOrdered && startNum !== 1 && myDepth > prevEmittedDepth && out.length && out[out.length - 1].trim() !== '') {
+      emit('', origLine); // 空行映射到当前项原行（空行本身不产生带位置的节点）
+    }
+    const delta = contentColumn - indent;
+    emit(' '.repeat(contentColumn) + line.slice(leading.length), origLine++);
+    stack.push({ indent, contentColumn: contentColumn + markerWidth, delta });
+    prevEmittedDepth = myDepth;
+  }
+  return { text: out.join('\n'), lineMap };
+}
+
 function renderMarkdown(content, options) {
   const opts = options || {};
   const softBreaks = opts.softBreaks === true;
-
   // 0. 统一换行符为 LF，避免 CRLF 的 \r 污染后续行数统计
   content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
   // 0. Convert GitHub-style math fences (```math/```latex/```tex) → $$...$$ blocks
   content = convertMathFences(content);
+
+  // 0.5 列表缩进归一化：把「每 tabSize 空格升一级」模型转换为 CommonMark 列对齐模型，
+  // 让有序列表深层嵌套按用户预期工作，并消除过缩进产生的代码块。
+  // 同时返回 lineMap（规范后行 → 原始源码行），用于下方还原 data-source-line。
+  const norm = normalizeListIndentation(content, opts.tabSize);
+  content = norm.text;
+  const listLineMap = norm.lineMap;
 
   // 1. Extract abbreviations
   const abbrResult = extractAbbreviations(content);
@@ -1313,6 +1422,16 @@ function renderMarkdown(content, options) {
 
   // 12. Embed abbreviation data
   html = embedAbbrData(html, abbreviations);
+
+  // 12.5 还原 data-source-line：把「规范后行号」映射回原始源码行号（1-based），
+  // 确保点击预览中任务列表勾选框时，回写的是正确源码行。否则嵌套有序非 1 项前插入的
+  // 空行会让行号整体偏移，导致勾选框修改了错误的 `- [ ]` 行（任务列表勾选不同步的根因）。
+  if (listLineMap && listLineMap.length) {
+    html = html.replace(/data-source-line="(\d+)"/g, (m, n) => {
+      const orig = listLineMap[parseInt(n, 10) - 1];
+      return orig ? `data-source-line="${orig}"` : m;
+    });
+  }
 
   return html;
 }
