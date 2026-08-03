@@ -72,7 +72,7 @@ jobs:
           releaseName: 'Dev2 Linux Build #${{ github.run_number }}'
           releaseBody: |
             自动构建产物，来自 dev2 分支（commit ${{ github.sha }}）。
-          releaseDraft: true   # 草稿模式，避免误发布正式版本
+          releaseDraft: false   # 草稿模式，避免误发布正式版本
           prerelease: true
           args: ''             # 默认即可，Linux x64 不需要额外 target 参数
 
