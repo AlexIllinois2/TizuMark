@@ -13,9 +13,25 @@
  *   （也可手动：NODE_PATH=<managed node_modules> node test/browser/outline-jump.test.cjs，需 dev-server 在 1420）
  */
 'use strict';
-const puppeteer = require('puppeteer-core');
+const fs = require('fs');
 
-const CHROME_PATH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+let puppeteer;
+try {
+  puppeteer = require('puppeteer-core');
+} catch (e) {
+  console.log(`  ⏭️  SKIP  puppeteer-core 不可用 (${e.message})，跳过浏览器测试`);
+  process.exit(0);
+}
+
+function resolveChromePath() {
+  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) return process.env.CHROME_PATH;
+  // Linux 常见路径
+  const linuxPaths = ['/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/usr/bin/chromium'];
+  for (const p of linuxPaths) { if (fs.existsSync(p)) return p; }
+  // Windows 回退（本地开发）
+  return 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+}
+const CHROME_PATH = resolveChromePath();
 const URL = 'http://localhost:1420/';
 
 // 足够长的多级标题文档，让标题能分布到不同滚动位置
@@ -99,6 +115,11 @@ function assert(name, cond, detail) {
 }
 
 (async () => {
+  // 若 Chrome 不可用，优雅跳过否则 CI 上报 0/0 失败
+  if (!fs.existsSync(CHROME_PATH)) {
+    console.log(`  ⏭️  SKIP  Chrome 未找到 (${CHROME_PATH})，跳过浏览器测试`);
+    process.exit(0);
+  }
   let pass = 0, fail = 0;
   const bump = (ok) => { ok ? pass++ : fail++; };
 

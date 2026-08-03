@@ -16,6 +16,7 @@
 
 const { spawnSync, spawn } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const http = require('http');
 
@@ -134,8 +135,20 @@ function isBrowserTest(file) {
 }
 
 function resolvePuppeteerModules() {
-  // 优先级：显式 env > 当前 NODE_PATH > 本机固定路径
-  return process.env.PUPPETEER_MODULES || process.env.NODE_PATH || 'C:/Users/admin/node_modules';
+  // 优先级：显式 env > 当前 NODE_PATH
+  if (process.env.PUPPETEER_MODULES) return process.env.PUPPETEER_MODULES;
+  if (process.env.NODE_PATH) return process.env.NODE_PATH;
+  // Linux 常见全局 node_modules 路径
+  const linuxPaths = [
+    '/usr/lib/node_modules',
+    '/usr/local/lib/node_modules',
+    path.join(os.homedir(), 'node_modules'),
+  ];
+  for (const p of linuxPaths) {
+    if (fs.existsSync(path.join(p, 'puppeteer-core'))) return p;
+  }
+  // Windows 回退（本地开发）
+  return 'C:/Users/admin/node_modules';
 }
 
 function waitForDevServer(timeoutMs) {
