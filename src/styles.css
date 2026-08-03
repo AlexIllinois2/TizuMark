@@ -1612,6 +1612,14 @@ body.is-resizing .side-btn {
   overflow-y: auto;
 }
 
+/* 代码块 hljs 默认主题里 .hljs 元素带 background:#ffffff，pre 内会形成"内白外灰"
+   双层。统一让 .hljs 透明，背景完全由 pre 的 var(--code-bg) 提供，软件与导出 PDF 一致。 */
+.preview-content pre code.hljs,
+.preview-content pre .hljs {
+  background: transparent !important;
+  padding: 12px 16px !important;
+}
+
 /* 代码块行号 & 自动换行 */
 .code-line {
   display: flex;
@@ -2800,6 +2808,27 @@ body.is-resizing .side-btn {
   margin: 0;
 }
 
+/* 确认框内的醒目警示块（导出 PDF 的耗时/损坏提示等）
+   默认 hidden，需调用方在 showConfirmDialog({ warning: '...' }) 显式打开。
+   用 --color-danger + --alert-caution-rgb 主题变量，深色/护眼主题跟随。 */
+.dialog-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 14px 0;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--color-danger);
+  background: rgba(var(--alert-caution-rgb), 0.10);
+  border: 1px solid rgba(var(--alert-caution-rgb), 0.35);
+  border-left: 4px solid var(--color-danger);
+  border-radius: 6px;
+}
+.dialog-warning.hidden { display: none; }
+.dialog-warning-icon { flex: none; font-size: 16px; line-height: 1.4; }
+
 .save-dialog {
   max-width: 380px;
 }
@@ -3727,6 +3756,23 @@ body.is-resizing .side-btn {
 .ecb-reload:hover,
 .ecb-reload-all:hover {
   background: rgba(74, 144, 217, 0.08);
+}
+.fatal-error-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100000;
+  background: #b00020;
+  color: #fff;
+  font: 12px/1.5 system-ui, -apple-system, sans-serif;
+  padding: 8px 14px;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.25);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.fatal-error-bar.hidden {
+  display: none;
 }
 .loading-overlay.hidden {
   display: none;

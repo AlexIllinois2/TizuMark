@@ -336,6 +336,13 @@
       </div>
     </div>
 
+    <!-- 后端健康横幅：dev 模式下 Rust/浏览器模式后端不可用时显示（tauri-api 延迟求值防白屏的副作用——
+         页面常驻显示但没有任何后端，用户无法区分。此处为启动 + 30s 心跳探测失败时的可见化提示。
+         样式复用兜底报错条 .fatal-error-bar（fixed 底部红条） -->
+    <div id="backend-banner" class="fatal-error-bar hidden" role="alert" aria-live="assertive">
+      <span id="backend-banner-text"></span>
+    </div>
+
     <div id="find-panel" class="find-panel hidden">
       <div class="find-row">
         <input type="text" id="find-input" placeholder="查找..." class="find-input">
@@ -681,6 +688,10 @@
         <h2 id="confirm-dialog-title">确认</h2>
       </div>
       <div class="dialog-content">
+        <div id="confirm-dialog-warning" class="dialog-warning hidden">
+          <span class="dialog-warning-icon" aria-hidden="true">⚠</span>
+          <span id="confirm-dialog-warning-text"></span>
+        </div>
         <p id="confirm-dialog-message" style="white-space: pre-line;">确定要恢复默认设置吗？</p>
       </div>
       <div class="dialog-footer">

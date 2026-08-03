@@ -97,6 +97,18 @@ test('缓存命中：imageCache 已有条目时零重复 IO', async () => {
   assert.equal(preview.querySelector('img').getAttribute('src'), 'BLOB:data:image/png;base64,CACHED');
 });
 
+test('打包文档（isBundled 无 filePath）：相对图片走 read_bundled_image_as_base64，而非页面 fetch', async () => {
+  const preview = makePreview('<img src="assets/icon.png" alt="i">');
+  const { calls, deps } = makeDeps({ activeTab: { isBundled: true } });
+  await processImages(preview, deps);
+  const fetchCalls = calls.filter((c) => c.cmd === 'fetch');
+  const bundledCalls = calls.filter((c) => c.cmd === 'bundled');
+  assert.equal(fetchCalls.length, 0, '无 filePath 的打包文档不应做页面相对 fetch（会 404）');
+  assert.equal(bundledCalls.length, 1, '应直接走打包资源定位命令');
+  assert.equal(bundledCalls[0].args.filename, 'assets/icon.png', 'filename 用原始相对路径，由 Rust dev/prod 定位');
+  assert.match(preview.querySelector('img').getAttribute('src'), /BLOB:data:image\/png;base64/, '应写回可显示 data URI');
+});
+
 test('代际过期：IO 进行中代际变化，提前返回不写 DOM', async () => {
   const preview = makePreview('<img src="pic.png" alt="p">');
   const { state, deps } = makeDeps({

@@ -530,8 +530,27 @@ fn watch_folder(path: String, app: tauri::AppHandle) -> Result<(), String> {
     let app_handle = app.clone();
     let mut watcher = RecommendedWatcher::new(
         move |res: notify::Result<NotifyEvent>| {
-            if res.is_ok() {
-                let _ = app_handle.emit("folder-changed", ());
+            // 回调在 notify 内部线程执行。必须保持【无锁、无状态】：panic 被 catch_unwind
+            // 捕获后该线程继续存活、监听不中断；但捕获 ≠ 状态一致，任何带锁/中间态的逻辑
+            // 都不要放这里（否则 panic 后可能残留锁导致死锁）。
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                if res.is_ok() {
+                    let _ = app_handle.emit("folder-changed", ());
+                }
+            }));
+            if let Err(payload) = result {
+                // 通知前端：监听异常可见化（弹「重新监听 / 继续使用」），panic 详情随事件带上。
+                // 注意：catch_unwind 捕获的 panic 同样会先触发 panic hook，此处 emit 是给前端的
+                // 第二通道（若 watcher 线程自身死掉，emit 发不出去——前端只能靠用户感知树不刷新）。
+                let msg = payload
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "unknown panic".to_string());
+                let _ = app_handle.emit(
+                    "folder-watch-error",
+                    serde_json::json!({ "message": msg }),
+                );
             }
         },
         NotifyConfig::default(),

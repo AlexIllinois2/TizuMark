@@ -281,6 +281,11 @@ const I18N = {
     exportError: '导出失败',
     printTip1: '可在「更多设置」中「取消勾选"页眉和页脚"」，去除 PDF 顶部的日期、标题等多余信息。',
     printTip2: '如果代码高亮或背景色显示异常，请在「更多设置」中「勾选"背景图形"」。',
+    pdfBigFileWarn: '⚠ 文件较大时生成 PDF 耗时较长，请耐心等待；如果未生成完就打开 PDF，会提示文件损坏',
+    backendDown: '⚠ 开发环境：后端已断开，文件功能不可用。请重启 npm run dev。',
+    folderWatchErrorTitle: '文件夹监听异常',
+    folderWatchErrorMessage: '目录树可能不会自动刷新。点击「确认」重新监听，或点击「取消」继续使用。',
+    folderWatchRecovered: '已重新监听文件夹',
     editor: '编辑器',
     previewSection: '预览',
     paneEdit: '编辑',
@@ -625,6 +630,11 @@ const I18N = {
     exportError: 'Export failed',
     printTip1: 'Go to "More settings" and uncheck "Headers and footers" to remove date, title and other extra info from the PDF.',
     printTip2: 'If code highlighting or background colors look wrong, go to "More settings" and check "Background graphics".',
+    pdfBigFileWarn: '⚠ Generating a large PDF takes time — please be patient. Opening the PDF before it finishes will report file corruption.',
+    backendDown: '⚠ Dev backend disconnected — file features unavailable. Restart with npm run dev.',
+    folderWatchErrorTitle: 'Folder watcher error',
+    folderWatchErrorMessage: 'The folder tree may not auto-refresh. Click "OK" to re-watch the folder, or "Cancel" to keep using.',
+    folderWatchRecovered: 'Folder watcher restarted',
     editor: 'Editor',
     previewSection: 'Preview',
     paneEdit: 'Edit',
@@ -836,6 +846,7 @@ class MarkdownEditor {
     this.updateWordCount();
     setTimeout(() => this.checkUpdate(false), 5000);
     this.updateSideButtons();
+    this.initBackendHealth();
     this.applyLanguage();
   }
 
@@ -4686,7 +4697,24 @@ class MarkdownEditor {
             // 直接读取文件（不要 fetch webview 源，否则会被 SPA 回退返回 index.html）。
             const tab = this.activeTab;
             if (tab && tab.filePath) {
-              const targetPath = resolveDocPath(tab.filePath, this.normalizeLinkHref(href));
+              const normHref = this.normalizeLinkHref(href);
+              // 简单文件名链接：可能是 bundled 资源（demo.md / guide.md 等，dev 项目根 /
+              // prod 资源目录）。先 read_bundled_file 探针——命中走 _openBundledFile
+              // （isBundled=true，否则 processImages 不启用 read_bundled_image_as_base64
+              // 回退，demo.md 内相对图片会显示失败框）；未命中（用户自己的笔记）再走下方
+              // 本地路径，行为不变。
+              if (!/[\/\\]/.test(normHref)) {
+                try {
+                  const probe = await TauriApi.readBundledFile({ filename: normHref });
+                  const probeContent = probe && typeof probe === 'object' ? probe.content : probe;
+                  if (probeContent && !probeContent.trim().startsWith('<!DOCTYPE') && !probeContent.trim().startsWith('<html')) {
+                    const probePath = probe && typeof probe === 'object' ? probe.path : normHref;
+                    await this._openBundledFile(href, probeContent, probePath);
+                    return;
+                  }
+                } catch (_) { /* 非 bundled 资源，走下方本地路径 */ }
+              }
+              const targetPath = resolveDocPath(tab.filePath, normHref);
               const existingIndex = this.tabs.findIndex(t => t.filePath === targetPath);
               if (existingIndex !== -1) {
                 this.switchTab(existingIndex);
@@ -4979,9 +5007,9 @@ class MarkdownEditor {
     });
   }
 
-  showConfirmDialog(title, message, action = null) {
+  showConfirmDialog(title, message, action = null, warning = null) {
     return Dialogs.showConfirmDialog({
-      title, message, action,
+      title, message, action, warning,
       t: (k, p) => this.t(k, p),
       showToast: (msg, type) => this.showToast(msg, type),
       doc: document,
@@ -5544,6 +5572,27 @@ class MarkdownEditor {
     catch (e) { console.warn('[folder-watch] failed:', e); }
   }
 
+  // 文件夹监听异常处理：弹确认框提供「重新监听（确认）/ 继续使用（取消）」。
+  // 手动触发所以无自动重挂的风暴风险；_folderWatchDialogOpen 防重入（panic 反复时
+  // 避免弹窗互相覆盖、监听叠加）
+  async _handleFolderWatchError(event) {
+    if (this._folderWatchDialogOpen) return;
+    this._folderWatchDialogOpen = true;
+    try {
+      const detail = event && event.payload && event.payload.message
+        ? '：' + event.payload.message
+        : '';
+      const ok = await this.showConfirmDialog(
+        this.t('folderWatchErrorTitle'),
+        this.t('folderWatchErrorMessage') + detail,
+        async () => { await this.startFolderWatch(); },
+      );
+      if (ok) this.showToast(this.t('folderWatchRecovered'), 'success');
+    } finally {
+      this._folderWatchDialogOpen = false;
+    }
+  }
+
   // 收到 folder-changed 后防抖重建文件树（保留已展开目录），避免单次操作触发多次重渲染
   _scheduleTreeRefresh() {
     if (this._treeRefreshTimer) clearTimeout(this._treeRefreshTimer);
@@ -5715,6 +5764,90 @@ class MarkdownEditor {
     }
   }
 
+  // 导出时把预览里的图片全部内联为 base64 data URI，使导出文档自包含、不受运行时
+  // blob: 回收 / 源解析影响（同源 srcdoc 打印帧在 PDF 导出、外部打开在 HTML 导出都适用）。
+  // 分支：blob:→fetch 还原；file://→Rust 读盘；相对路径→按文档目录 Rust 读盘；data:/http(s): 保留。
+  async _inlineImagesForExport(clone, filePath) {
+    if (!filePath) return; // 未保存文档：相对路径无法解析，跳过（保留原 src）
+    const dir = filePath.replace(/[/\\][^/\\]*$/, '');
+    const mimeOfExt = (name) => {
+      const ext = String(name).split('.').pop().toLowerCase();
+      if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+      if (ext === 'gif') return 'image/gif';
+      if (ext === 'svg') return 'image/svg+xml';
+      if (ext === 'webp') return 'image/webp';
+      if (ext === 'png') return 'image/png';
+      if (ext === 'bmp') return 'image/bmp';
+      return 'image/png';
+    };
+    const blobToDataUri = (blob) => new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => reject(fr.error || new Error('readAsDataURL failed'));
+      fr.readAsDataURL(blob);
+    });
+    const imgPromises = Array.from(clone.querySelectorAll('img')).map(async (img) => {
+      let src = img.getAttribute('src');
+      if (!src) return;
+      // 已内联（data:）或远程（http(s):）资源直接保留
+      if (src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://')) return;
+      try {
+        let dataUri = null;
+        if (src.startsWith('blob:')) {
+          // 预览里 img.src 已被 processImages 经 getCachedImageURL 缓存成 blob: URL，
+          // 导出时该 blob 可能已被 LRU 回收失效，必须还原为内联 base64。
+          // blob 与主窗口同源，可直接 fetch 还原。
+          const resp = await fetch(src);
+          if (resp.ok) {
+            const blob = await resp.blob();
+            dataUri = await blobToDataUri(blob);
+          }
+        } else if (src.startsWith('file://')) {
+          // file:// 走 Rust 读磁盘（绕过 CSP，与 processImages 一致）
+          const url = src.replace(/^file:\/\//, '');
+          const base64 = await TauriApi.fetchImageAsBase64({ url });
+          dataUri = `data:${mimeOfExt(url)};base64,${base64}`;
+        } else {
+          // 纯相对路径：按当前 .md 所在目录补全
+          let rel = src;
+          if (rel.startsWith('/')) rel = rel.slice(1);
+          const base64 = await TauriApi.fetchImageAsBase64({ url: dir + '/' + rel });
+          dataUri = `data:${mimeOfExt(rel)};base64,${base64}`;
+        }
+        if (dataUri) img.src = dataUri;
+      } catch (e) {
+        // 还原失败不阻断导出：保留原 src，至少用户能手动补
+        console.warn('[export] 图片内联失败，保留原 src:', src, e);
+      }
+    });
+    await Promise.allSettled(imgPromises);
+  }
+
+  // PDF 导出需要完整 styles.css。优先运行时 fetch（原始文本保真），失败则回退读取
+  // 已加载样式表的 CSSOM（自包含、不依赖网络/打包路径），彻底杜绝
+  // 「fetch 失败 → appCSS 空 → 打印样式大面积缺失」的软依赖风险。
+  async _loadStylesheetText(url) {
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const txt = await resp.text();
+        if (txt && txt.trim()) return txt;
+      }
+    } catch (e) { /* fallthrough to CSSOM */ }
+    try {
+      const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+      for (const link of links) {
+        const href = link.getAttribute('href') || '';
+        if (href.indexOf(url) === -1) continue;
+        const sheet = link.sheet;
+        if (!sheet) continue;
+        const rules = Array.from(sheet.cssRules).map((r) => r.cssText).join('\n');
+        if (rules && rules.trim()) return rules;
+      }
+    } catch (e) { /* cross-origin 等忽略 */ }
+    return '';
+  }
+
   async exportHTML() {
     try {
       const path = await dialogSave({
@@ -5738,26 +5871,7 @@ class MarkdownEditor {
       const abbrData = clone.querySelector('#abbr-data');
       if (abbrData) abbrData.remove();
 
-      const filePath = this.activeTab.filePath;
-      if (filePath) {
-        const dir = filePath.replace(/[/\\][^/\\]*$/, '');
-        const imgPromises = Array.from(clone.querySelectorAll('img')).map(async (img) => {
-          let src = img.getAttribute('src');
-          if (!src || src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://') || src.startsWith('file://') || src.startsWith('blob:')) return;
-          if (src.startsWith('/')) src = src.slice(1);
-          try {
-            const base64 = await TauriApi.fetchImageAsBase64({ url: dir + '/' + src });
-            const ext = src.split('.').pop().toLowerCase();
-            let mime = 'image/png';
-            if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
-            else if (ext === 'gif') mime = 'image/gif';
-            else if (ext === 'svg') mime = 'image/svg+xml';
-            else if (ext === 'webp') mime = 'image/webp';
-            img.src = `data:${mime};base64,${base64}`;
-          } catch (e) { /* skip unresolvable images */ }
-        });
-        await Promise.allSettled(imgPromises);
-      }
+      await this._inlineImagesForExport(clone, this.activeTab.filePath);
 
       let katexCSS = '';
       try {
@@ -5796,8 +5910,17 @@ class MarkdownEditor {
     em { font-style: italic; }
     del { text-decoration: line-through; color: #5e5e62; }
     code { padding: 2px 6px; background: #f0efee; border: 1px solid #d4d4d8; border-radius: 4px; font-family: "SF Mono", "Fira Code", monospace; font-size: 0.88em; }
-    pre { padding: 16px; background: #f0efee; border-radius: 6px; overflow-x: auto; margin: 16px 0; max-width: 100%; border: 1px solid #d4d4d8; }
-    pre code { padding: 0; background: none; border: none; font-size: 0.9em; line-height: 1.5; }
+    pre { padding: 16px; background: #f0efee; border-radius: 6px; white-space: pre-wrap; word-wrap: break-word; word-break: break-word; overflow: visible; margin: 16px 0; max-width: 100%; border: 1px solid #d4d4d8; }
+    pre code { padding: 0; background: transparent; border: none; font-size: 0.9em; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; word-break: break-word; }
+    /* 代码块：hljs 主题里 .hljs{background:#fff}（specificity 0,1,0）会盖住上面 pre code(0,0,2) 的 transparent，
+       形成"内白外灰"。用 .hljs 同类选择 + !important 显式压住，让 pre 的灰底透出到 code 上。 */
+    pre code.hljs, pre code .hljs { background: transparent !important; padding: 0; }
+    /* 代码块行结构（code-block.js 输出的 .code-line/.code-line-num/.code-line-text 在导出里也要换行） */
+    .code-scroll { max-height: none; overflow: visible; }
+    .code-line { display: flex; line-height: 1.8; min-width: 0; }
+    .code-line-num { flex-shrink: 0; width: 3em; text-align: right; padding-right: 0.8em; color: #888; user-select: none; display: none; }
+    .preview-content.code-line-numbers .code-line-num { display: inline; }
+    .code-line-text { white-space: pre-wrap; word-wrap: break-word; word-break: break-word; flex: 1 1 auto; min-width: 0; }
     blockquote { padding: 12px 20px; margin: 0 0 16px 0; border-left: 4px solid #2563eb; background: #f6f5f4; border-radius: 0 6px 6px 0; color: #5e5e62; }
     blockquote p:last-child { margin-bottom: 0; }
     table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
@@ -5943,14 +6066,17 @@ ${clone.innerHTML}
   }
 
   async exportPDF() {
-    // Print tips before starting（纯文本，确认框按 textContent 渲染）
+    // Print tips + 醒目警示（"文件较大时生成 PDF 耗时较长..."）一起在确认框里展示，
+    // 用户点确认后直接走系统打印对话框，不再做任何"是否写完"的承诺。
     const proceed = await this.showConfirmDialog(
       this.t('exportPDF'),
-      this.t('printTip1') + '\n\n' + this.t('printTip2')
+      this.t('printTip1') + '\n\n' + this.t('printTip2'),
+      null,
+      this.t('pdfBigFileWarn'),
     );
     if (!proceed) return;
 
-    // --- Loading overlay ---
+    // --- Loading overlay (打印准备中，afterprint 立即收尾) ---
     const overlay = document.createElement('div');
     overlay.innerHTML = `<div class="pdf-loading-spinner"></div><div class="pdf-loading-text">${this.t('preparingPrint')}</div>`;
     overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);font-family:-apple-system,sans-serif;';
@@ -5968,14 +6094,22 @@ ${clone.innerHTML}
       overlayDone = true;
       if (overlay.parentNode) overlay.remove();
     };
-    const safetyTimer = setTimeout(hideOverlay, 30000);
 
     try {
       // Yield so the overlay paints before CPU-heavy Mermaid work
       await new Promise(r => requestAnimationFrame(r));
 
+      // 文件名：取自当前 md，去扩展名。系统打印对话框默认文件名走主窗口 document.title
+      // （_exportViaSystemPrint 在 iframe.onload 里临时覆盖为该值），无需在应用内另弹保存框。
+      const pdfBaseName = String(this.activeTab.name || '').replace(/\.[^.]+$/, '');
+      const safeBaseName = pdfBaseName || this.t('untitled') || 'document';
+
       const clone = this.preview.cloneNode(true);
       clone.querySelectorAll('.copy-btn, #abbr-data').forEach(el => el.remove());
+
+      // 图片内联：把预览里的 blob:/file:///相对路径图片全部转内联 base64，
+      // 使打印帧自包含（不受 blob LRU 回收 / 源解析影响，根除 PDF 空白图）。
+      await this._inlineImagesForExport(clone, this.activeTab.filePath);
 
       // Re-render Mermaid via mermaid.render() so every diagram gets a
       // consistent viewBox regardless of the current preview-pane width.
@@ -6012,14 +6146,15 @@ ${clone.innerHTML}
         }
       }
 
-      const escapedTitle = this.activeTab.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-      let appCSS = '';
-      try { const resp = await fetch('styles.css'); if (resp.ok) appCSS = await resp.text(); } catch (e) { /* skip */ }
+      // 完整 styles.css：优先 fetch（原始文本保真），失败回退已加载样式表 CSSOM（加固，避免软依赖）
+      const appCSS = await this._loadStylesheetText('styles.css');
       let hljsCSS = '';
       try { const themeLink = document.getElementById('highlight-theme'); if (themeLink) { const resp = await fetch(themeLink.getAttribute('href')); if (resp.ok) hljsCSS = await resp.text(); } } catch (e) { /* skip */ }
       let katexCSS = '';
       try { const resp = await fetch('lib/katex/katex.min.css'); if (resp.ok) katexCSS = await resp.text(); } catch (e) { /* skip */ }
+
+      // escapedTitle：用于打印帧 <title> / contentDocument.title（去扩展名文件名已在上文取得）
+      const escapedTitle = safeBaseName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
       const colorScheme = document.documentElement.getAttribute('data-color-scheme') || 'default';
 
@@ -6027,6 +6162,18 @@ ${clone.innerHTML}
 @page { margin: 1.5cm; }
 html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
 .preview-content { max-width: 680px !important; margin: 0 auto !important; padding: 16px 24px !important; }
+.preview-content pre { white-space: pre-wrap !important; word-wrap: break-word !important; word-break: break-word !important; overflow: visible !important; }
+.preview-content pre code { white-space: pre-wrap !important; word-wrap: break-word !important; word-break: break-word !important; }
+/* 代码块 hljs 默认主题里 .hljs 元素带 background:#ffffff，会盖住 pre 的灰色形成"内白外灰"。
+   强制透明 + 12px 内边距，让整个代码块统一是 pre 的 --code-bg 灰色（与软件预览一致）。 */
+.preview-content pre code.hljs,
+.preview-content pre .hljs { background: transparent !important; padding: 12px 16px !important; }
+/* 代码块行结构（导出 iframe 没载入 styles.css，code-block.js 输出的 .code-line 必须显式块级化） */
+.code-scroll { max-height: none !important; overflow: visible !important; }
+.code-line { display: flex !important; line-height: 1.8 !important; min-width: 0 !important; }
+.code-line-num { flex-shrink: 0 !important; width: 3em !important; text-align: right !important; padding-right: 0.8em !important; color: #888 !important; user-select: none !important; display: none !important; }
+.preview-content.code-line-numbers .code-line-num { display: inline !important; }
+.code-line-text { white-space: pre-wrap !important; word-wrap: break-word !important; word-break: break-word !important; flex: 1 1 auto !important; min-width: 0 !important; }
 .mermaid-container { margin: 8px 0 !important; max-width: 100% !important; overflow: hidden !important; break-inside: avoid; page-break-inside: avoid; }
 .mermaid-container svg { width: auto !important; max-width: 100% !important; height: auto !important; display: block !important; margin: 0 auto !important; }
 .mermaid-container svg text, .mermaid-container svg .nodeLabel, .mermaid-container svg .edgeLabel, .mermaid-container svg .label, .mermaid-container svg textPath { font-size: 14px !important; }
@@ -6049,34 +6196,68 @@ input[type="checkbox"]:checked::after { display: none !important; }
 <div class="preview-content">${clone.innerHTML}</div>
 </body></html>`;
 
-      // Hide overlay right before print dialog, so the user sees
-      // the spinner until the system print dialog appears.
-      const iframe = document.createElement('iframe');
-      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:680px;height:600px;border:none;';
-      iframe.srcdoc = html;
-      document.body.appendChild(iframe);
-
-      iframe.onload = () => {
-        const after = () => {
-          iframe.contentWindow.removeEventListener('afterprint', after);
-          iframe.remove();
-          this.setStatus(this.t('exportedPDF'));
-        };
-        iframe.contentWindow.addEventListener('afterprint', after);
-        setTimeout(() => {
-          iframe.contentWindow.removeEventListener('afterprint', after);
-          if (iframe.parentNode) iframe.remove();
-        }, 30000);
-        hideOverlay();
-        clearTimeout(safetyTimer);
-        iframe.contentWindow.print();
-      };
+      // 系统打印（iframe + contentWindow.print()）：用 OS 打印引擎生成 PDF，保证文字可选中。
+      // afterprint 即收尾，不做落盘检测——OS 打印后台异步落盘是浏览器架构限制，
+      // 应用拿不到"写完"回调。警示已在确认框里展示，由用户自己判断何时打开。
+      await this._exportViaSystemPrint(html, safeBaseName, escapedTitle, hideOverlay);
     } catch (e) {
       console.error('exportPDF error:', e);
       hideOverlay();
-      clearTimeout(safetyTimer);
       this.setStatus(this.t('exportError'));
     }
+  }
+
+  // 系统打印路径（iframe + contentWindow.print()）：用 OS 打印引擎生成 PDF。
+  // 不做落盘检测（OS 打印后台异步写盘，应用拿不到"写完"回调；警示已前置到确认框）。
+  // afterprint（用户在系统框里点完打印/取消后触发）一回调即收尾；30s watchdog 兜底异常。
+  async _exportViaSystemPrint(html, safeBaseName, escapedTitle, hideOverlay) {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:680px;height:600px;border:none;';
+    iframe.srcdoc = html;
+    document.body.appendChild(iframe);
+
+    // 文件名来源：Chromium 打印 PDF 默认文件名取自【主窗口】(顶层 frame) title，
+    // 而非 srcdoc 子 frame <title>。故 onload 临时覆盖主窗口 document.title 为 md 文件名，
+    // 打印结束后还原（afterprint 或 watchdog 兜底）。同时显式写 contentDocument.title 兼容。
+    const originalTitle = document.title;
+    let titleRestored = false;
+    const restoreTitle = () => {
+      if (titleRestored) return;
+      titleRestored = true;
+      document.title = originalTitle;
+    };
+
+    // 两条清理路径（afterprint / 30s 兜底 watchdog）共用 cleanupIframe + cleaned 互斥标志，
+    // 避免"iframe 已 remove 后再次读 contentWindow.removeEventListener"报 NPE。
+    let cleaned = false;
+    let finished = false;
+    const cleanupIframe = () => {
+      if (cleaned) return;
+      cleaned = true;
+      restoreTitle();
+      if (iframe.contentWindow) {
+        try { iframe.contentWindow.removeEventListener('afterprint', after); } catch (_) {}
+      }
+      if (iframe.parentNode) iframe.remove();
+    };
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(watchdog);
+      cleanupIframe();
+      hideOverlay();
+    };
+    const after = () => finish();
+    // 30s 兜底：覆盖"用户在系统框里点取消 / afterprint 不触发"等异常路径，
+    // 走完整收尾（清 iframe + 还原 title + 隐藏 overlay）。
+    const watchdog = setTimeout(finish, 30000);
+
+    iframe.onload = () => {
+      if (iframe.contentDocument) iframe.contentDocument.title = escapedTitle;
+      document.title = safeBaseName; // 主窗口 title 决定系统打印对话框默认文件名
+      iframe.contentWindow.addEventListener('afterprint', after);
+      iframe.contentWindow.print();
+    };
   }
 
   getCachedImageURL(dataUri) {
@@ -6711,6 +6892,38 @@ input[type="checkbox"]:checked::after { display: none !important; }
         }
       });
     });
+  }
+
+  // 后端健康探测（dev 模式"僵尸界面"可见化修复）：启动时 + 每 30s 心跳 ping 一次。
+  // 背景：dev 模式下前端页面与 Rust 后端 / Node dev-server 生命周期完全解耦（tauri-api 延迟
+  // 求值 + 全降级是防白屏的刻意设计），后端挂掉时页面仍正常显示且无任何提示——用户无法区分
+  // 「应用正常」与「后端已死」。这里复用最轻的已有命令 get_cli_args 做心跳，不新增 IPC、
+  // 不改 invoke 透传语义（N21 硬约束不受影响）。失败 → 顶部红条；恢复成功 → 自动隐藏。
+  initBackendHealth() {
+    this._probeBackendHealth();
+    this._backendHealthTimer = setInterval(() => this._probeBackendHealth(), 30000);
+  }
+
+  async _probeBackendHealth() {
+    let down = false;
+    try {
+      if (!TauriApi.isAvailable()) throw new Error('not in tauri runtime');
+      await TauriApi.getCliArgs();
+    } catch (_) {
+      down = true;
+    }
+    this._setBackendBanner(down);
+  }
+
+  _setBackendBanner(down) {
+    const banner = document.getElementById('backend-banner');
+    if (!banner) return;
+    // 复用兜底报错条样式 .fatal-error-bar（fixed 底部红条），只切 hidden
+    banner.classList.toggle('hidden', !down);
+    if (down) {
+      const txt = document.getElementById('backend-banner-text');
+      if (txt) txt.textContent = this.t('backendDown');
+    }
   }
 
   showToast(text, type = 'danger', opts = {}) {
@@ -8329,6 +8542,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 工作区目录树随外部文件增删自动刷新（由 Rust watch_folder 广播 folder-changed 事件）
     await TauriApi.onEvent('folder-changed', () => {
       if (window.editor) window.editor._scheduleTreeRefresh();
+    });
+
+    // 文件夹监听异常（Rust watch_folder 回调 panic，已由 catch_unwind 兜住监听不中断）：
+    // 弹窗提示用户手动「重新监听 / 继续使用」——不做自动重挂，避免失败风暴
+    await TauriApi.onEvent('folder-watch-error', (event) => {
+      if (window.editor) window.editor._handleFolderWatchError(event);
     });
 
     await TauriApi.onEvent('file-open', async (event) => {

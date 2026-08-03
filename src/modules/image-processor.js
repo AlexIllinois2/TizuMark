@@ -130,7 +130,21 @@ async function processImages(preview, deps) {
       }
       return;
     }
-    // 打包文档（使用说明 / demo）：相对资源由 _openBundledFile 记录真实资源路径，按其目录读取图片
+    // 打包文档（使用说明 / demo，activeTab.isBundled=true）：相对资源由 _openBundledFile
+    // 记录真实资源路径。优先走打包资源定位命令 read_bundled_image_as_base64（按 dev 项目根 /
+    // prod 资源目录解析），避免页面相对 fetch（404 噪音且图片出不来）。
+    if (activeTab && activeTab.isBundled) {
+      try {
+        const base64 = await tauri.readBundledImageAsBase64({ filename: rawSrc });
+        // 代际检查 #6b（打包回退校验）
+        if (gen !== getRenderGeneration()) return;
+        const dataUri = `data:${mimeOf(rawSrc)};base64,${base64}`;
+        imageCache.set(rawSrc, dataUri);
+        img.src = getCachedImageURL(dataUri);
+        return;
+      } catch (e2) { /* 落到下面的兜底 fetch */ }
+    }
+    // 最后兜底：尝试页面相对 fetch（通常 404，仅作最后努力）
     try {
       const resp = await fetch(rawSrc);
       if (!resp.ok) { fail(img); return; }
