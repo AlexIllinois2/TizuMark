@@ -1608,8 +1608,10 @@ body.is-resizing .side-btn {
 }
 
 .code-scroll {
-  max-height: 500px;
-  overflow-y: auto;
+  max-height: 300px;
+  /* 默认 hidden：Windows WebView2 always-show 滚动条会让短代码块也显示空轨道。
+     只有内容真的超出 max-height 时，由 render 后处理改为 auto（见 preview-controller.js） */
+  overflow-y: hidden;
 }
 
 /* 代码块 hljs 默认主题里 .hljs 元素带 background:#ffffff，pre 内会形成"内白外灰"

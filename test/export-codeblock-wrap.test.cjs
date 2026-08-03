@@ -73,6 +73,30 @@ test('exportHTML: code.hljs 背景透明（修复"内白外灰"——与 styles.
   });
 });
 
+test('exportHTML: 代码块 pre 背景是明显浅灰（非极浅/接近白）', async () => {
+  // 用户反馈：导出 HTML 代码块背景 #f0efee 在白底页面下接近白色，看不出是"代码块灰底"。
+  // 改为 #e8e8e8 明显的浅灰，一眼可辨；同时与软件预览 --code-bg（#eeedec 默认）接近。
+  const captured = {};
+  await withEditor({ invokeImpl: (cmd, args) => {
+    if (cmd === 'plugin:dialog|save') return '/tmp/out.html';
+    if (cmd === 'write_file') { captured.content = args.content; return undefined; }
+    return null;
+  } }, async (w, ed) => {
+    ed.activeTab.filePath = '/docs/note.md';
+    await ed.exportHTML();
+    assert.ok(captured.content);
+    const c = captured.content;
+    const preRule = /pre\s*\{[^}]*\}/.exec(c);
+    assert.ok(preRule, '应含 pre { } 规则');
+    const pre = preRule[0];
+assert.ok(/#f6f5f4/i.test(pre), 'pre 背景应为 #f6f5f4（与 details/blockquote/toc-wrapper 同灰）');
+  // 防回归：不要退回 #fff/#f0efee/#e8e8e8 等极浅/接近白或过深的色值
+  assert.ok(!/#f0efee/i.test(pre), 'pre 背景不应是 #f0efee（在白底页面下接近白）');
+  assert.ok(!/#fff[^\d]/i.test(pre) && !/background:\s*#fff\b/i.test(pre), 'pre 背景不应是 #fff');
+  assert.ok(!/#e8e8e8/i.test(pre), 'pre 背景不应退回 #e8e8e8（已统一为 #f6f5f4）');
+  });
+});
+
 test('exportPDF: printCSS 显式让 pre 换行且溢出可见（无滚动条）', async () => {
   await withEditor({}, async (w, ed) => {
     ed.showConfirmDialog = async () => true;

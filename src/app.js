@@ -5938,7 +5938,7 @@ class MarkdownEditor {
     em { font-style: italic; }
     del { text-decoration: line-through; color: #5e5e62; }
     code { padding: 2px 6px; background: #f0efee; border: 1px solid #d4d4d8; border-radius: 4px; font-family: "SF Mono", "Fira Code", monospace; font-size: 0.88em; }
-    pre { padding: 16px; background: #f0efee; border-radius: 6px; white-space: pre-wrap; word-wrap: break-word; word-break: break-word; overflow: visible; margin: 16px 0; max-width: 100%; border: 1px solid #d4d4d8; }
+    pre { padding: 16px; background: #f6f5f4; border-radius: 6px; white-space: pre-wrap; word-wrap: break-word; word-break: break-word; overflow: visible; margin: 16px 0; max-width: 100%; border: 1px solid #d4d4d8; }
     pre code { padding: 0; background: transparent; border: none; font-size: 0.9em; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; word-break: break-word; }
     /* 代码块：hljs 主题里 .hljs{background:#fff}（specificity 0,1,0）会盖住上面 pre code(0,0,2) 的 transparent，
        形成"内白外灰"。用 .hljs 同类选择 + !important 显式压住，让 pre 的灰底透出到 code 上。 */
@@ -8595,6 +8595,19 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.editor._loadingStart = Date.now();
 
     updateLoadingProgress(60, '正在注册事件监听…');
+    // 代码块按需滚动：preview 出现/替换 .code-scroll 时自动跑后处理（rAF 去抖）。
+    // LiveReload 推新 JS 后已渲染的代码块不会重新触发 render，单靠 render 末尾调用
+    // 会漏掉；MutationObserver 兜底所有时机（含初次加载、async 替换、LiveReload 后）。
+    const pruneCodeScrolls = () => {
+      if (!window.editor || !window.editor.preview) return;
+      window.editor.preview.querySelectorAll('.code-scroll').forEach((el) => {
+        // 必须显式 'auto'：CSS 默认是 hidden（防 Windows always-show 滚动条轨道），
+        // 清空 inline 会让 CSS 接管 → 仍 hidden → 永远没滚动条
+        el.style.overflowY = el.scrollHeight > el.clientHeight + 1 ? 'auto' : 'hidden';
+      });
+    };
+    new MutationObserver(() => requestAnimationFrame(pruneCodeScrolls))
+      .observe(window.editor.preview, { childList: true, subtree: true });
     await TauriApi.onEvent('close-requested', async () => {
       await window.editor.handleAppClose();
     });
