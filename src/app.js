@@ -2162,7 +2162,30 @@ class MarkdownEditor {
         securityLevel: 'loose',
         fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-preview').trim() || '-apple-system, sans-serif',
       });
-      await mermaid.run({ nodes: Array.from(this.preview.querySelectorAll('.mermaid-container')) });
+      // 主题切换重渲染全部图表。一次性 mermaid.run(全部节点) 是同步 CPU 密集任务
+      // （layout 计算），图表多时阻塞主线程造成明显卡顿（含转圈动画被卡住）。
+      // 分批渲染：每批【渲染前】先让出主线程一帧（保证转圈持续转动、不被阻塞），
+      // 图表较多时再叠加预览区 loading 提示。
+      const nodes = Array.from(this.preview.querySelectorAll('.mermaid-container'));
+      const BATCH = 2;
+      const showLoading = nodes.length > 6;
+      if (showLoading) this._beginPaneLoad();
+      try {
+        for (let i = 0; i < nodes.length; i += BATCH) {
+          if (this._mermaidGeneration !== gen) return; // 中途又切主题，放弃本次
+          // 每批渲染前让出主线程一帧：mermaid.run 是同步 CPU 密集，若首批立即执行，
+          // 转圈动画帧会被阻塞（表现为"点完停顿一下才开始转"）
+          await new Promise((r) => requestAnimationFrame(r));
+          const batch = nodes.slice(i, i + BATCH);
+          try {
+            await mermaid.run({ nodes: batch });
+          } catch (e) {
+            console.error('Mermaid re-render error:', e);
+          }
+        }
+      } finally {
+        if (showLoading) this._endPaneLoad();
+      }
     } catch (e) {
       console.error('Mermaid re-render error:', e);
     }
@@ -4624,11 +4647,16 @@ class MarkdownEditor {
         return;
       }
 
-      const mermaidSvg = e.target.closest('.mermaid-container svg');
-      if (mermaidSvg) {
+      const mermaidContainer = e.target.closest('.mermaid-container');
+      if (mermaidContainer) {
         e.preventDefault();
         e.stopPropagation();
-        this.showLightbox(mermaidSvg, 'svg');
+        // 锚点必须是容器而非 svg：closest('.mermaid-container svg') 只匹配「自身是 svg 且
+        // 祖先有 container」的节点——点击 svg 内部（rect/text 等）能向上命中 svg，但点击
+        // 容器内边距（两侧灰色区，target 是 div 本身）匹配不到，lightbox 打不开。
+        // 改为容器锚点 + 内部取 svg：中央与空白区点击都能打开图表查看器。
+        const svg = mermaidContainer.querySelector('svg');
+        if (svg) this.showLightbox(svg, 'svg');
         return;
       }
 
@@ -7206,27 +7234,59 @@ input[type="checkbox"]:checked::after { display: none !important; }
   }
 
   async toggleTheme() {
-    if (this.settings.themeMode !== 'light' && this.settings.themeMode !== 'dark') {
-      this.settings.themeMode = this.isDark ? 'light' : 'dark';
+    // 复用启动 loading（logo + 进度条 + 文字）作全局遮罩。平滑策略：
+    //  1) 先把遮罩背景/文字固定为【切换前】主题色（inline style）——切换瞬间 var(--bg-primary)
+    //     跳变不会让遮罩"啪"地变色，且遮罩初始色与页面一致，出现时无缝；
+    //  2) 双 rAF：第一帧绘制遮罩，第二帧才改主题（单 rAF 回调在绘制前执行会与遮罩同帧）；
+    //  3) 完成后的隐藏用 opacity 淡出（合成器属性，不占主线程，mermaid 渲染期间也流畅，
+    //     不用 background-color 渐变——那是主线程 repaint，会被渲染阻塞导致跳帧卡顿）。
+    const overlay = document.getElementById('loading-overlay');
+    const cs = getComputedStyle(document.documentElement);
+    overlay.style.backgroundColor = cs.getPropertyValue('--bg-primary').trim() || '#f5f5f5';
+    const textEl = document.getElementById('loading-text');
+    if (textEl) textEl.style.color = cs.getPropertyValue('--text-secondary').trim();
+    overlay.classList.remove('hidden');
+    overlay.offsetHeight; // 强制重排，确保下一帧一定绘制遮罩
+    const showTime = Date.now();
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    try {
+      if (this.settings.themeMode !== 'light' && this.settings.themeMode !== 'dark') {
+        this.settings.themeMode = this.isDark ? 'light' : 'dark';
+        document.getElementById('set-theme-mode').value = this.settings.themeMode;
+      }
+      this.isDark = !this.isDark;
+      this.settings.themeMode = this.isDark ? 'dark' : 'light';
       document.getElementById('set-theme-mode').value = this.settings.themeMode;
-    }
-    this.isDark = !this.isDark;
-    this.settings.themeMode = this.isDark ? 'dark' : 'light';
-    document.getElementById('set-theme-mode').value = this.settings.themeMode;
-    this.saveSettings();
-    document.documentElement.setAttribute('data-theme', this.isDark ? 'dark' : 'light');
-    document.documentElement.setAttribute('data-color-scheme', this.settings.colorScheme || 'default');
-    this.cm.setOption('theme', this.isDark ? 'material-darker' : 'default');
-    this.updateThemeIcon();
+      this.saveSettings();
+      document.documentElement.setAttribute('data-theme', this.isDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-color-scheme', this.settings.colorScheme || 'default');
+      this.cm.setOption('theme', this.isDark ? 'material-darker' : 'default');
+      this.updateThemeIcon();
 
-    const highlightTheme = document.getElementById('highlight-theme');
-    if (highlightTheme) {
-      highlightTheme.href = this.isDark
-        ? 'lib/highlight.js/github-dark.min.css'
-        : 'lib/highlight.js/github.min.css';
-    }
+      const highlightTheme = document.getElementById('highlight-theme');
+      if (highlightTheme) {
+        highlightTheme.href = this.isDark
+          ? 'lib/highlight.js/github-dark.min.css'
+          : 'lib/highlight.js/github.min.css';
+      }
 
-    await this.rerenderMermaid();
+      await this.rerenderMermaid();
+    } finally {
+      // 最小显示时长：图表少/切换很快时遮罩也不一闪而过，保证用户能看清 loading 界面
+      const MIN_SHOW_MS = 300;
+      const elapsed = Date.now() - showTime;
+      if (elapsed < MIN_SHOW_MS) {
+        await new Promise((r) => setTimeout(r, MIN_SHOW_MS - elapsed));
+      }
+      // 清除固定色 → opacity 淡出（0.3s，合成器流畅）→ 隐藏。淡出时页面已是新主题，
+      // 旧色遮罩渐渐透明、新主题页面透出，自然交叉过渡
+      overlay.style.backgroundColor = '';
+      if (textEl) textEl.style.color = '';
+      overlay.style.opacity = '0';
+      await new Promise((r) => setTimeout(r, 320));
+      overlay.style.opacity = '';
+      overlay.classList.add('hidden');
+    }
     this.setStatus(this.t('themeSwitched', { theme: this.isDark ? this.t('themeDark') : this.t('themeLight') }));
   }
 

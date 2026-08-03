@@ -1777,12 +1777,16 @@ body.is-resizing .side-btn {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(0, 0, 0, 0.85);
+  /* 亮色模式：浅灰背景（暗色由下方 [data-theme="dark"] 覆盖为深色） */
+  background: rgba(243, 244, 246, 0.94);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: zoom-out;
   backdrop-filter: blur(4px);
+}
+[data-theme="dark"] .image-lightbox {
+  background: rgba(0, 0, 0, 0.85);
 }
 .image-lightbox img {
   max-width: 90vw;
@@ -1799,9 +1803,11 @@ body.is-resizing .side-btn {
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
-  color: rgba(255,255,255,0.9);
+  /* 亮色：深字浅底（暗色由下方 [data-theme="dark"] 覆盖） */
+  color: rgba(51, 55, 64, 0.92);
   font-size: 15px;
-  background: rgba(0,0,0,0.55);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.14);
   padding: 10px 22px;
   border-radius: 20px;
   z-index: 10000;
@@ -1810,6 +1816,11 @@ body.is-resizing .side-btn {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+[data-theme="dark"] .lightbox-hint {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: none;
 }
 .lightbox-hint-close {
   cursor: pointer;
@@ -3687,6 +3698,10 @@ body.is-resizing .side-btn {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* 淡出用 opacity（合成器属性，不占主线程，mermaid 渲染期间也流畅）。
+     主题切换时背景色由 JS 固定为切换前主题色（inline style），不做 background 渐变——
+     background-color 动画是主线程 repaint，会被 mermaid 渲染阻塞导致跳帧卡顿 */
+  transition: opacity 0.3s ease;
 }
 
 /* 外部文件变更提示条（位于菜单栏以下，作为正常布局的一行，不覆盖标题栏/工具栏/窗口按钮） */

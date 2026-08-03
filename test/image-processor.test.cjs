@@ -64,6 +64,24 @@ test('相对路径（非 isBundled）成功：按 dir 补全绝对路径', async
   assert.match(preview.querySelector('img').getAttribute('src'), /BLOB:data:image\/png;base64/);
 });
 
+test('Windows \\\\?\\ 长路径前缀 filePath：去掉前缀再拼相对路径（避免 os error 123 混合分隔符）', async () => {
+  // read_bundled_file 在 dev 模式返回带 \\?\ 前缀的 canonical 路径（如
+  // \\?\D:\project\tizu-mark\src-tauri\target\debug\demo.md）
+  const preview = makePreview('<img src="assets/icon.png" alt="i">');
+  const { calls, deps } = makeDeps({
+    activeTab: { filePath: '\\\\?\\D:\\project\\tizu-mark\\src-tauri\\target\\debug\\demo.md' },
+  });
+  await processImages(preview, deps);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].cmd, 'fetch');
+  assert.equal(
+    calls[0].args.url,
+    'D:\\project\\tizu-mark\\src-tauri\\target\\debug/assets/icon.png',
+    '拼接 URL 不应含 \\\\?\\ 前缀（混合分隔符会触发 Path::canonicalize os error 123）',
+  );
+  assert.match(preview.querySelector('img').getAttribute('src'), /BLOB:data:image\/png;base64/);
+});
+
 test('相对路径（非 isBundled）本地失败：绝不回退 read_bundled_image_as_base64', async () => {
   const preview = makePreview('<img src="missing.png" alt="m">');
   const { calls, deps } = makeDeps({ activeTab: { filePath: 'D:/docs/note.md' }, fetchThrow: true });
