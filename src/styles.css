@@ -2887,6 +2887,12 @@ body.is-resizing .side-btn {
   pointer-events: none;
 }
 
+/* 按钮 loading 态（保存按钮复用；#btn-add-font.is-loading 仅作用于导入字体按钮） */
+.dialog-btn.is-loading {
+  pointer-events: none;
+  opacity: 0.9;
+}
+
 /* 关闭窗口确认对话框 */
 .close-confirm-dialog {
   max-width: 380px;
@@ -3307,6 +3313,25 @@ body.is-resizing .side-btn {
 /* Settings Dialog */
 .settings-dialog {
   max-width: 460px;
+}
+
+/* 设置面板重渲染的 loading toast：主题/配色/字体/代码块选项变更触发全量重渲染
+   （mermaid 图表多时较慢）时，在页面顶部 toast 位置显示持续提示，完成后消失 */
+.toast.settings-loading-toast {
+  align-items: center;
+  background: rgba(28, 30, 38, 0.92);
+  color: #fff;
+  backdrop-filter: blur(2px);
+}
+
+.settings-loading-toast-spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.32);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: pane-spin 0.7s linear infinite;
 }
 
 .settings-content {

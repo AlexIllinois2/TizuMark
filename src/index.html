@@ -632,13 +632,13 @@
       </div>
       <div class="dialog-content">
         <div id="update-state-checking">
-          <p>正在检查更新...</p>
+          <p id="update-state-checking-text">正在检查更新...</p>
         </div>
         <div id="update-state-available" class="hidden">
-          <p>TizuMark <span id="update-new-version" class="update-version-highlight"></span> 可用</p>
-          <p class="update-current">当前版本: <span id="update-current-version"></span></p>
+          <p>TizuMark <span id="update-new-version" class="update-version-highlight"></span> <span id="update-available-suffix">可用</span></p>
+          <p class="update-current"><span id="update-current-version-label">当前版本: </span><span id="update-current-version"></span></p>
           <div class="update-notes">
-            <h4>更新内容</h4>
+            <h4 id="update-notes-title">更新内容</h4>
             <div id="update-notes-body"></div>
           </div>
           <div class="update-progress hidden" id="update-progress-wrap">
@@ -654,8 +654,8 @@
                 <path d="M8 12.5l2.5 2.5L16 9"></path>
               </svg>
             </div>
-            <h3 class="update-latest-title">已是最新版本</h3>
-            <p class="update-latest-sub">当前已是最新版本 <span id="update-latest-version" class="update-version-highlight"></span>，无需更新</p>
+            <h3 class="update-latest-title" id="update-latest-title">已是最新版本</h3>
+            <p class="update-latest-sub"><span id="update-latest-prefix">当前已是最新版本</span> <span id="update-latest-version" class="update-version-highlight"></span><span id="update-latest-suffix">，无需更新</span></p>
           </div>
         </div>
       </div>
@@ -708,10 +708,10 @@
         <h2 id="close-dialog-title">关闭应用</h2>
       </div>
       <div class="dialog-content">
-        <p>请选择关闭应用时的操作：</p>
+        <p id="close-dialog-msg">请选择关闭应用时的操作：</p>
         <label class="close-dialog-remember-label">
           <input type="checkbox" id="close-dialog-remember">
-          <span>记住选择，不再询问</span>
+          <span id="close-dialog-remember-label-text">记住选择，不再询问</span>
         </label>
       </div>
       <div class="dialog-footer">
@@ -1006,8 +1006,8 @@
           <div class="settings-row settings-row-stacked">
             <label>图片存储路径</label>
             <div class="radio-group" id="settings-image-asset-path-mode">
-              <label><input type="radio" name="settings-image-asset-path" value="relative" checked /> <span>相对路径</span></label>
-              <label><input type="radio" name="settings-image-asset-path" value="absolute" /> <span>绝对路径</span></label>
+              <label><input type="radio" name="settings-image-asset-path" value="relative" checked /> <span id="setting-image-asset-path-relative">相对路径</span></label>
+              <label><input type="radio" name="settings-image-asset-path" value="absolute" /> <span id="setting-image-asset-path-absolute">绝对路径</span></label>
             </div>
             <input type="text" id="settings-image-asset-path" value="assets" class="settings-text-input" />
             <p class="form-hint" id="setting-image-asset-path-hint">
@@ -1039,6 +1039,7 @@
       <div class="dialog-footer">
         <button id="settings-reset" class="dialog-btn">恢复默认</button>
         <button id="settings-cancel-btn" class="dialog-btn">取消</button>
+        <button id="settings-apply-btn" class="dialog-btn dialog-btn-primary">应用</button>
         <button id="settings-save-btn" class="dialog-btn dialog-btn-primary">保存</button>
       </div>
     </div>

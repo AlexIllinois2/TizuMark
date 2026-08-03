@@ -29,8 +29,11 @@ test('smoke: 初始化过程未触发致命错误条', async () => {
   return new Promise((resolve) => {
     setTimeout(() => {
       assert.strictEqual(getInitErr(), null, '不应出现 Initialization error');
-      const bar = w.document.querySelector('.fatal-error-bar');
-      assert.strictEqual(bar, null, '不应显示致命错误条（否则等同于白屏）');
+      // #backend-banner（后端健康探测条）常驻 DOM 且复用 .fatal-error-bar 样式类，
+      // 即使 hidden 也会被 querySelector 选中，须排除后再断言真正由初始化失败创建的致命错误条
+      const bars = [...w.document.querySelectorAll('.fatal-error-bar')]
+        .filter((b) => b.id !== 'backend-banner');
+      assert.strictEqual(bars.length, 0, '不应显示致命错误条（否则等同于白屏）');
       cleanup(w);
       resolve();
     }, 300);

@@ -173,6 +173,10 @@ const I18N = {
     tabSize: 'Tab 宽度',
     lineWrap: '自动换行',
     lineNumbers: '显示行号',
+    codeLineNumbers: '代码块行号',
+    codeBlockWrap: '代码块自动换行',
+    langZh: '中文',
+    langEn: 'English',
     previewFontSize: '正文字号',
     lineHeight: '行高',
     maxWidth: '最大宽度',
@@ -324,6 +328,44 @@ const I18N = {
     depTauri: '桌面应用框架',
     spaces: '空格',
     settingsReset: '已恢复默认设置',
+    settingsApplying: '正在应用…',
+    applying: '应用中…',
+    saving: '正在保存…',
+    apply: '应用',
+    ok: '确定',
+    browse: '浏览...',
+    reloadFile: '重新加载文件',
+    toggleTheme: '切换主题',
+    collapseExpandToolbar: '折叠/展开工具栏',
+    closeNotice: '关闭提示',
+    insertLink: '插入链接',
+    insertImage: '插入图片',
+    imageSourceLocal: '本地图片',
+    imageSourceWeb: '网络图片',
+    imageAltLabel: '替代文本',
+    closeAppTitle: '关闭应用',
+    minimizeToTray: '最小化到托盘',
+    quitApp: '退出应用',
+    updateAvailableSuffix: '可用',
+    updateCurrentVersionLabel: '当前版本:',
+    updateNotes: '更新内容',
+    updateLatestPrefix: '当前已是最新版本',
+    updateLatestSuffix: '，无需更新',
+    updateSkip: '稍后再说',
+    csDirPlaceholder: '目录路径',
+    largeFileNotice: '⚠ 文档过大（约 {lines} 行 / {size} MB），预览仅显示当前位置附近内容，滚动编辑区可逐步查看全文。',
+    shortcutOccupied: '快捷键 "{key}" 已被「{name}」占用',
+    progressCheckingEula: '正在检查许可协议…',
+    progressInitEditor: '正在初始化编辑器…',
+    progressRegisterEvents: '正在注册事件监听…',
+    progressLoadingFile: '正在加载文件…',
+    progressReady: '准备就绪',
+    devtoolsOpened: 'DevTools 已打开',
+    devtoolsOpenFailed: 'DevTools 打开失败: {err}',
+    devtools: '开发者工具',
+    closeAppMsg: '请选择关闭应用时的操作：',
+    rememberChoice: '记住选择，不再询问',
+    errorCodePrefix: '错误码 {code}',
     shortcutsReset: '已恢复默认快捷键',
     saveDialogMessage: '文件已修改，是否保存？',
     imageLoadFailed: '[图片加载失败]',
@@ -371,7 +413,7 @@ const I18N = {
     imageAssetPathLabel: '图片存储路径',
     imageAssetPathModeRelative: '相对路径',
     imageAssetPathModeAbsolute: '绝对路径',
-    imageAssetPathRelativeHint: '相对于 markdown 文件所在目录的路径。例如 assets → 图片将保存在 docs/assets/。将整个文件夹移动到其他位置后，路径仍然有效，无需额外操作。',
+    imageAssetPathRelativeHint: '相对于 markdown 文件所在目录的路径。例如 <code>assets</code> → 图片将保存在 <code>docs/assets/</code>。将整个文件夹移动到其他位置后，路径仍然有效，无需额外操作。',
     imageAssetPathAbsoluteHint: '完整的磁盘路径。例如 D:/images → 图片将直接保存到 D:/images/。如果将 markdown 文件夹移动到其他位置，图片路径会失效，需要手动更新引用。',
     imageAssetPathPlaceholder: 'assets',
     imageFileRequired: '请选择要插入的本地图片',
@@ -522,6 +564,10 @@ const I18N = {
     tabSize: 'Tab Size',
     lineWrap: 'Line Wrap',
     lineNumbers: 'Line Numbers',
+    codeLineNumbers: 'Code line numbers',
+    codeBlockWrap: 'Wrap code blocks',
+    langZh: 'Chinese',
+    langEn: 'English',
     previewFontSize: 'Preview Font Size',
     lineHeight: 'Line Height',
     maxWidth: 'Max Width',
@@ -674,6 +720,44 @@ const I18N = {
     depTauri: 'Desktop application framework',
     spaces: 'spaces',
     settingsReset: 'Settings reset to defaults',
+    settingsApplying: 'Applying…',
+    applying: 'Applying…',
+    saving: 'Saving…',
+    apply: 'Apply',
+    ok: 'OK',
+    browse: 'Browse...',
+    reloadFile: 'Reload File',
+    toggleTheme: 'Toggle Theme',
+    collapseExpandToolbar: 'Collapse/Expand Toolbar',
+    closeNotice: 'Close Notice',
+    insertLink: 'Insert Link',
+    insertImage: 'Insert Image',
+    imageSourceLocal: 'Local Image',
+    imageSourceWeb: 'Web Image',
+    imageAltLabel: 'Alt Text',
+    closeAppTitle: 'Close App',
+    minimizeToTray: 'Minimize to Tray',
+    quitApp: 'Quit App',
+    updateAvailableSuffix: 'available',
+    updateCurrentVersionLabel: 'Current version:',
+    updateNotes: 'Release Notes',
+    updateLatestPrefix: 'You are on the latest version',
+    updateLatestSuffix: '. No update needed.',
+    updateSkip: 'Later',
+    csDirPlaceholder: 'Folder path',
+    largeFileNotice: '⚠ Large document ({lines} lines / {size} MB): preview shows only the area near the current position; scroll the editor to view the full content gradually.',
+    shortcutOccupied: 'Shortcut "{key}" is already used by "{name}"',
+    progressCheckingEula: 'Checking license agreement…',
+    progressInitEditor: 'Initializing editor…',
+    progressRegisterEvents: 'Registering event listeners…',
+    progressLoadingFile: 'Loading file…',
+    progressReady: 'Ready',
+    devtoolsOpened: 'DevTools opened',
+    devtoolsOpenFailed: 'Failed to open DevTools: {err}',
+    devtools: 'Developer Tools',
+    closeAppMsg: 'Choose an action when closing the app:',
+    rememberChoice: 'Remember my choice, don\'t ask again',
+    errorCodePrefix: 'Error code {code}',
     shortcutsReset: 'Shortcuts reset to defaults',
     saveDialogMessage: 'File has been modified. Save?',
     imageLoadFailed: '[Image failed to load]',
@@ -721,7 +805,7 @@ const I18N = {
     imageAssetPathLabel: 'Image Asset Path',
     imageAssetPathModeRelative: 'Relative Path',
     imageAssetPathModeAbsolute: 'Absolute Path',
-    imageAssetPathRelativeHint: 'Relative to the markdown file\'s directory. Example: assets → images saved in docs/assets/. Path remains valid when moving the entire folder to another location.',
+    imageAssetPathRelativeHint: 'Relative to the markdown file\'s directory. Example: <code>assets</code> → images saved in <code>docs/assets/</code>. Path remains valid when moving the entire folder to another location.',
     imageAssetPathAbsoluteHint: 'Full disk path. Example: D:/images → images saved directly in D:/images/. Path will break if the markdown folder is moved to another location.',
     imageAssetPathPlaceholder: 'assets',
     imageFileRequired: 'Please select a local image file',
@@ -905,7 +989,7 @@ class MarkdownEditor {
     const textEl = document.getElementById('large-file-banner-text');
     if (!banner || !textEl) return;
     const sizeMB = (totalChars / 1048576).toFixed(1);
-    textEl.textContent = `⚠ 文档过大（约 ${totalLines} 行 / ${sizeMB} MB），预览仅显示当前位置附近内容，滚动编辑区可逐步查看全文。`;
+    textEl.textContent = this.t('largeFileNotice', { lines: totalLines, size: sizeMB });
     banner.classList.remove('hidden');
     this._largeFileNoticeKey = key;
   }
@@ -968,6 +1052,10 @@ class MarkdownEditor {
     updateMenuText('btn-settings', t('settings'));
     updateMenuText('btn-user-guide', t('userGuide'));
     updateMenuText('btn-about', t('about'));
+    updateMenuText('btn-open-folder', t('openFolder'));
+    updateMenuText('btn-reload-menu', t('reloadFile'));
+    updateMenuText('btn-check-update', t('checkUpdate'));
+    updateMenuText('btn-devtools', t('devtools'));
 
     // View mode tabs
     updateMenuText('btn-view-preview', t('preview'));
@@ -1033,15 +1121,32 @@ class MarkdownEditor {
     setRowLabel('set-default-view', t('defaultView'));
     setRowLabel('set-scroll-sync', t('scrollSync'));
     setRowLabel('set-soft-breaks', t('softBreaks'));
+    setRowLabel('set-code-line-numbers', t('codeLineNumbers'));
+    setRowLabel('set-code-wrap', t('codeBlockWrap'));
+    setRowLabel('set-close-action', t('closeAction'));
+    setRowLabel('set-show-tray-icon', t('showTrayIcon'));
+    setRowLabel('settings-image-store-mode', t('imageSettingLabel'));
+    setRowLabel('settings-image-asset-path-mode', t('imageAssetPathLabel'));
+    setSectionTitle('btn-add-font', t('customFonts'));
+    setRowLabel('set-editor-font', t('editorFont'));
+    setRowLabel('set-preview-font', t('previewFont'));
+    setRowLabel('font-preview-sample', t('fontPreview'));
     const softBreaksHint = document.querySelector('#setting-soft-breaks-hint .hint-text');
     if (softBreaksHint) softBreaksHint.textContent = t('softBreaksHint');
     const tabSizeHint = document.querySelector('#setting-tab-size-hint .hint-text');
     if (tabSizeHint) tabSizeHint.textContent = t('tabSizeHint');
+    const trayHint = document.querySelector('#setting-show-tray-icon-hint .hint-text');
+    if (trayHint) trayHint.textContent = t('showTrayIconHint');
     setText('setting-image-store-assets', t('imageSettingAssets'));
     setText('setting-image-store-base64', t('imageSettingBase64'));
     document.querySelector('#setting-image-store-hint .hint-text').textContent = t('imageSettingHint');
+    setText('setting-image-asset-path-relative', t('imageAssetPathModeRelative'));
+    setText('setting-image-asset-path-absolute', t('imageAssetPathModeAbsolute'));
+    const assetPathHint = document.querySelector('#setting-image-asset-path-hint-text');
+    if (assetPathHint) assetPathHint.innerHTML = t('imageAssetPathRelativeHint');
     document.getElementById('settings-reset').textContent = t('resetDefault');
     document.getElementById('settings-cancel-btn').textContent = t('cancel');
+    document.getElementById('settings-apply-btn').textContent = t('apply');
     document.getElementById('settings-save-btn').textContent = t('save');
     document.getElementById('settings-close-x').setAttribute('aria-label', t('cancel'));
     document.getElementById('confirm-dialog-confirm').textContent = t('confirm');
@@ -1084,6 +1189,73 @@ class MarkdownEditor {
     // Update tab bar
     this.updateTabBar();
     this.updateWordCount();
+    this.updateOutline();
+
+    // Toolbar / panel title attributes（2026-08-04 i18n 补漏）
+    setTitle('btn-reload', t('reloadFile'));
+    setTitle('btn-theme', t('toggleTheme'));
+    setTitle('fmt-collapse', t('collapseExpandToolbar'));
+    setTitle('outline-close', t('close'));
+    setTitle('folder-close', t('closeFolder'));
+    setTitle('large-file-banner-close', t('closeNotice'));
+    // fmt-icon-btn 系列（加粗/斜体/删除线/链接/图片/水平线/高亮/上标/下标）
+    const fmtActionTitleKeys = {
+      'insert-bold': 'bold',
+      'insert-italic': 'italic',
+      'insert-strikethrough': 'strikethrough',
+      'insert-link': 'link',
+      'insert-image': 'image',
+      'insert-hr': 'hr',
+      'insert-highlight': 'highlight',
+      'insert-superscript': 'superscript',
+      'insert-subscript': 'subscript',
+    };
+    document.querySelectorAll('#format-toolbar .fmt-icon-btn[data-action]').forEach(el => {
+      const key = fmtActionTitleKeys[el.dataset.action];
+      if (key) el.title = t(key);
+    });
+
+    // Insert-link dialog
+    setText('insert-link-title', t('insertLink'));
+    setText('insert-link-text-label', t('linkText'));
+    setText('insert-link-url-label', t('linkUrl'));
+    setText('insert-link-cancel', t('cancel'));
+    setText('insert-link-ok', t('ok'));
+
+    // Insert-image dialog
+    setText('insert-image-title', t('insertImage'));
+    setText('insert-image-source-label', t('imageSource'));
+    setText('insert-image-source-local', t('imageSourceLocal'));
+    setText('insert-image-source-web', t('imageSourceWeb'));
+    setText('insert-image-file-label', t('file'));
+    setText('insert-image-browse', t('browse'));
+    setText('insert-image-url-label', t('imageUrlLabel'));
+    setText('insert-image-alt-label', t('imageAltLabel'));
+    setText('insert-image-cancel', t('cancel'));
+    setText('insert-image-ok', t('ok'));
+    // 自定义字体导入按钮（省略号后缀）
+    setText('btn-add-font', t('addFont') + '…');
+
+    // Close-confirm dialog
+    setText('close-dialog-title', t('closeAppTitle'));
+    setText('close-dialog-msg', t('closeAppMsg'));
+    setText('close-dialog-remember-label-text', t('rememberChoice'));
+    setText('close-dialog-minimize', t('minimizeToTray'));
+    setText('close-dialog-quit', t('quitApp'));
+
+    // Update dialog 静态文本（标题随状态由 showUpdateState 动态设置）
+    setText('update-state-checking-text', t('updateChecking'));
+    setText('update-available-suffix', t('updateAvailableSuffix'));
+    setText('update-current-version-label', t('updateCurrentVersionLabel'));
+    setText('update-notes-title', t('updateNotes'));
+    setText('update-latest-title', t('updateLatest'));
+    setText('update-latest-prefix', t('updateLatestPrefix'));
+    setText('update-latest-suffix', t('updateLatestSuffix'));
+    setText('update-skip', t('updateSkip'));
+    setText('update-action', t('updateChecking'));
+
+    // 跨文件搜索：目录路径 placeholder 补漏
+    setPlaceholder('cs-dir', t('csDirPlaceholder'));
 
     // Side buttons
     this.applyViewMode();
@@ -1326,7 +1498,21 @@ class MarkdownEditor {
     if (maxWSel && maxWSel.options.length > 0) {
       maxWSel.options[0].text = t('unlimited');
     }
-    // Language selector — keep option text fixed (中文 / English)
+    // Close action
+    const closeSel = document.getElementById('set-close-action');
+    if (closeSel) {
+      closeSel.options[0].text = t('closeActionAsk');
+      closeSel.options[1].text = t('closeActionQuit');
+      closeSel.options[2].text = t('closeActionMinimize');
+    }
+    // Language selector
+    const langSel = document.getElementById('set-language');
+    if (langSel) {
+      langSel.options[0].text = t('langZh');
+      langSel.options[1].text = t('langEn');
+    }
+    // 自定义字体区（空状态 + 编辑/预览字体下拉的「跟随方案」）随语言刷新
+    this.renderCustomFontSettings();
   }
 
   defaultSettings() {
@@ -1418,16 +1604,8 @@ class MarkdownEditor {
     try { localStorage.setItem('tizumark-settings', JSON.stringify(this.settings)); } catch {}
   }
 
-  async initSettings() {
-    document.getElementById('btn-settings').addEventListener('click', () => this.showSettings());
-    document.getElementById('settings-close-x').addEventListener('click', () => this.hideSettings());
-    document.getElementById('settings-save-btn').addEventListener('click', () => this.hideSettings());
-    document.getElementById('settings-cancel-btn').addEventListener('click', () => this.hideSettings());
-    document.getElementById('settings-dialog').addEventListener('click', (e) => {
-      if (e.target.id === 'settings-dialog') this.hideSettings();
-    });
-    document.getElementById('settings-reset').addEventListener('click', () => this.resetSettings());
-
+  // 把 this.settings 同步到设置面板各控件（initSettings 与「取消/X 恢复」共用）
+  syncSettingsControls() {
     const s = this.settings;
     document.getElementById('set-font-size').value = s.fontSize;
     document.getElementById('font-size-label').textContent = s.fontSize + 'px';
@@ -1448,140 +1626,160 @@ class MarkdownEditor {
     document.getElementById('set-language').value = s.language || 'zh';
     const modeRadio = document.querySelector(`#settings-image-store-mode input[value="${s.imageInsertMode || 'assets'}"]`);
     if (modeRadio) modeRadio.checked = true;
+    document.getElementById('set-soft-breaks').checked = s.softBreaks !== false;
+    document.getElementById('set-show-tray-icon').checked = s.showTrayIcon !== false;
+    document.getElementById('set-close-action').value = s.closeAction || 'ask';
+    document.getElementById('settings-image-asset-path').value = s.imageAssetPath || 'assets';
+    const pathModeRadio = document.querySelector(`#settings-image-asset-path-mode input[value="${s.imageAssetPathMode || 'relative'}"]`);
+    if (pathModeRadio) pathModeRadio.checked = true;
+  }
+
+  // 设置重渲染的 loading toast（引用计数）：主题/配色/字体/代码块选项变更会触发全量重渲染
+  // （mermaid 图表多时较慢），期间在页面顶部 toast 位置显示持续提示，计数归零才移除。
+  // msgKey 可选：应用时「正在应用设置…」/ 保存时「保存中…」（与按钮 loading 文案对应）。
+  _beginSettingsBusy(msgKey = 'settingsApplying') {
+    this._settingsBusyCount = (this._settingsBusyCount || 0) + 1;
+    if (this._settingsBusyCount !== 1) return;
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    if (this._settingsBusyToast && this._settingsBusyToast.isConnected) return;
+    const el = document.createElement('div');
+    el.className = 'toast settings-loading-toast';
+    const spinner = document.createElement('span');
+    spinner.className = 'settings-loading-toast-spinner';
+    const body = document.createElement('div');
+    body.className = 'toast-body';
+    body.textContent = this.t(msgKey);
+    el.appendChild(spinner);
+    el.appendChild(body);
+    container.appendChild(el);
+    this._settingsBusyToast = el;
+  }
+
+  _endSettingsBusy() {
+    this._settingsBusyCount = Math.max(0, (this._settingsBusyCount || 0) - 1);
+    if (this._settingsBusyCount === 0 && this._settingsBusyToast && this._settingsBusyToast.isConnected) {
+      this._settingsBusyToast.remove();
+      this._settingsBusyToast = null;
+    }
+  }
+
+  async initSettings() {
+    document.getElementById('btn-settings').addEventListener('click', () => this.showSettings());
+    document.getElementById('settings-close-x').addEventListener('click', () => this.hideSettings(true));
+    const applyBtn = document.getElementById('settings-apply-btn');
+    applyBtn.addEventListener('click', async () => {
+      // 点「应用」= 生效 + 落盘，面板保持打开：按钮进入 loading 态（让一帧确保可见）
+      applyBtn.classList.add('is-loading');
+      applyBtn.disabled = true;
+      applyBtn.innerHTML = '<span class="btn-spinner"></span>' + this.t('applying');
+      await new Promise(r => requestAnimationFrame(r));
+      try {
+        await this.applyPendingSettings('settingsApplying');
+      } finally {
+        applyBtn.disabled = false;
+        applyBtn.classList.remove('is-loading');
+        applyBtn.textContent = this.t('apply');
+      }
+    });
+    const saveBtn = document.getElementById('settings-save-btn');
+    saveBtn.addEventListener('click', async () => {
+      // 点「保存」= 应用 + 落盘 + 关闭：按钮进入 loading 态（让一帧确保可见）
+      saveBtn.classList.add('is-loading');
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="btn-spinner"></span>' + this.t('saving');
+      await new Promise(r => requestAnimationFrame(r));
+      try {
+        await this.applyPendingSettings('saving');
+        this.hideSettings(false);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.classList.remove('is-loading');
+        saveBtn.textContent = this.t('save');
+      }
+    });
+    document.getElementById('settings-cancel-btn').addEventListener('click', () => this.hideSettings(true));
+    // 注：不支持点击遮罩层关闭设置框，只能点「取消」或「×」关闭
+    document.getElementById('settings-reset').addEventListener('click', () => this.resetSettings());
+
+    this.syncSettingsControls();
 
     document.getElementById('set-font-size').addEventListener('input', (e) => {
-      const v = Number(e.target.value);
-      if (this.activeTab) this.activeTab.fontSize = v;
-      this.cm.getWrapperElement().style.fontSize = v + 'px';
-      document.getElementById('font-size-label').textContent = v + 'px';
-      this.cm.refresh();
+      // 应用式：拖动只更新数值显示，实际字号在点「应用/保存」后生效
+      document.getElementById('font-size-label').textContent = Number(e.target.value) + 'px';
     });
     document.getElementById('set-font-size').addEventListener('change', (e) => {
       this.settings.fontSize = Number(e.target.value);
-      this.saveSettings();
     });
     document.getElementById('set-tab-size').addEventListener('change', (e) => {
       this.settings.tabSize = Number(e.target.value);
-      this.cm.setOption('tabSize', this.settings.tabSize);
-      this.cm.setOption('indentUnit', this.settings.tabSize);
-      this.saveSettings();
     });
     document.getElementById('set-line-wrap').addEventListener('change', (e) => {
       this.settings.lineWrap = e.target.checked;
-      this.cm.setOption('lineWrapping', this.settings.lineWrap);
-      this.saveSettings();
     });
     document.getElementById('set-line-numbers').addEventListener('change', (e) => {
       this.settings.lineNumbers = e.target.checked;
-      this.cm.setOption('lineNumbers', this.settings.lineNumbers);
-      this.saveSettings();
     });
     document.getElementById('set-preview-font-size').addEventListener('input', (e) => {
-      const v = Number(e.target.value);
-      this.preview.style.fontSize = v + 'px';
-      document.getElementById('preview-font-size-label').textContent = v + 'px';
+      document.getElementById('preview-font-size-label').textContent = Number(e.target.value) + 'px';
     });
     document.getElementById('set-preview-font-size').addEventListener('change', (e) => {
       this.settings.previewFontSize = Number(e.target.value);
-      this.saveSettings();
     });
     document.getElementById('set-line-height').addEventListener('change', (e) => {
       this.settings.lineHeight = Number(e.target.value);
-      this.preview.style.lineHeight = String(e.target.value);
-      this.saveSettings();
     });
     document.getElementById('set-max-width').addEventListener('change', (e) => {
       this.settings.maxWidth = Number(e.target.value);
-      if (this.settings.maxWidth) {
-        this.preview.style.maxWidth = this.settings.maxWidth + 'px';
-        this.preview.style.margin = '0 auto';
-        this.preview.classList.add('max-width-active');
-      } else {
-        this.preview.style.maxWidth = '';
-        this.preview.style.margin = '';
-        this.preview.classList.remove('max-width-active');
-      }
-      this.saveSettings();
     });
-    document.getElementById('set-theme-mode').addEventListener('change', async (e) => {
+    document.getElementById('set-theme-mode').addEventListener('change', (e) => {
       this.settings.themeMode = e.target.value;
-      await this.applyThemeMode();
-      this.saveSettings();
     });
-    document.getElementById('set-color-scheme').addEventListener('change', async (e) => {
+    document.getElementById('set-color-scheme').addEventListener('change', (e) => {
       this.settings.colorScheme = e.target.value;
-      await this.applyThemeMode();
-      this.saveSettings();
     });
     document.getElementById('set-font-scheme').addEventListener('change', (e) => {
       this.settings.fontScheme = e.target.value;
-      this.applyFontScheme();
-      this.saveSettings();
     });
     document.getElementById('set-default-view').addEventListener('change', (e) => {
       this.settings.defaultView = e.target.value;
-      this.saveSettings();
     });
     document.getElementById('set-scroll-sync').addEventListener('change', (e) => {
       this.settings.scrollSync = e.target.checked;
-      this.saveSettings();
     });
-    document.getElementById('set-soft-breaks').checked = s.softBreaks !== false;
     document.getElementById('set-soft-breaks').addEventListener('change', (e) => {
       this.settings.softBreaks = e.target.checked;
-      this.saveSettings();
-      this.updatePreview();
     });
-    document.getElementById('set-show-tray-icon').checked = s.showTrayIcon !== false;
     document.getElementById('set-show-tray-icon').addEventListener('change', (e) => {
       this.settings.showTrayIcon = e.target.checked;
-      this.saveSettings();
-      this.applyWindowBehavior();
     });
-    document.getElementById('set-close-action').value = s.closeAction || 'ask';
     document.getElementById('set-close-action').addEventListener('change', (e) => {
       this.settings.closeAction = e.target.value;
-      this.saveSettings();
     });
     document.getElementById('set-code-line-numbers').addEventListener('change', (e) => {
       this.settings.codeLineNumbers = e.target.checked;
-      this.preview.classList.toggle('code-line-numbers', e.target.checked);
-      if (this._hljsCache) this._hljsCache.clear();
-      this.saveSettings();
-      this.updatePreview();
     });
     document.getElementById('set-code-wrap').addEventListener('change', (e) => {
       this.settings.codeWrap = e.target.checked;
-      this.preview.classList.toggle('code-wrap', e.target.checked);
-      this.saveSettings();
-      this.updatePreview();
     });
     document.getElementById('set-language').addEventListener('change', (e) => {
       this.settings.language = e.target.value;
-      this.saveSettings();
-      this.applyLanguage();
     });
     document.querySelectorAll('#settings-image-store-mode input[name="settings-image-store"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         this.settings.imageInsertMode = e.target.value;
-        this.saveSettings();
       });
     });
 
-    document.getElementById('settings-image-asset-path').value = s.imageAssetPath || 'assets';
     document.getElementById('settings-image-asset-path').addEventListener('change', (e) => {
       this.settings.imageAssetPath = e.target.value.trim() || 'assets';
-      this.saveSettings();
     });
 
-    const pathModeRadio = document.querySelector(`#settings-image-asset-path-mode input[value="${s.imageAssetPathMode || 'relative'}"]`);
-    if (pathModeRadio) pathModeRadio.checked = true;
     document.querySelectorAll('#settings-image-asset-path-mode input[name="settings-image-asset-path"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         this.settings.imageAssetPathMode = e.target.value;
         this.settings.imageAssetPath = e.target.value === 'absolute' ? 'D:/images' : 'assets';
         document.getElementById('settings-image-asset-path').value = this.settings.imageAssetPath;
-        this.saveSettings();
         this.updateImageAssetPathHint();
       });
     });
@@ -1593,15 +1791,11 @@ class MarkdownEditor {
     const edFont = document.getElementById('set-editor-font');
     if (edFont) edFont.addEventListener('change', (e) => {
       this.settings.editorFont = e.target.value;
-      this.saveSettings();
-      this.applyCustomFonts();
       this.refreshFontSelectors();
     });
     const pvFont = document.getElementById('set-preview-font');
     if (pvFont) pvFont.addEventListener('change', (e) => {
       this.settings.previewFont = e.target.value;
-      this.saveSettings();
-      this.applyCustomFonts();
       this.refreshFontSelectors();
     });
 
@@ -1959,7 +2153,7 @@ class MarkdownEditor {
         this.settings.editorFont = last;
         this.settings.previewFont = last;
       }
-      this.saveSettings();
+      // 应用式：字体列表在面板内即时更新，落盘随「应用/保存」
       await this.registerCustomFonts();
       this.applyCustomFonts();
       this.renderCustomFontSettings();
@@ -2028,7 +2222,7 @@ class MarkdownEditor {
         this.settings.customFonts = (this.settings.customFonts || []).filter(f => f.id !== id);
         if (this.settings.editorFont === id) this.settings.editorFont = '';
         if (this.settings.previewFont === id) this.settings.previewFont = '';
-        this.saveSettings();
+        // 应用式：删除在面板内即时生效，落盘随「应用/保存」
         await this.registerCustomFonts();
         this.applyCustomFonts();
         this.renderCustomFontSettings();
@@ -2192,11 +2386,43 @@ class MarkdownEditor {
   }
 
   showSettings() {
+    // 打开设置面板：备份当前设置快照。应用式：面板内改动只改内存与控件显示，
+    // 点「应用/保存」才生效并落盘，未生效直接关闭（取消 / ×）时按快照恢复。
+    this._settingsSnapshot = JSON.parse(JSON.stringify(this.settings));
     document.getElementById('settings-dialog').classList.remove('hidden');
   }
 
-  hideSettings() {
+  hideSettings(revert = false) {
+    // 先取走快照（防连点：恢复只执行一次，重复触发直接走关闭分支）
+    const snapshot = revert ? this._settingsSnapshot : null;
+    this._settingsSnapshot = null;
+    if (snapshot) {
+      // 未应用直接关闭：恢复内存设置与控件显示。
+      // 面板内改动从不实时触碰编辑器/预览，无需 applySettings / 重渲染，瞬间完成。
+      this.settings = JSON.parse(JSON.stringify(snapshot));
+      this.syncSettingsControls();
+      this.renderCustomFontSettings();
+      this.updateImageAssetPathHint();
+    }
     document.getElementById('settings-dialog').classList.add('hidden');
+  }
+
+  // 「应用」：把面板内改动生效（applySettings）并落盘，面板保持打开（可连续调整）；
+  // 「保存」= applyPendingSettings + 关闭面板。重渲染期间显示 loading toast。
+  // 「应用」/「保存」统一入口：生效 + 落盘 + 快照推进。msgKey 控制顶部 loading toast 文案
+  // （'settingsApplying' = 正在应用… / 'saving' = 正在保存…），与按钮 loading 文案对应。
+  async applyPendingSettings(msgKey = 'settingsApplying') {
+    this._beginSettingsBusy(msgKey);
+    try {
+      await this.applySettings();
+    } finally {
+      this._endSettingsBusy();
+    }
+    this.applyLanguage();       // 语言/界面文本生效
+    this.applyWindowBehavior(); // 托盘显隐生效
+    this.saveSettings();        // 应用 = 落盘
+    // 应用即确认：快照推进到当前值，之后「取消」回滚到最近一次应用/保存的状态
+    this._settingsSnapshot = JSON.parse(JSON.stringify(this.settings));
   }
 
   async resetSettings() {
@@ -2210,41 +2436,19 @@ class MarkdownEditor {
     // 恢复默认：保留已导入的自定义字体，仅把编辑器/预览字体选择重置为「跟随方案」
     const savedCustomFonts = this.settings.customFonts || [];
     this.settings = { ...defaults, customFonts: savedCustomFonts };
-    this.saveSettings();
-
-    document.getElementById('set-font-size').value = defaults.fontSize;
-    document.getElementById('font-size-label').textContent = defaults.fontSize + 'px';
-    document.getElementById('set-tab-size').value = defaults.tabSize;
-    document.getElementById('set-line-wrap').checked = defaults.lineWrap;
-    document.getElementById('set-line-numbers').checked = defaults.lineNumbers;
-    document.getElementById('set-preview-font-size').value = defaults.previewFontSize;
-    document.getElementById('preview-font-size-label').textContent = defaults.previewFontSize + 'px';
-    document.getElementById('set-line-height').value = defaults.lineHeight;
-    document.getElementById('set-max-width').value = defaults.maxWidth;
-    document.getElementById('set-theme-mode').value = defaults.themeMode;
-    document.getElementById('set-color-scheme').value = defaults.colorScheme;
-    document.getElementById('set-font-scheme').value = defaults.fontScheme;
-    document.getElementById('set-default-view').value = defaults.defaultView;
-    document.getElementById('set-scroll-sync').checked = defaults.scrollSync;
-    document.getElementById('set-soft-breaks').checked = defaults.softBreaks !== false;
-    document.getElementById('set-language').value = defaults.language;
-    const defaultRadio = document.querySelector(`#settings-image-store-mode input[value="${defaults.imageInsertMode}"]`);
-    if (defaultRadio) defaultRadio.checked = true;
-    document.getElementById('settings-image-asset-path').value = defaults.imageAssetPath;
-    const defaultPathRadio = document.querySelector(`#settings-image-asset-path-mode input[value="${defaults.imageAssetPathMode}"]`);
-    if (defaultPathRadio) defaultPathRadio.checked = true;
-    this.updateImageAssetPathHint();
-
-    await this.applySettings();
+    this.syncSettingsControls();
     this.renderCustomFontSettings();
-    this.setStatus(this.t('settingsReset'));
+    this.updateImageAssetPathHint();
+    // 恢复默认立即生效并落盘（等同自动执行一次「应用」），面板保持打开可继续调整
+    await this.applyPendingSettings();
   }
 
   updateImageAssetPathHint() {
     const mode = this.settings.imageAssetPathMode || 'relative';
     const hintEl = document.getElementById('setting-image-asset-path-hint-text');
     if (hintEl) {
-      hintEl.textContent = mode === 'relative'
+      // 文案含 <code> 高亮片段，须用 innerHTML
+      hintEl.innerHTML = mode === 'relative'
         ? this.t('imageAssetPathRelativeHint')
         : this.t('imageAssetPathAbsoluteHint');
     }
@@ -2612,7 +2816,7 @@ class MarkdownEditor {
     const keyStr = parts.join('+');
     const dup = this.findDuplicateShortcut(keyStr, this.recordingAction);
     if (dup) {
-      this.showToast(`快捷键 "${keyStr}" 已被「${this.t('shortcutLabel')[dup] || dup}」占用`);
+      this.showToast(this.t('shortcutOccupied', { key: keyStr, name: this.t('shortcutLabel')[dup] || dup }));
       this.recordingAction = null;
       this.renderShortcutsList();
       return true;
@@ -6987,7 +7191,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
       if (text.code) {
         const codeEl = document.createElement('div');
         codeEl.className = 'toast-code';
-        codeEl.textContent = '错误码 ' + text.code;
+        codeEl.textContent = this.t('errorCodePrefix', { code: text.code });
         body.appendChild(codeEl);
       }
     } else {
@@ -7584,9 +7788,9 @@ input[type="checkbox"]:checked::after { display: none !important; }
             timer = null;
             try {
               await TauriApi.openDevtools();
-              this.showToast('DevTools 已打开', 'success');
+              this.showToast(this.t('devtoolsOpened'), 'success');
             } catch (e) {
-              this.showToast('DevTools 打开失败: ' + e, 'danger');
+              this.showToast(this.t('devtoolsOpenFailed', { err: e }), 'danger');
             }
           }
         });
@@ -7618,9 +7822,13 @@ input[type="checkbox"]:checked::after { display: none !important; }
     ['checking', 'available', 'latest'].forEach(s => {
       document.getElementById('update-state-' + s).classList.toggle('hidden', s !== state);
     });
-    const titles = { checking: '检查更新', available: '发现新版本', latest: '已是最新' };
+    const titles = {
+      checking: this.t('updateChecking'),
+      available: this.t('updateAvailable'),
+      latest: this.t('updateLatest'),
+    };
     const titleEl = document.getElementById('update-title');
-    if (titleEl) titleEl.textContent = titles[state] || '发现新版本';
+    if (titleEl) titleEl.textContent = titles[state] || this.t('updateAvailable');
     const btn = document.getElementById('update-action');
     const skipBtn = document.getElementById('update-skip');
     if (state === 'checking') {
@@ -8533,6 +8741,16 @@ function updateLoadingProgress(percent, text) {
   if (textEl && text) textEl.textContent = text;
 }
 
+// 初始化阶段（window.editor 未创建）读取当前语言：settings 尚未加载，直接从持久化读
+function tInit(key) {
+  let lang = 'zh';
+  try {
+    const saved = JSON.parse(localStorage.getItem('tizumark-settings') || '{}');
+    if (saved && saved.language === 'en') lang = 'en';
+  } catch (_) {}
+  return I18N[lang][key] !== undefined ? I18N[lang][key] : I18N.zh[key] || key;
+}
+
 function initEula() {
   const eulaAccepted = localStorage.getItem('tizumark-eula-accepted');
   if (eulaAccepted === 'true') {
@@ -8587,14 +8805,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   }, 20000);
 
   try {
-    updateLoadingProgress(5, '正在检查许可协议…');
+    updateLoadingProgress(5, tInit('progressCheckingEula'));
     const isFirstLaunch = await initEula();
 
-    updateLoadingProgress(15, '正在初始化编辑器…');
+    updateLoadingProgress(15, tInit('progressInitEditor'));
     window.editor = new MarkdownEditor();
     window.editor._loadingStart = Date.now();
 
-    updateLoadingProgress(60, '正在注册事件监听…');
+    updateLoadingProgress(60, tInit('progressRegisterEvents'));
     // 代码块按需滚动：preview 出现/替换 .code-scroll 时自动跑后处理（rAF 去抖）。
     // LiveReload 推新 JS 后已渲染的代码块不会重新触发 render，单靠 render 末尾调用
     // 会漏掉；MutationObserver 兜底所有时机（含初次加载、async 替换、LiveReload 后）。
@@ -8640,7 +8858,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       await window.editor.openPathsSmart(args);
     });
 
-    updateLoadingProgress(85, '正在加载文件…');
+    updateLoadingProgress(85, tInit('progressLoadingFile'));
     try {
       const args = await TauriApi.getCliArgs();
       const hadSession = await window.editor.restoreSession();
@@ -8678,7 +8896,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       console.warn('Failed to load session / cli args:', e);
     }
 
-    updateLoadingProgress(100, '准备就绪');
+    updateLoadingProgress(100, tInit('progressReady'));
     await window.editor.initFileWatcher();
     await new Promise(r => setTimeout(r, 300));
   } catch (e) {
