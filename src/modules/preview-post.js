@@ -103,7 +103,13 @@ function protectUnpairedDollar(text) {
         if (close !== -1 &&
             text[close - 1] !== ' ' && text[close - 1] !== '\n' && text[close - 1] !== '\r' &&
             !/[\n\r]/.test(inner) &&
-            !(inner.includes('|') && (text.lastIndexOf('|', i - 1) !== -1 || text.indexOf('|', close + 1) !== -1)) &&
+            // | 在 inner 内紧邻空白（^|\s \|(?:\s|$)）才是表格列分隔符形态；
+            // 紧邻非空白（如 P(A|B)、k|z）是合法数学符号。
+            // 修复：只检查 inner 内部的 | 紧邻空白，不再去 $ 前后整个文本里找 |，
+            // 否则相邻多个含 | 的合法公式（如 $F\hat{x}_{k-1|k-1}$ $\hat{x}_{k|k-1}=...$）
+            // 会因为下一个公式的 | 误把前一个 reject、成对公式被错误包成 ignore span，
+            // 导致 KaTeX 跳过 → 预览里只剩 $...$ 源码。
+            !/(?:^|\s)\|(?:\s|$)/.test(inner) &&
             (close + 1 >= n || text[close + 1] !== '$')) {
           out += text.substring(i, close + 1);
           i = close + 1;
