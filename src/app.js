@@ -4464,7 +4464,7 @@ class MarkdownEditor {
   // 与编辑器高亮共用同一配色（醒目黄色）。从后往前包裹，避免节点切分影响更早偏移。
   clearPreviewHighlights() {
     const pv = this.preview;
-    if (!pv) { window.getSelection().removeAllRanges(); return; }
+    if (!pv) { this._safeClearSelection(); return; }
     const marks = pv.querySelectorAll('mark.preview-search-hl');
     marks.forEach(mk => {
       const parent = mk.parentNode;
@@ -4472,7 +4472,20 @@ class MarkdownEditor {
       parent.removeChild(mk);
     });
     pv.normalize();
-    window.getSelection().removeAllRanges();
+    this._safeClearSelection();
+  }
+
+  // 仅清空落在 #preview 内的文档选区。
+  // 关键修复：若焦点落在搜索框 / 编辑器等可编辑元素上（其选区不在 #preview 内），
+  // 绝不调用 window.getSelection().removeAllRanges()——WebView2/Chromium 下该调用会令
+  // 当前聚焦的 <input> 失焦，表现为「搜索框里打一个字符光标就移走」。
+  _safeClearSelection() {
+    const sel = window.getSelection && window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const pv = this.preview;
+    // 选区锚点不在预览内（例如在搜索输入框里）→ 不动它，避免抢焦点
+    if (!pv || !pv.contains(sel.anchorNode)) return;
+    sel.removeAllRanges();
   }
 
   highlightPreviewMatches(query, caseSensitive, useRegex) {
