@@ -317,16 +317,11 @@ function guardMathBlocks(content) {
         if (content[i] === '$' && (i === start + 1 || content[i - 1] !== ' ')) {
           const inner = content.substring(start + 1, i);
           // 不成对/跨行一律不当公式。
-          // | 在"同一行且行内还有其他 |"时保守地不当公式，避免把表格单元格分隔符吞进数学；
-          // > 与全角 ｜ 不再限制（它们在数学表达式中合法）。
+          // | 两侧紧邻空白（" | " 或行首/行尾空白+竖线）时视为表格列分隔符，保守拒绝；
+          // 紧邻非空白（如 P(A|B)、k|z）是条件概率/绝对值等合法数学符号，放行并保护占位。
           let reject = /[\n\r]/.test(inner);
-          if (!reject && inner.includes('|')) {
-            const lineStart = content.lastIndexOf('\n', start - 1) + 1;
-            const lineEnd = content.indexOf('\n', start);
-            const line = content.substring(lineStart, lineEnd === -1 ? len : lineEnd);
-            const before = line.substring(0, start - lineStart);
-            const after = line.substring(i + 1 - lineStart);
-            if (before.includes('|') || after.includes('|')) reject = true;
+          if (!reject && inner.includes('|') && /(?:^|\s)\|(?:\s|$)/.test(inner)) {
+            reject = true;
           }
           if (!reject) {
             i += 1;

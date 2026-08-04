@@ -314,3 +314,31 @@ test('空行隔开的两个独立 $$...$$ 不互相跨段配对', async () => {
   assert.ok(!html.includes('MATHBLOCK'), '不应残留未替换占位符');
 });
 
+// ===== 表格单元格内行内公式含 | 不被切断（用户复现）=====
+
+test('表格单元格内成对公式含 | 不切断表格列', async () => {
+  // 用户复现：$p(x_k|z_{1:k-1})$ 中的 | 曾被 markdown-it 当列分隔符切断成两列。
+  // 现在成对公式优先保护，表格保持 4 列、公式完整留在单个 td 内供 DOM 阶段 KaTeX 渲染。
+  const md = [
+    '| 表述 | 出发点 | 过程 | 结果 |',
+    '| --- | --- | --- | --- |',
+    '| **CK 积分** | 整个分布 $p(x_k|z_{1:k-1})$ | 全概率 + 马尔可夫 | 完整预测分布(含 $\\mu$) |',
+    '| **条件期望捷径** | 只用均值 $\\hat{x}_{k|k-1}$ | 直接算 $E[x_k|z_{1:k-1}]$ | 只用均值 |',
+  ].join('\n');
+  const html = renderMarkdown(md, { softBreaks: false });
+  assert.ok(html.includes('<table'), '应渲染为 <table>');
+  assert.strictEqual((html.match(/<td/g) || []).length, 8, '4 列 × 2 行 = 8 个单元格，不错位');
+  assert.ok(html.includes('$p(x_k|z_{1:k-1})$'), '成对公式应完整保留在单个单元格内');
+  assert.ok(html.includes('$\\hat{x}_{k|k-1}$'), '含 | 的下标公式应完整保留');
+  assert.ok(html.includes('$E[x_k|z_{1:k-1}]$'), '含 | 的期望公式应完整保留');
+});
+
+test('跨单元格的孤立 $ 不配对成公式', async () => {
+  // 原有保守规则：$x 与 y$ 分处两个单元格时，不应跨单元格配对成 $x | y$ 吞掉列分隔符
+  const md = '| a | b |\n| - | - |\n| $x | y$ |';
+  const html = renderMarkdown(md, { softBreaks: false });
+  assert.strictEqual((html.match(/<td/g) || []).length, 2, '数据行 2 个单元格（表头是 th 不计数）');
+  assert.ok(html.includes('$x') && html.includes('y$'), '孤立 $ 各自保留在单元格内');
+  assert.ok(!html.includes('MATHBLOCK'), '不应生成跨单元格 MATHBLOCK');
+});
+
