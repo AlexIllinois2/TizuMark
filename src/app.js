@@ -250,7 +250,7 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: '本软件基于 GPL v3 开源协议发布。',
     noUnauthorized: '欢迎自由使用、修改和分发，衍生作品须延续 GPL v3 协议。',
-    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要' },
+    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要', closeToTray: '关闭到托盘' },
     shortcutGroup: { file: '文件', search: '查找与搜索', tabView: '标签页与视图', format: '文本格式', insert: '插入', heading: '标题', callout: '提示块' },
     shortcutScheme: '快捷键方案',
     shortcutList: '快捷键',
@@ -641,7 +641,7 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: 'This software is released under the GPL v3 open-source license.',
     noUnauthorized: 'Free to use, modify, and distribute. Derivative works must remain under GPL v3.',
-    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important' },
+    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important', closeToTray: 'Hide to tray' },
     shortcutGroup: { file: 'File', search: 'Find & Search', tabView: 'Tabs & View', format: 'Text Format', insert: 'Insert', heading: 'Headings', callout: 'Callouts' },
     shortcutScheme: 'Shortcut Scheme',
     shortcutList: 'Shortcuts',
@@ -2511,6 +2511,7 @@ class MarkdownEditor {
       insertCalloutWarning: { key: '', label: 'Warning 警告' },
       insertCalloutCaution: { key: '', label: 'Caution 注意' },
       insertCalloutImportant: { key: '', label: 'Important 重要' },
+      closeToTray: { key: '', label: '关闭到托盘' },
     };
   }
 
@@ -2648,13 +2649,19 @@ class MarkdownEditor {
     }
   }
 
-  resetShortcuts() {
-    this.shortcuts = this.getDefaultShortcuts();
-    localStorage.removeItem('tizumark-shortcuts');
-    this.shortcutScheme = 'default';
-    this.saveShortcutScheme('default');
+  clearShortcut(action) {
+    // 仅更新面板内编辑草稿（内存），不落盘、不应用；点「确认」才生效
+    this.shortcuts[action].key = '';
+    if (this.shortcutScheme !== 'custom') this.shortcutScheme = 'custom';
     this.renderShortcutsList();
-    this.applyShortcuts();
+  }
+
+  resetShortcuts() {
+    // 仅把面板内各选项值重置为默认（内存草稿预览），不落盘、不立即应用到 CM。
+    // 必须点「确认」按钮才正式生效；未确认关闭面板后，重开仍读 localStorage 旧值。
+    this.shortcuts = this.getDefaultShortcuts();
+    this.shortcutScheme = 'default';
+    this.renderShortcutsList();
     this.setStatus(this.t('shortcutsReset'));
   }
 
@@ -2730,7 +2737,7 @@ class MarkdownEditor {
     const groupLabels = this.t('shortcutGroup') || {};
     // 按功能分组展示，便于在长列表中查找
     const groups = [
-      { key: 'file', ids: ['newFile', 'openFile', 'saveFile', 'saveAs', 'closeTab', 'exportPDF'] },
+      { key: 'file', ids: ['newFile', 'openFile', 'saveFile', 'saveAs', 'closeTab', 'exportPDF', 'closeToTray'] },
       { key: 'search', ids: ['find', 'crossSearch'] },
       { key: 'tabView', ids: ['nextTab', 'prevTab', 'toggleView', 'toggleTheme'] },
       { key: 'format', ids: ['bold', 'italic', 'strikethrough', 'inlineCode', 'highlight', 'insertSuperscript', 'insertSubscript'] },
@@ -2779,11 +2786,7 @@ class MarkdownEditor {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const action = btn.dataset.action;
-        this.shortcuts[action].key = '';
-        this._markShortcutCustom();
-        this.saveShortcuts();
-        this.renderShortcutsList();
-        this.applyShortcuts();
+        this.clearShortcut(action);
       });
     });
   }
@@ -2823,10 +2826,10 @@ class MarkdownEditor {
     }
     this.shortcuts[this.recordingAction].key = keyStr;
     this.recordingAction = null;
-    this._markShortcutCustom();
-    this.saveShortcuts();
+    // 仅更新面板内的编辑草稿（内存 this.shortcuts），不落盘、不应用到 CM/全局派发。
+    // 必须点「确认」按钮（shortcuts-save-btn）才正式 saveShortcuts + applyShortcuts 生效。
+    if (this.shortcutScheme !== 'custom') this.shortcutScheme = 'custom'; // 内存预览标记，不落盘
     this.renderShortcutsList();
-    this.applyShortcuts();
     return true;
   }
 
@@ -2882,6 +2885,10 @@ class MarkdownEditor {
 
   showShortcutsDialog() {
     this.recordingAction = null;
+    // 每次打开都从 localStorage 重新加载已保存键位 + 方案，作为编辑基线。
+    // 这样「未点确认就关闭面板」留下的内存草稿不会残留，重开仍显示已保存值。
+    this.shortcuts = this.loadShortcuts();
+    this.shortcutScheme = this.loadShortcutScheme();
     this.renderShortcutsList();
     this.populateSchemeSelect();
     document.getElementById('shortcuts-dialog').classList.remove('hidden');
@@ -2985,6 +2992,7 @@ class MarkdownEditor {
         const next = (this.activeTabIndex + 1) % this.tabs.length;
         this.switchTab(next);
       },
+      closeToTray: () => this.hideToTray(),
       prevTab: () => {
         const prev = this.activeTabIndex > 0 ? this.activeTabIndex - 1 : this.tabs.length - 1;
         this.switchTab(prev);
@@ -8636,6 +8644,22 @@ input[type="checkbox"]:checked::after { display: none !important; }
       }
     } catch (error) {
       console.error('handleAppClose error:', error);
+      try {
+        const w = TauriApi.currentWindow();
+        if (w) await w.hide();
+      } catch { /* 浏览器环境下降级 */ }
+    }
+  }
+
+  async hideToTray() {
+    // 快捷键「关闭到托盘」：仅把窗口隐藏到系统托盘，应用进程与文档保留在内存中，
+    // 因此不会丢失未保存内容；下次从托盘图标恢复窗口即可继续编辑。
+    try {
+      this.saveSession();
+      const w = TauriApi.currentWindow();
+      if (w) await w.hide();
+    } catch (error) {
+      console.error('hideToTray error:', error);
       try {
         const w = TauriApi.currentWindow();
         if (w) await w.hide();

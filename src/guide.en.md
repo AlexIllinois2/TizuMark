@@ -123,6 +123,7 @@ When a document exceeds ~5000 lines or 4MB, the preview automatically switches t
 | <kbd>Ctrl</kbd> + <kbd>\`</kbd> | Inline Code | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Tab</kbd> | Previous Tab |
 | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> | Strikethrough | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd> | Code Block |
 | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Q</kbd> | Blockquote | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd> | Toggle Theme |
+| Customizable (none by default) | Hide to tray |  |  |
 
 > All shortcuts are customizable in **`File → Keyboard Shortcuts`**. Click "Modify" and press your new key combination. Click "Clear" to remove, "Restore Default" to reset.
 > 
