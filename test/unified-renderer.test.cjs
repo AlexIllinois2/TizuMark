@@ -254,3 +254,63 @@ test('事件处理器 on* 仍被剥离', async () => {
   assert.ok(html.includes('color: red'), '合法 style 仍保留');
 });
 
+// ===== 引用块内块级公式（blockquote + $$...$$）回归 =====
+
+test('引用块内规范写法 > $$...$$ 渲染为块级公式', async () => {
+  const md = [
+    '> **数学提示**：速率为 $v$，通量分别为',
+    '> $$',
+    '> \\rho v,\\; p+\\rho v^{2}',
+    '> $$',
+    '> 上述通量相等',
+  ].join('\n');
+  const html = renderMarkdown(md, { softBreaks: false });
+  assert.ok(html.includes('blockquote'), '应保留引用块结构');
+  assert.ok((html.match(/math-display/g) || []).length === 1, '应生成一个块级公式占位');
+  assert.ok(!html.includes('MATHBLOCK'), '不应残留未替换占位符');
+});
+
+test('引用块 lazy continuation 写法不影响下方独立公式和列表', async () => {
+  // 用户复现：> $$ 开头、中间行无 > 前缀（markdown lazy continuation），
+  // 下方还有独立公式和列表——上方公式配对绝不能跨段吞掉下方内容。
+  const md = [
+    '> **数学提示**：若气体速率为 $v$，则通量分别为',
+    '> $$',
+    '\\rho v,\\; p+\\rho v^{2}',
+    '$$',
+    '> 当控制体内没有源时，上述通量相等。',
+    '',
+    '- 32323',
+    '- 322323',
+    '',
+    '$$',
+    '\\rho v,\\; p+\\rho v^{2}',
+    '$$',
+  ].join('\n');
+  const html = renderMarkdown(md, { softBreaks: false });
+  const displays = html.match(/math-display/g) || [];
+  assert.strictEqual(displays.length, 2, '引用块公式 + 下方独立公式各一个块级占位');
+  assert.ok((html.match(/<li/g) || []).length === 2, '列表项不应被公式配对吞掉');
+  assert.ok(html.includes('32323') && html.includes('322323'), '列表内容应保留');
+  assert.ok(!html.includes('MATHBLOCK'), '不应残留未替换占位符');
+});
+
+test('空行隔开的两个独立 $$...$$ 不互相跨段配对', async () => {
+  const md = [
+    '公式一：',
+    '$$',
+    'a^2',
+    '$$',
+    '',
+    '公式二：',
+    '$$',
+    'b^2',
+    '$$',
+  ].join('\n');
+  const html = renderMarkdown(md, { softBreaks: false });
+  const displays = html.match(/math-display/g) || [];
+  assert.strictEqual(displays.length, 2, '两个独立公式各生成一个块级占位');
+  assert.ok(html.includes('公式一') && html.includes('公式二'), '段落文字应保留');
+  assert.ok(!html.includes('MATHBLOCK'), '不应残留未替换占位符');
+});
+
