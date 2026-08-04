@@ -2471,6 +2471,70 @@ body.is-resizing .side-btn {
   color: var(--text-primary);
 }
 
+.folder-sort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.folder-sort-key {
+  font-size: 11px;
+  padding: 3px 22px 3px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 12px;
+  color: var(--text-primary);
+  max-width: 100px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.folder-sort-key:hover {
+  border-color: var(--accent-color, #4a90d9);
+}
+
+.folder-sort-key:focus {
+  outline: none;
+  border-color: var(--accent-color, #4a90d9);
+  box-shadow: 0 0 0 2px var(--accent-soft, rgba(74, 144, 217, 0.18));
+}
+
+.folder-sort-order {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.folder-sort-order svg {
+  width: 14px;
+  height: 14px;
+}
+
+.folder-sort-order:hover {
+  background-color: var(--bg-hover, rgba(128, 128, 128, 0.08));
+  color: var(--text-primary);
+  border-color: var(--accent-color, #4a90d9);
+}
+
 .folder-tree {
   flex: 1;
   overflow: auto;
@@ -2571,8 +2635,39 @@ body.is-resizing .side-btn {
 
 .tree-label {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tree-meta {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 1px;
+  margin-left: 8px;
+  padding-right: 2px;
+  font-size: 10px;
+  line-height: 1.25;
+  color: var(--text-tertiary, #9aa0a6);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.tree-meta .tree-size {
+  color: var(--text-quaternary, #b0b4b8);
+}
+
+.tree-meta .tree-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.tree-row:hover .tree-meta,
+.tree-row.active .tree-meta {
+  color: var(--text-secondary);
 }
 
 .tree-children.hidden {

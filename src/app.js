@@ -445,6 +445,13 @@ const I18N = {
     openFolder: '打开文件夹',
     files: '文件',
     closeFolder: '关闭文件夹',
+    openContainingFolder: '打开所在目录',
+    openFolderFailed: '无法打开文件管理器，请手动定位目录',
+    sortBy: '排序',
+    sortByName: '名称',
+    sortByTime: '修改时间',
+    sortAsc: '升序',
+    sortDesc: '降序',
     folderOpened: '已打开文件夹: {path}',
     extraDirsIgnoredBatch: '已忽略 {n} 个多余目录（每次仅打开一个文件夹）',
     fontSizeChanged: '字号 {size}px',
@@ -837,6 +844,13 @@ const I18N = {
     openFolder: 'Open Folder',
     files: 'Files',
     closeFolder: 'Close Folder',
+    openContainingFolder: 'Open Containing Folder',
+    openFolderFailed: 'Failed to open file manager, please locate the folder manually',
+    sortBy: 'Sort',
+    sortByName: 'Name',
+    sortByTime: 'Modified',
+    sortAsc: 'Ascending',
+    sortDesc: 'Descending',
     folderOpened: 'Opened folder: {path}',
     extraDirsIgnoredBatch: 'Ignored {n} extra folders (only one folder can be opened at a time)',
     fontSizeChanged: 'Font size {size}px',
@@ -1197,6 +1211,15 @@ class MarkdownEditor {
     setTitle('fmt-collapse', t('collapseExpandToolbar'));
     setTitle('outline-close', t('close'));
     setTitle('folder-close', t('closeFolder'));
+    // 文件目录排序控件文案
+    const sortKey = document.getElementById('folder-sort-key');
+    if (sortKey) {
+      sortKey.title = t('sortBy');
+      if (sortKey.options[0]) sortKey.options[0].text = t('sortByName');
+      if (sortKey.options[1]) sortKey.options[1].text = t('sortByTime');
+    }
+    this.updateFolderSortOrderButton();
+    this.updateFolderMenuLabel();
     setTitle('large-file-banner-close', t('closeNotice'));
     // fmt-icon-btn 系列（加粗/斜体/删除线/链接/图片/水平线/高亮/上标/下标）
     const fmtActionTitleKeys = {
@@ -1463,6 +1486,9 @@ class MarkdownEditor {
       'tab-close-others': 'closeOther',
       'tab-close-all': 'closeAll',
       'tab-copy-path': 'copyFilePath',
+      // 注意：'folder-open-containing' 文案由 updateFolderMenuLabel() 按 _folderCtxIsDir 动态切换
+      // （文件夹→openFolder / 文件→openContainingFolder），不走这里的静态映射。
+      'folder-copy-path': 'copyFilePath',
     };
     document.querySelectorAll('.context-menu-item[data-action]').forEach(el => {
       const key = ctxActionKeys[el.dataset.action];
@@ -1544,6 +1570,8 @@ class MarkdownEditor {
       customFonts: [],
       editorFont: '',
       previewFont: '',
+      fileSortKey: 'name',
+      fileSortOrder: 'asc',
     };
   }
 
@@ -3784,6 +3812,26 @@ class MarkdownEditor {
     document.getElementById('folder-close').addEventListener('click', () => {
       this.closeFolder();
     });
+    // 文件目录排序控件
+    const sortKeyEl = document.getElementById('folder-sort-key');
+    if (sortKeyEl) {
+      sortKeyEl.value = this.settings.fileSortKey || 'name';
+      sortKeyEl.addEventListener('change', () => {
+        this.settings.fileSortKey = sortKeyEl.value;
+        this.saveSettings();
+        this.renderFolderTree();
+      });
+    }
+    const sortOrderEl = document.getElementById('folder-sort-order');
+    if (sortOrderEl) {
+      sortOrderEl.addEventListener('click', () => {
+        this.settings.fileSortOrder = this.settings.fileSortOrder === 'desc' ? 'asc' : 'desc';
+        this.saveSettings();
+        this.updateFolderSortOrderButton();
+        this.renderFolderTree();
+      });
+    }
+    this.updateFolderSortOrderButton();
     document.getElementById('tab-outline').addEventListener('click', () => {
       this.showSidebarTab('outline');
     });
@@ -5855,6 +5903,75 @@ class MarkdownEditor {
     }, 400);
   }
 
+  sortFolderEntries(entries, key, order, dirFirst = true) {
+    const arr = entries.slice();
+    const sign = order === 'desc' ? -1 : 1;
+    arr.sort((a, b) => {
+      if (dirFirst && a.is_dir !== b.is_dir) {
+        return a.is_dir ? -1 : 1;
+      }
+      let cmp;
+      if (key === 'time') {
+        cmp = (a.mtime || 0) - (b.mtime || 0);
+      } else {
+        cmp = String(a.name).toLowerCase().localeCompare(String(b.name).toLowerCase());
+      }
+      return cmp * sign;
+    });
+    return arr;
+  }
+
+  // 文件大小自适应格式化：B / KB / MB / GB（保留 1 位小数，>=1000 才进级）
+  formatFileSize(bytes) {
+    const b = Number(bytes) || 0;
+    if (b < 1024) return b + ' B';
+    const units = ['KB', 'MB', 'GB', 'TB'];
+    let val = b / 1024;
+    let i = 0;
+    while (val >= 1024 && i < units.length - 1) {
+      val /= 1024;
+      i += 1;
+    }
+    return val.toFixed(val >= 100 ? 0 : 1) + ' ' + units[i];
+  }
+
+  // 修改时间友好格式化：今天显示 HH:mm，今年显示 MM-DD HH:mm，跨年显示 YYYY-MM-DD
+  formatFileTime(mtime) {
+    const ms = Number(mtime) || 0;
+    if (!ms) return '';
+    const d = new Date(ms);
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const hm = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) {
+      return hm;
+    }
+    const md = pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    if (d.getFullYear() === now.getFullYear()) {
+      return md + ' ' + hm;
+    }
+    return d.getFullYear() + '-' + md;
+  }
+
+  updateFolderSortOrderButton() {
+    const el = document.getElementById('folder-sort-order');
+    if (!el) return;
+    const asc = (this.settings.fileSortOrder || 'asc') !== 'desc';
+    // 升序=上箭头、降序=下箭头（不同图标，直观指示当前方向）
+    el.innerHTML = asc
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><polyline points="6 11 12 5 18 11"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><polyline points="6 13 12 19 18 13"/></svg>';
+    el.classList.toggle('desc', !asc);
+    el.title = this.t(asc ? 'sortAsc' : 'sortDesc');
+  }
+
+  // 文件树右键菜单首项文案：文件夹→「打开文件夹」，文件→「打开所在目录」（动态切换，i18n 键均有）
+  updateFolderMenuLabel() {
+    const span = document.getElementById('folder-open-label');
+    if (!span) return;
+    span.textContent = this.t(this._folderCtxIsDir ? 'openFolder' : 'openContainingFolder');
+  }
+
   async renderFolderTree() {
     const treeEl = document.getElementById('folder-tree');
     if (!treeEl) return;
@@ -5887,10 +6004,20 @@ class MarkdownEditor {
     } catch (e) {
       return;
     }
+    entries = this.sortFolderEntries(entries, this.settings.fileSortKey, this.settings.fileSortOrder);
     for (const entry of entries) {
       const node = document.createElement('div');
       node.className = 'tree-node ' + (entry.is_dir ? 'tree-folder' : 'tree-file');
       node.dataset.path = entry.path;
+      node.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this._folderCtxPath = entry.path;
+        this._folderCtxIsDir = entry.is_dir;
+        this.updateFolderMenuLabel();
+        this.hideAllContextMenus();
+        this.showContextMenu('context-menu-folder', e.clientX, e.clientY);
+      });
 
       const row = document.createElement('div');
       row.className = 'tree-row';
@@ -5946,6 +6073,21 @@ class MarkdownEditor {
       row.appendChild(arrow);
       row.appendChild(icon);
       row.appendChild(label);
+
+      const meta = document.createElement('span');
+      meta.className = 'tree-meta';
+      if (!entry.is_dir && entry.size != null) {
+        const sizeEl = document.createElement('span');
+        sizeEl.className = 'tree-size';
+        sizeEl.textContent = this.formatFileSize(entry.size);
+        meta.appendChild(sizeEl);
+      }
+      const timeEl = document.createElement('span');
+      timeEl.className = 'tree-time';
+      timeEl.textContent = this.formatFileTime(entry.mtime);
+      meta.appendChild(timeEl);
+      row.appendChild(meta);
+
       containerEl.appendChild(node);
     }
     this.highlightTreeActiveFile();
@@ -8498,6 +8640,9 @@ input[type="checkbox"]:checked::after { display: none !important; }
       case 'tab-close-others': this.closeOtherTabs(this._contextTabIndex); break;
       case 'tab-close-all': this.closeAllTabs(); break;
       case 'tab-copy-path': this.copyTabPath(this._contextTabIndex); break;
+
+      case 'folder-open-containing': this.openContainingFolder(this._folderCtxPath, this._folderCtxIsDir); break;
+      case 'folder-copy-path': this.copyPath(this._folderCtxPath); break;
     }
   }
 
@@ -8556,6 +8701,19 @@ input[type="checkbox"]:checked::after { display: none !important; }
     this.saveSession();
   }
 
+  async copyPath(path) {
+    if (!path) {
+      this.setStatus(this.t('notSaved'));
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(path);
+      this.setStatus(this.t('pathCopied'));
+    } catch {
+      this.setStatus(this.t('copyFailed'));
+    }
+  }
+
   async copyTabPath(index) {
     if (index < 0 || index >= this.tabs.length) return;
     const tab = this.tabs[index];
@@ -8563,12 +8721,48 @@ input[type="checkbox"]:checked::after { display: none !important; }
       this.setStatus(this.t('notSaved'));
       return;
     }
-    try {
-      await navigator.clipboard.writeText(tab.filePath);
-      this.setStatus(this.t('pathCopied'));
-    } catch {
-      this.setStatus(this.t('copyFailed'));
+    await this.copyPath(tab.filePath);
+  }
+
+  // 在系统文件管理器中「打开所在目录」：文件→打开父目录并选中文件，目录→打开并选中自身。
+  // 主路径 = Rust reveal_in_folder 命令（直接 spawn 系统文件管理器，不受 shell 插件 scope 限制，最可靠，
+  //   且能「选中」目标文件）；兜底 = shell.open(dir)（需 capability 放行本地路径，链接同理走此通道）。
+  // 注意：shell.open 对文件夹默认被 scope 拒绝，必须由 capability 显式允许本地路径，否则静默失败。
+  async openContainingFolder(path, isDir) {
+    if (!path) { console.error('[openFolder] path 为空'); this.setStatus(this.t('openFolderFailed')); return; }
+    // 去掉 Windows 长路径前缀 \\?\（explorer / shell 都不认，会导致静默失败）。
+    const stripLong = (p) => (p && p.startsWith('\\\\?\\')) ? p.slice(4) : p;
+    const normPath = stripLong(path);
+    // 目录本身，或文件取其父目录
+    const dir = stripLong(isDir ? path : path.replace(/[/\\][^/\\]*$/, ''));
+    if (!dir) { console.error('[openFolder] dir 为空, path=', path); this.setStatus(this.t('openFolderFailed')); return; }
+    console.log('[openFolder] 目标 dir=', dir, ' normPath=', normPath, ' isDir=', !!isDir, ' Tauri可用=', TauriApi.isAvailable());
+
+    // 1) 主路径：Rust 命令直接 spawn 文件管理器（能选中目标文件，最可靠）。
+    if (TauriApi.isAvailable()) {
+      try {
+        // 注意：Tauri v2 invoke 参数名 JS 侧必须 camelCase（Rust 侧 is_dir ↔ JS 侧 isDir）
+        await TauriApi.revealInFolder({ path: normPath, isDir: !!isDir });
+        console.log('[openFolder] reveal_in_folder 调用成功，已请求打开资源管理器');
+        return;
+      } catch (e) {
+        console.error('[openFolder] reveal_in_folder 失败:', e && e.message ? e.message : String(e));
+      }
+    } else {
+      console.error('[openFolder] TauriApi.isAvailable()=false，跳过 reveal_in_folder');
     }
+
+    // 2) 兜底：shell.open 打开所在目录（capability 已放行本地路径）。
+    let dirOpened = false;
+    if (TauriApi.shellOpen) {
+      try { dirOpened = await TauriApi.shellOpen(dir); } catch (e) { console.error('[openFolder] shell.open 异常:', e); dirOpened = false; }
+      console.log('[openFolder] shell.open 结果=', dirOpened);
+    } else {
+      console.error('[openFolder] shellOpen 不可用');
+    }
+    if (dirOpened) return;
+
+    this.setStatus(this.t('openFolderFailed'));
   }
 
   async batchSaveTabs(tabs) {

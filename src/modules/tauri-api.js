@@ -15,13 +15,14 @@
 (function () {
   'use strict';
 
-  // 20 个自定义命令（唯一真源）
+  // 自定义命令（唯一真源）；方法由其生成。契约测试反解析 lib.rs 的 generate_handler! 校验集合一致。
   const COMMANDS = [
     'read_file', 'write_file', 'write_binary_file', 'file_meta', 'is_directory',
     'list_dir', 'ensure_dir', 'app_data_dir', 'read_bundled_file',
     'read_bundled_image_as_base64', 'fetch_image_as_base64', 'save_image_to_assets',
     'watch_folder', 'stop_watch', 'search_in_files', 'generate_toc',
     'get_cli_args', 'quit_app', 'open_devtools', 'set_window_behavior',
+    'reveal_in_folder',
   ];
 
   // 延迟求值：调用时才读取 invoke（根治白屏单点）
