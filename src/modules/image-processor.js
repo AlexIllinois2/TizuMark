@@ -27,9 +27,23 @@ function mimeOf(s) {
 }
 
 function fail(img) {
+  // 清除有效 src → 浏览器才会渲染 alt 文本（有效 data URI 下 alt 不显示）。
+  img.removeAttribute('src');
   img.style.border = '1px solid #d00';
-  img.style.opacity = '0.4';
+  img.style.backgroundColor = 'rgba(208,0,0,0.06)';
   img.alt = (img.alt || '') + ' [加载失败]';
+}
+
+// 还原 unified 渲染器对非 ASCII 路径做的 percent-encode（如 图片/截图.png → %E5%9B%BE...）。
+// 若不解码直接拿编码串去 Rust 读盘会找不到真实文件 → 裂图。纯 ASCII 路径解码为 no-op；
+// 含非法转义序列（如字面量 % 非转义）时容错返回原串，避免抛错中断整张图处理。
+function safeDecodeURI(s) {
+  if (typeof s !== 'string' || s.indexOf('%') === -1) return s;
+  try {
+    return decodeURIComponent(s);
+  } catch (e) {
+    return s;
+  }
 }
 
 // 已可显示的内联 / 远程资源，直接跳过（与原 app.js 一致）
@@ -89,6 +103,8 @@ async function processImages(preview, deps) {
     const gen = getRenderGeneration();
     // file:// 协议：去掉前缀，当作绝对路径处理（demo.md 声明支持 file:// 写法）
     let rawSrc = src.startsWith('file://') ? src.replace(/^file:\/\//, '') : src;
+    // 关键修复：中文/非 ASCII 路径被渲染器 percent-encode，必须解码还原成真实路径再读盘。
+    rawSrc = safeDecodeURI(rawSrc);
     // 绝对路径（Unix /... 或 Windows D:/...）：直接走 Rust 读磁盘
     if (rawSrc.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(rawSrc)) {
       try {

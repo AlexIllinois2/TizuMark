@@ -356,6 +356,7 @@ const I18N = {
     updateSkip: '稍后再说',
     csDirPlaceholder: '目录路径',
     largeFileNotice: '⚠ 文档过大（约 {lines} 行 / {size} MB），预览仅显示当前位置附近内容，滚动编辑区可逐步查看全文。',
+    dontRemind: '不再提醒',
     shortcutOccupied: '快捷键 "{key}" 已被「{name}」占用',
     progressCheckingEula: '正在检查许可协议…',
     progressInitEditor: '正在初始化编辑器…',
@@ -757,6 +758,7 @@ const I18N = {
     updateSkip: 'Later',
     csDirPlaceholder: 'Folder path',
     largeFileNotice: '⚠ Large document ({lines} lines / {size} MB): preview shows only the area near the current position; scroll the editor to view the full content gradually.',
+    dontRemind: "Don't remind",
     shortcutOccupied: 'Shortcut "{key}" is already used by "{name}"',
     progressCheckingEula: 'Checking license agreement…',
     progressInitEditor: 'Initializing editor…',
@@ -901,6 +903,9 @@ class MarkdownEditor {
     this._editorPercent = null;
     this.isDark = false;
     this.viewMode = 'preview';
+    // 会话级「不再提醒」标志：仅本次应用运行期间有效，关闭应用后新会话自然复位为 false。
+    // 注意：不在 switchTab / openFile 等处重置，否则会丢失用户在本次会话内的选择。
+    this._largeFileNoticeSessionSuppressed = false;
 
     this.settings = this.loadSettings();
     this.shortcuts = this.loadShortcuts();
@@ -1000,6 +1005,8 @@ class MarkdownEditor {
   }
 
   showLargeFileNotice(key, totalLines, totalChars) {
+    // 会话级「不再提醒」：本次应用运行期间一旦点过，整轮生命周期内都不再弹（不含跨会话）。
+    if (this._largeFileNoticeSessionSuppressed) return;
     // 纯预览模式使用虚拟滚动，可拖到任意位置查看全文，无需提示横幅
     if (this.viewMode === 'preview') { this.hideLargeFileNotice(); return; }
     if (this._largeFileNoticeDismissed && this._largeFileNoticeKey === key) return;
@@ -1228,6 +1235,7 @@ class MarkdownEditor {
     this.updateFolderSortOrderButton();
     this.updateFolderMenuLabel();
     setTitle('large-file-banner-close', t('closeNotice'));
+    setTitle('large-file-banner-dont-remind', t('dontRemind'));
     // fmt-icon-btn 系列（加粗/斜体/删除线/链接/图片/水平线/高亮/上标/下标）
     const fmtActionTitleKeys = {
       'insert-bold': 'bold',
@@ -2036,8 +2044,9 @@ class MarkdownEditor {
           const previewHeight = this.preview.clientHeight;
           const targetRect = target.getBoundingClientRect();
           const previewRect = this.preview.getBoundingClientRect();
-          const top = targetRect.top - previewRect.top + this.preview.scrollTop
-                    - (previewHeight / 2) + (targetRect.height / 2);
+          // 顶部对齐：标题行与预览视口顶部对齐（余量 0），与编辑区跳转（顶部 -80px）一致，
+          // 符合用户预期「点大纲即定位到标题顶部」，且不依赖居中逻辑、不影响滚动同步。
+          const top = targetRect.top - previewRect.top + this.preview.scrollTop;
           this.preview.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
         } else if (this.previewWindow) {
           // 大文档窗口模式：目标标题尚未渲染在预览中，以该行为焦点重渲染预览窗口，使其落点
@@ -3951,6 +3960,11 @@ class MarkdownEditor {
     document.getElementById('large-file-banner-close').addEventListener('click', () => {
       this.hideLargeFileNotice();
       this._largeFileNoticeDismissed = true;
+    });
+    // 「不再提醒」：本次应用运行期间彻底屏蔽大文档横幅（会话级，重启后复位）。
+    document.getElementById('large-file-banner-dont-remind').addEventListener('click', () => {
+      this._largeFileNoticeSessionSuppressed = true;
+      this.hideLargeFileNotice();
     });
     document.getElementById('about-close').addEventListener('click', () => this.hideAbout());
     document.getElementById('about-dialog').addEventListener('click', (e) => {
