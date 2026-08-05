@@ -203,7 +203,7 @@ test('folder-sort: applyLanguage 刷新排序控件文案（中/英）', async (
   } finally { cleanup(w); }
 });
 
-test('folder-ctx: 文件树节点右键显示 #context-menu-folder 并记录上下文路径', async () => {
+test('folder-ctx: 文件树节点右键显示 #context-menu-file-tree 并记录上下文路径', async () => {
   const { w, ed } = await makeEditor();
   try {
     const origInvoke = w.__TAURI__.core.invoke;
@@ -213,22 +213,25 @@ test('folder-ctx: 文件树节点右键显示 #context-menu-folder 并记录上�
     };
     ed.workspaceFolder = '/root';
     await ed.renderFolderTree();
-    const menu = w.document.getElementById('context-menu-folder');
-    assert.ok(menu, '右键菜单容器应存在');
+    // 检查 dev2 的 context-menu-file-tree 菜单
+    const menu = w.document.getElementById('context-menu-file-tree');
+    assert.ok(menu, '文件树右键菜单容器应存在');
     assert.ok(menu.classList.contains('hidden'), '初始应隐藏');
 
     // 明确选中 a.md 节点（排序后首个文件节点），避免顺序歧义
     const fileNode = w.document.querySelector('#folder-tree .tree-node[data-path="/root/a.md"]');
     assert.ok(fileNode, '应有 a.md 文件节点');
-    const evt = new w.window.Event('contextmenu', { bubbles: false });
+    // 使用 bubbles: true 让事件冒泡到容器，触发 dev2 的委托监听器
+    const evt = new w.window.Event('contextmenu', { bubbles: true });
     evt.clientX = 10; evt.clientY = 10;
-    evt.preventDefault = () => {};
-    evt.stopPropagation = () => {};
     fileNode.dispatchEvent(evt);
 
-    assert.ok(!menu.classList.contains('hidden'), '右键后菜单应显示');
+    // 检查 dev2 的文件树菜单是否显示
+    assert.ok(!menu.classList.contains('hidden'), '右键后文件树菜单应显示');
+    // 验证上下文状态被正确设置
     assert.strictEqual(ed._folderCtxPath, '/root/a.md', '应记录被右键文件的路径');
     assert.strictEqual(ed._folderCtxIsDir, false);
+    assert.strictEqual(ed._fileTreeCtx?.path, '/root/a.md', 'dev2 的 _fileTreeCtx 也应记录路径');
   } finally { cleanup(w); }
 });
 

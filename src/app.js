@@ -6281,13 +6281,14 @@ class MarkdownEditor {
       node.className = 'tree-node ' + (entry.is_dir ? 'tree-folder' : 'tree-file');
       node.dataset.path = entry.path;
       node.addEventListener('contextmenu', (e) => {
+        // 注意：此处仅做状态设置，不阻止事件冒泡。
+        // dev2 的容器级委托监听器（#folder-tree contextmenu）会处理实际的菜单显示，
+        // 它提供更完整的功能（剪切/复制/粘贴/新建/删除等）。
+        // 如果调用 stopPropagation()，dev2 的监听器将收不到事件。
         e.preventDefault();
-        e.stopPropagation();
         this._folderCtxPath = entry.path;
         this._folderCtxIsDir = entry.is_dir;
         this.updateFolderMenuLabel();
-        this.hideAllContextMenus();
-        this.showContextMenu('context-menu-folder', e.clientX, e.clientY);
       });
 
       const row = document.createElement('div');
@@ -9401,7 +9402,12 @@ await TauriApi.openDevtools();
         e.preventDefault();
         e.stopPropagation();
         const isDir = treeNode.classList.contains('tree-folder');
+        // 设置 dev2 所需的文件树上下文
         this._fileTreeCtx = { path, isDir, nodeEl: treeNode };
+        // 同时设置 master 所需的状态（供其他功能如 openContainingFolder 使用）
+        this._folderCtxPath = path;
+        this._folderCtxIsDir = isDir;
+        this.updateFolderMenuLabel();
         this.hideAllContextMenus();
         this.showContextMenu('context-menu-file-tree', e.clientX, e.clientY);
         this.updateFileTreeMenuState();
