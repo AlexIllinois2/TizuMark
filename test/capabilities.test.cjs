@@ -47,19 +47,20 @@ test('capabilities: 前端与构建产物零引用 plugin:fs', () => {
 
 test('capabilities: 核心权限仍在位（dialog/shell/updater/window-state）', () => {
   const cap = JSON.parse(fs.readFileSync(capFile, 'utf8'));
-  const perms = cap.permissions.join('\n');
+  // 兼容字符串权限（如 "dialog:default"）和对象权限（如 {"identifier":"shell:allow-open",...}）
+  const permIds = cap.permissions.map((p) => typeof p === 'string' ? p : p.identifier).join('\n');
   for (const expect of [
     'dialog:default', 'dialog:allow-open', 'dialog:allow-save',
     'shell:allow-open', 'updater:default', 'window-state:default',
   ]) {
-    assert.ok(perms.includes(expect), `应保留权限：${expect}`);
+    assert.ok(permIds.includes(expect), `应保留权限：${expect}`);
   }
   // dialog 全能力集：open/save/confirm/ask/message 必须齐（confirm/ask 缺一即
   // window.confirm / dialog.ask 调用报 "not allowed"，历史 bug；可用性优先）
   for (const expect of ['dialog:allow-confirm', 'dialog:allow-ask']) {
-    assert.ok(perms.includes(expect), `dialog 能力不可缺：${expect}`);
+    assert.ok(permIds.includes(expect), `dialog 能力不可缺：${expect}`);
   }
   // 明确排除：不允许 shell:allow-execute / allow-spawn（任意命令执行）
-  assert.ok(!perms.includes('shell:allow-execute') && !perms.includes('shell:allow-spawn'),
+  assert.ok(!permIds.includes('shell:allow-execute') && !permIds.includes('shell:allow-spawn'),
     '不得出现 shell 任意命令执行权限');
 });
