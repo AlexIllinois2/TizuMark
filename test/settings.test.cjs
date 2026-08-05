@@ -34,6 +34,7 @@ test('settings: defaultSettings 返回完整默认配置', async () => {
     assert.strictEqual(d.outlineWidth, 240);
     assert.strictEqual(d.codeLineNumbers, false);
     assert.strictEqual(d.codeWrap, false);
+    assert.strictEqual(d.codeScroll, true, '代码块滚动条默认开启（保持原行为）');
     assert.strictEqual(d.softBreaks, true);
     assert.strictEqual(d.showTrayIcon, true);
     assert.strictEqual(d.closeAction, 'ask');
@@ -171,6 +172,18 @@ test('settings: applySettings 应用 maxWidth 与代码块选项', async () => {
     assert.strictEqual(ed.preview.style.maxWidth, '800px');
     assert.ok(ed.preview.classList.contains('code-line-numbers'));
     assert.ok(ed.preview.classList.contains('code-wrap'));
+  } finally { cleanup(w); }
+});
+
+test('settings: applySettings 按 codeScroll 切换 code-no-scroll 类（关闭时撑开高度）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.settings.codeScroll = false;
+    await ed.applySettings();
+    assert.ok(ed.preview.classList.contains('code-no-scroll'), 'codeScroll=false 应加 code-no-scroll（高度自适应、不滚动）');
+    ed.settings.codeScroll = true;
+    await ed.applySettings();
+    assert.ok(!ed.preview.classList.contains('code-no-scroll'), 'codeScroll=true 应移除 code-no-scroll（恢复滚动条行为）');
   } finally { cleanup(w); }
 });
 

@@ -1614,6 +1614,12 @@ body.is-resizing .side-btn {
   overflow-y: hidden;
 }
 
+/* 关闭「代码块滚动条」设置时：高度自适应内容，永不出现纵向滚动条 */
+.preview-content.code-no-scroll .code-scroll {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
 /* 代码块 hljs 默认主题里 .hljs 元素带 background:#ffffff，pre 内会形成"内白外灰"
    双层。统一让 .hljs 透明，背景完全由 pre 的 var(--code-bg) 提供，软件与导出 PDF 一致。 */
 .preview-content pre code.hljs,

@@ -175,6 +175,8 @@ const I18N = {
     lineNumbers: '显示行号',
     codeLineNumbers: '代码块行号',
     codeBlockWrap: '代码块自动换行',
+    codeScroll: '代码块滚动条',
+    codeScrollHint: '勾选后，较长的代码块会显示纵向滚动条（默认行为）；不勾选时，代码块高度自动撑开、与内容等高，不再出现滚动条。',
     langZh: '中文',
     langEn: 'English',
     previewFontSize: '正文字号',
@@ -573,6 +575,8 @@ const I18N = {
     lineNumbers: 'Line Numbers',
     codeLineNumbers: 'Code line numbers',
     codeBlockWrap: 'Wrap code blocks',
+    codeScroll: 'Code block scrollbar',
+    codeScrollHint: 'When enabled, long code blocks show a vertical scrollbar (default). When disabled, the code block grows to fit its content height and no scrollbar appears.',
     langZh: 'Chinese',
     langEn: 'English',
     previewFontSize: 'Preview Font Size',
@@ -1137,6 +1141,7 @@ class MarkdownEditor {
     setRowLabel('set-soft-breaks', t('softBreaks'));
     setRowLabel('set-code-line-numbers', t('codeLineNumbers'));
     setRowLabel('set-code-wrap', t('codeBlockWrap'));
+    setRowLabel('set-code-scroll', t('codeScroll'));
     setRowLabel('set-close-action', t('closeAction'));
     setRowLabel('set-show-tray-icon', t('showTrayIcon'));
     setRowLabel('settings-image-store-mode', t('imageSettingLabel'));
@@ -1149,6 +1154,8 @@ class MarkdownEditor {
     if (softBreaksHint) softBreaksHint.textContent = t('softBreaksHint');
     const tabSizeHint = document.querySelector('#setting-tab-size-hint .hint-text');
     if (tabSizeHint) tabSizeHint.textContent = t('tabSizeHint');
+    const codeScrollHint = document.querySelector('#setting-code-scroll-hint .hint-text');
+    if (codeScrollHint) codeScrollHint.textContent = t('codeScrollHint');
     const trayHint = document.querySelector('#setting-show-tray-icon-hint .hint-text');
     if (trayHint) trayHint.textContent = t('showTrayIconHint');
     setText('setting-image-store-assets', t('imageSettingAssets'));
@@ -1562,6 +1569,7 @@ class MarkdownEditor {
       outlineWidth: 240,
       codeLineNumbers: false,
       codeWrap: false,
+      codeScroll: true,
       softBreaks: true,
       showTrayIcon: true,
       closeAction: 'ask',
@@ -1651,6 +1659,7 @@ class MarkdownEditor {
     document.getElementById('set-scroll-sync').checked = s.scrollSync;
     document.getElementById('set-code-line-numbers').checked = s.codeLineNumbers;
     document.getElementById('set-code-wrap').checked = s.codeWrap;
+    document.getElementById('set-code-scroll').checked = s.codeScroll;
     document.getElementById('set-language').value = s.language || 'zh';
     const modeRadio = document.querySelector(`#settings-image-store-mode input[value="${s.imageInsertMode || 'assets'}"]`);
     if (modeRadio) modeRadio.checked = true;
@@ -1789,6 +1798,9 @@ class MarkdownEditor {
     });
     document.getElementById('set-code-wrap').addEventListener('change', (e) => {
       this.settings.codeWrap = e.target.checked;
+    });
+    document.getElementById('set-code-scroll').addEventListener('change', (e) => {
+      this.settings.codeScroll = e.target.checked;
     });
     document.getElementById('set-language').addEventListener('change', (e) => {
       this.settings.language = e.target.value;
@@ -2114,6 +2126,7 @@ class MarkdownEditor {
     }
     this.preview.classList.toggle('code-line-numbers', s.codeLineNumbers);
     this.preview.classList.toggle('code-wrap', s.codeWrap);
+    this.preview.classList.toggle('code-no-scroll', s.codeScroll === false);
     if (this._hljsCache) this._hljsCache.clear();
     await this.applyThemeMode();
     this.applyFontScheme();
