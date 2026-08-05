@@ -2508,16 +2508,16 @@ class MarkdownEditor {
       italic: { key: 'Ctrl+I', label: '斜体' },
       insertLink: { key: 'Ctrl+K', label: '插入链接' },
       exportPDF: { key: 'Ctrl+P', label: '导出 PDF' },
-      inlineCode: { key: 'Ctrl+`', label: '行内代码' },
-      strikethrough: { key: 'Ctrl+Shift+S', label: '删除线' },
-      codeBlock: { key: 'Ctrl+Shift+C', label: '代码块' },
+      inlineCode: { key: 'Ctrl+Shift+`', label: '行内代码' },
+      strikethrough: { key: 'Ctrl+Shift+5', label: '删除线' },
+      codeBlock: { key: 'Ctrl+Shift+K', label: '代码块' },
       blockquote: { key: 'Ctrl+Shift+Q', label: '引用块' },
       toggleView: { key: '', label: '切换视图' },
       toggleTheme: { key: 'Ctrl+Shift+T', label: '切换主题' },
       saveAs: { key: '', label: '另存为' },
       crossSearch: { key: 'Ctrl+H', label: '跨文件搜索' },
       insertTable: { key: '', label: '插入表格' },
-      insertImage: { key: '', label: '插入图片' },
+      insertImage: { key: 'Ctrl+Shift+I', label: '插入图片' },
       insertUl: { key: '', label: '无序列表' },
       insertOl: { key: '', label: '有序列表' },
       insertTask: { key: '', label: '任务列表' },
@@ -2525,13 +2525,13 @@ class MarkdownEditor {
       highlight: { key: '', label: '高亮标记' },
       insertSuperscript: { key: '', label: '上标' },
       insertSubscript: { key: '', label: '下标' },
-      insertH1: { key: '', label: '标题1' },
-      insertH2: { key: '', label: '标题2' },
-      insertH3: { key: '', label: '标题3' },
-      insertH4: { key: '', label: '标题4' },
-      insertH5: { key: '', label: '标题5' },
-      insertH6: { key: '', label: '标题6' },
-      insertMathBlock: { key: '', label: '数学公式' },
+      insertH1: { key: 'Ctrl+1', label: '标题1' },
+      insertH2: { key: 'Ctrl+2', label: '标题2' },
+      insertH3: { key: 'Ctrl+3', label: '标题3' },
+      insertH4: { key: 'Ctrl+4', label: '标题4' },
+      insertH5: { key: 'Ctrl+5', label: '标题5' },
+      insertH6: { key: 'Ctrl+6', label: '标题6' },
+      insertMathBlock: { key: 'Ctrl+Shift+M', label: '数学公式' },
       insertMermaid: { key: '', label: 'Mermaid 图表' },
       insertToc: { key: '', label: '目录' },
       insertCalloutNote: { key: '', label: 'Note 提示' },
@@ -2629,18 +2629,47 @@ class MarkdownEditor {
     this.applyShortcuts();
   }
 
+  // 归一化单条快捷键：兼容旧版字符串格式、补齐缺失字段、损坏 key 回落默认，
+  // 自愈 localStorage 中残留的旧/损坏数据，确保加粗等键位不会因数据格式变更而丢失。
+  _normalizeShortcutEntry(raw, def) {
+    const dKey = def && def.key ? def.key : '';
+    const dLabel = def && def.label ? def.label : '';
+    if (raw == null) return { key: dKey, label: dLabel };
+    // 旧版曾把 bold 等存成字符串（"Ctrl+B"）而非 {key,label} 对象
+    if (typeof raw === 'string') {
+      const k = raw.trim();
+      return { key: k, label: dLabel };
+    }
+    if (typeof raw === 'object') {
+      let key = (typeof raw.key === 'string') ? raw.key.trim() : '';
+      if (key === '') key = dKey; // 旧数据 key 缺失/损坏 → 回落默认键（自愈）
+      const label = (typeof raw.label === 'string' && raw.label.trim()) ? raw.label.trim() : dLabel;
+      return { key, label };
+    }
+    return { key: dKey, label: dLabel };
+  }
+
+  // 以 defaults 为基准逐项归一化 saved：未知项丢弃、缺失项落默认、字符串/损坏项自愈。
+  _normalizeShortcuts(saved, defaults) {
+    const out = {};
+    for (const [aid, def] of Object.entries(defaults)) {
+      out[aid] = this._normalizeShortcutEntry(saved ? saved[aid] : undefined, def);
+    }
+    return out;
+  }
+
   loadShortcuts() {
     const defaults = this.getDefaultShortcuts();
     try {
-      const saved = this._validConfigObject(JSON.parse(localStorage.getItem('tizumark-shortcuts')));
-      const merged = { ...defaults, ...saved };
-      // 迁移：Ctrl+Shift+F 被中文输入法拦截，迁移到 Ctrl+H（不受输入法拦截）。
-      // 此前中间版本用过 Ctrl+Shift+L，也一并迁移到 Ctrl+H。
+      const parsed = JSON.parse(localStorage.getItem('tizumark-shortcuts'));
+      const saved = this._validConfigObject(parsed);
+      const merged = this._normalizeShortcuts(saved, defaults);
+      // 迁移：crossSearch 受输入法/保留键拦截的键位，统一迁到 Ctrl+H（不受输入法拦截）。
+      // 此前中间版本用过 Ctrl+Shift+F / Ctrl+Shift+L，也一并迁移到 Ctrl+H。
       if (merged.crossSearch && (merged.crossSearch.key === 'Ctrl+Shift+F' || merged.crossSearch.key === 'Ctrl+Shift+L')) {
         merged.crossSearch = { ...merged.crossSearch, key: 'Ctrl+H' };
       }
-      // 迁移：findReplace / previewFind 不再作为独立快捷键项（与 find 是同一功能），
-      // 若用户有保存的键位则清理。
+      // 迁移：findReplace / previewFind 不再作为独立快捷键项（与 find 是同一功能），清理残留。
       if (merged.findReplace) delete merged.findReplace;
       if (merged.previewFind) delete merged.previewFind;
       return merged;
@@ -3047,12 +3076,21 @@ class MarkdownEditor {
     }
     this.cm.setOption('extraKeys', extraKeys);
 
-    // Build global shortcut lookup for document-level handling
+    // Build global shortcut lookup for document-level handling.
+    // 全局动作（保存/查找等）在任何焦点下都派发；编辑器动作（加粗/标题等）包一层
+    // 「编辑器聚焦才执行」的守卫，这样无论 CodeMirror 自身的 extraKeys 派发是否生效
+    // （焦点/事件到达问题），都能通过全局捕获通道稳定触发，且不会在非编辑场景误触。
+    // 命中即 stopPropagation（见 document keydown 监听），事件不再冒泡到 CM，不会重复执行。
     this.globalShortcutLookup = {};
-    for (const [action, fn] of Object.entries(globalMap)) {
+    const registerGlobal = (action, fn, editorOnly) => {
       const key = s[action]?.key;
-      if (key) this.globalShortcutLookup[key] = fn;
-    }
+      if (!key) return;
+      this.globalShortcutLookup[key] = editorOnly
+        ? () => { if (this.cm && this.cm.hasFocus()) fn(); }
+        : fn;
+    };
+    for (const [action, fn] of Object.entries(globalMap)) registerGlobal(action, fn, false);
+    for (const [action, fn] of Object.entries(editorMap)) registerGlobal(action, fn, true);
 
     this.updateShortcutHints();
   }
