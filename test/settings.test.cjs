@@ -643,3 +643,101 @@ test('settings: 切换英文后设置对话框无残留中文（除字体预览�
     assert.deepStrictEqual(leftovers, [], '设置对话框不应有残留中文，实际: ' + leftovers.join(' | '));
   } finally { cleanup(w); }
 });
+
+// ====== 添加字体：立即保存列表，不自动切换选择项、不立即应用（2026-08-06） ======
+
+// 构造 addFontFiles 所需 Tauri 运行时：dialogOpen 返回字体文件，
+// appDataDir/ensureDir/fetchImageAsBase64/writeBinaryFile 均可用。
+function mockFontImportEnv(w, files) {
+  w.TauriApi.dialogOpen = async () => files;
+  w.TauriApi.appDataDir = async () => 'C:/mock/appdata';
+  w.TauriApi.ensureDir = async () => ({});
+  w.TauriApi.fetchImageAsBase64 = async ({ url }) =>
+    Buffer.from('font-bytes:' + url).toString('base64');
+  w.TauriApi.writeBinaryFile = async () => ({});
+  if (!w.requestAnimationFrame) {
+    w.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
+  }
+}
+
+test('settings: 添加字体只入列表并立即落盘，不自动切换编辑器/预览字体选择，也不应用', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    // 预置当前选择项，验证添加后不被改写
+    ed.settings.customFonts = [{ id: 'cfOld', name: 'Old Font', fileName: 'old.ttf', hash: 'h0' }];
+    ed.settings.editorFont = 'cfOld';
+    ed.settings.previewFont = 'cfOld';
+    mockFontImportEnv(w, ['C:/fonts/NewFont.ttf']);
+
+    await ed.addFontFiles();
+
+    assert.strictEqual(ed.settings.customFonts.length, 2, 'customFonts 应新增一条');
+    const added = ed.settings.customFonts.find(f => f.name === 'NewFont.ttf');
+    assert.ok(added, '应含新字体 NewFont.ttf');
+    assert.ok(added.id && added.fileName, '新字体应生成 id 与 fileName');
+
+    // 不自动切换选择项
+    assert.strictEqual(ed.settings.editorFont, 'cfOld', 'editorFont 应保持原选择');
+    assert.strictEqual(ed.settings.previewFont, 'cfOld', 'previewFont 应保持原选择');
+
+    // 不立即应用：CM/预览 fontFamily 不应变为 tizumark-custom-*
+    assert.ok(!ed.cm.getWrapperElement().style.fontFamily.includes('tizumark-custom-cf'),
+      '添加后不应自动应用字体到编辑器，实际: ' + ed.cm.getWrapperElement().style.fontFamily);
+    assert.ok(!ed.preview.style.fontFamily.includes('tizumark-custom-cf'),
+      '添加后不应自动应用字体到预览，实际: ' + ed.preview.style.fontFamily);
+
+    // 字体列表已立即落盘
+    ed.saveSettings(); // 先确保 localStorage 已有完整设置记录（tabSize=4 等）
+    ed.settings.tabSize = 8; // 面板内未应用的改动（内存）
+    await ed.addFontFiles();
+
+    const stored = JSON.parse(w.localStorage.getItem('tizumark-settings'));
+    assert.strictEqual(stored.customFonts.length, 2, 'customFonts 应立即写入 localStorage');
+    assert.strictEqual(stored.customFonts.find(f => f.name === 'NewFont.ttf')?.fileName, added.fileName);
+    // 未应用的其他设置不应被 addFontFiles 落盘改动
+    assert.strictEqual(stored.tabSize, 4, '未应用的其他设置不应被 addFontFiles 落盘');
+  } finally { cleanup(w); }
+});
+
+test('settings: 添加字体后取消面板，字体列表保留（快照已同步）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.settings.customFonts = [];
+    ed.settings.editorFont = '';
+    ed.settings.previewFont = '';
+    mockFontImportEnv(w, ['C:/fonts/Persist.ttf']);
+
+    ed.showSettings(); // 打开面板会生成 _settingsSnapshot
+    await ed.addFontFiles();
+    assert.strictEqual(ed.settings.customFonts.length, 1, '添加后列表 1 条');
+
+    // 取消面板：字体列表不回滚（快照已同步），选择项保持（本就未变）
+    w.document.getElementById('settings-cancel-btn').dispatchEvent(new w.Event('click'));
+    assert.strictEqual(ed.settings.customFonts.length, 1, '取消后字体列表应保留');
+    assert.strictEqual(ed.settings.customFonts[0].name, 'Persist.ttf');
+    assert.strictEqual(ed.settings.editorFont, '', '选择项仍为空');
+    assert.strictEqual(ed.settings.previewFont, '', '选择项仍为空');
+  } finally { cleanup(w); }
+});
+
+test('settings: 添加字体后用户手动选择并应用/保存才生效落盘', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.settings.customFonts = [];
+    mockFontImportEnv(w, ['C:/fonts/Chosen.ttf']);
+    await ed.addFontFiles();
+    const added = ed.settings.customFonts[0];
+
+    // 用户手动把选择项改为新字体（模拟下拉框 change）
+    ed.settings.editorFont = added.id;
+    ed.settings.previewFont = added.id;
+    // 点「应用」→ applyPendingSettings → applySettings + saveSettings 全量落盘
+    w.document.getElementById('settings-apply-btn').dispatchEvent(new w.Event('click'));
+    await delay(60);
+
+    const stored = JSON.parse(w.localStorage.getItem('tizumark-settings'));
+    assert.strictEqual(stored.editorFont, added.id, '应用后 editorFont 落盘为新字体');
+    assert.strictEqual(stored.previewFont, added.id, '应用后 previewFont 落盘为新字体');
+    assert.strictEqual(stored.customFonts.length, 1);
+  } finally { cleanup(w); }
+});

@@ -1648,6 +1648,19 @@ class MarkdownEditor {
     try { localStorage.setItem('tizumark-settings', JSON.stringify(this.settings)); } catch {}
   }
 
+  // 只把 customFonts 字段写回 localStorage（不落盘面板内其他未应用设置）。
+  // 需求（2026-08-06）：添加字体后字体列表立即保存，但编辑器/预览字体选择
+  // 与是否应用仍由「应用/保存」决定。
+  _persistCustomFontsOnly() {
+    try {
+      const raw = localStorage.getItem('tizumark-settings');
+      const stored = raw ? this._validConfigObject(JSON.parse(raw)) : {};
+      if (!stored) return;
+      stored.customFonts = this.settings.customFonts;
+      localStorage.setItem('tizumark-settings', JSON.stringify(stored));
+    } catch {}
+  }
+
   // 把 this.settings 同步到设置面板各控件（initSettings 与「取消/X 恢复」共用）
   syncSettingsControls() {
     const s = this.settings;
@@ -2198,14 +2211,19 @@ class MarkdownEditor {
           failed.push({ name, reason: String(err && err.message ? err.message : err) });
         }
       }
-      if (imported.length) {
-        const last = imported[imported.length - 1];
-        this.settings.editorFont = last;
-        this.settings.previewFont = last;
+      // 需求（2026-08-06）：添加字体只入列表并立即保存字体列表本身，
+      // 不自动切换编辑器/预览字体选择项，也不立即应用到软件；
+      // 用户手动选择字体后点「应用/保存」才生效并落盘。
+      if (success.length) {
+        // 仅持久化 customFonts 字段（不落盘面板内其他未应用设置）
+        this._persistCustomFontsOnly();
+        // 同步快照：取消面板不丢已添加的字体列表
+        if (this._settingsSnapshot) {
+          this._settingsSnapshot.customFonts = JSON.parse(JSON.stringify(this.settings.customFonts || []));
+        }
       }
-      // 应用式：字体列表在面板内即时更新，落盘随「应用/保存」
+      // 注册 @font-face 资源（供下拉框/预览按需选择时可用），不改变任何选择项
       await this.registerCustomFonts();
-      this.applyCustomFonts();
       this.renderCustomFontSettings();
       if (success.length) {
         this.showToast(this.t('importSuccess', { n: success.length }), 'success');
