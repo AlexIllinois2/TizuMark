@@ -174,6 +174,13 @@
           });
         } catch (e) { console.warn('[preview] Code block error:', e); }
 
+        // 代码块按需滚动：CSS 默认 overflow-y:hidden（避免 Windows always-show 滚动条
+        // 轨道在短代码块上也出现），只有内容真的超出 max-height 时才显式设 auto（必须
+        // 显式 'auto'，不能清空让 CSS 接管——CSS 已是 hidden，清空后还是 hidden）。
+        this.app.preview.querySelectorAll('.code-scroll').forEach((el) => {
+          el.style.overflowY = el.scrollHeight > el.clientHeight + 1 ? 'auto' : 'hidden';
+        });
+
         // 等待浏览器完成布局后再测量元素位置
         await new Promise(r => requestAnimationFrame(r));
         if (gen !== this.app._renderGeneration) { this.app._resumeScroll(); return; }

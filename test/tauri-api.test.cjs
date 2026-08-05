@@ -38,7 +38,7 @@ test('COMMANDS 集合 == lib.rs generate_handler! 注册集合（C17，前后端
   const expected = [...TauriApi.COMMANDS].sort();
   assert.deepEqual(names, expected,
     `前后端命令集合必须一致。差异：${JSON.stringify(names)} vs ${JSON.stringify(expected)}`);
-  assert.equal(expected.length, 24, '应有 24 个自定义命令（dev2 文件树右键操作新增 rename/remove/copy/move_path）');
+  assert.equal(expected.length, 25, '应有 25 个自定义命令（dev2 文件树右键操作 + reveal_in_folder）');
 });
 
 test('generate_handler! 解析失败必须显式抛错（N27）', () => {

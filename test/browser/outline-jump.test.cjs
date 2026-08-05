@@ -15,14 +15,6 @@
 'use strict';
 const fs = require('fs');
 
-let puppeteer;
-try {
-  puppeteer = require('puppeteer-core');
-} catch (e) {
-  console.log(`  ⏭️  SKIP  puppeteer-core 不可用 (${e.message})，跳过浏览器测试`);
-  process.exit(0);
-}
-
 function resolveChromePath() {
   if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) return process.env.CHROME_PATH;
   // Linux 常见路径
@@ -33,6 +25,20 @@ function resolveChromePath() {
 }
 const CHROME_PATH = resolveChromePath();
 const URL = 'http://localhost:1420/';
+
+// 浏览器测试是本地范式：依赖系统 Chrome + 本机 node_modules 中的 puppeteer-core。
+// CI（ubuntu）或缺少该环境的机器上直接运行时应优雅跳过，而非崩溃。
+try {
+  require('puppeteer-core');
+} catch (_) {
+  console.log('SKIP: puppeteer-core 不可用（浏览器回归测试需系统 Chrome + puppeteer-core，属本地范式）。');
+  process.exit(0);
+}
+if (!fs.existsSync(CHROME_PATH)) {
+  console.log('SKIP: 未找到系统 Chrome：' + CHROME_PATH);
+  process.exit(0);
+}
+const puppeteer = require('puppeteer-core');
 
 // 足够长的多级标题文档，让标题能分布到不同滚动位置
 function buildDemo() {

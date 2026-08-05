@@ -336,6 +336,13 @@
       </div>
     </div>
 
+    <!-- 后端健康横幅：dev 模式下 Rust/浏览器模式后端不可用时显示（tauri-api 延迟求值防白屏的副作用——
+         页面常驻显示但没有任何后端，用户无法区分。此处为启动 + 30s 心跳探测失败时的可见化提示。
+         样式复用兜底报错条 .fatal-error-bar（fixed 底部红条） -->
+    <div id="backend-banner" class="fatal-error-bar hidden" role="alert" aria-live="assertive">
+      <span id="backend-banner-text"></span>
+    </div>
+
     <div id="find-panel" class="find-panel hidden">
       <div class="find-row">
         <input type="text" id="find-input" placeholder="查找..." class="find-input">
@@ -377,6 +384,13 @@
           <div id="folder-content" class="folder-content sidebar-panel hidden">
             <div class="folder-header" id="folder-header">
               <span class="folder-path" id="folder-path"></span>
+              <div class="folder-sort" id="folder-sort">
+                <select id="folder-sort-key" class="folder-sort-key" title="">
+                  <option value="name">名称</option>
+                  <option value="time">修改时间</option>
+                </select>
+                <button id="folder-sort-order" class="folder-sort-order" type="button" title="升序" aria-label="切换排序方向"></button>
+              </div>
               <button id="folder-close" class="folder-close-btn" title="关闭文件夹">&times;</button>
             </div>
             <div id="folder-tree" class="folder-tree"></div>
@@ -625,13 +639,13 @@
       </div>
       <div class="dialog-content">
         <div id="update-state-checking">
-          <p>正在检查更新...</p>
+          <p id="update-state-checking-text">正在检查更新...</p>
         </div>
         <div id="update-state-available" class="hidden">
-          <p>TizuMark <span id="update-new-version" class="update-version-highlight"></span> 可用</p>
-          <p class="update-current">当前版本: <span id="update-current-version"></span></p>
+          <p>TizuMark <span id="update-new-version" class="update-version-highlight"></span> <span id="update-available-suffix">可用</span></p>
+          <p class="update-current"><span id="update-current-version-label">当前版本: </span><span id="update-current-version"></span></p>
           <div class="update-notes">
-            <h4>更新内容</h4>
+            <h4 id="update-notes-title">更新内容</h4>
             <div id="update-notes-body"></div>
           </div>
           <div class="update-progress hidden" id="update-progress-wrap">
@@ -647,8 +661,8 @@
                 <path d="M8 12.5l2.5 2.5L16 9"></path>
               </svg>
             </div>
-            <h3 class="update-latest-title">已是最新版本</h3>
-            <p class="update-latest-sub">当前已是最新版本 <span id="update-latest-version" class="update-version-highlight"></span>，无需更新</p>
+            <h3 class="update-latest-title" id="update-latest-title">已是最新版本</h3>
+            <p class="update-latest-sub"><span id="update-latest-prefix">当前已是最新版本</span> <span id="update-latest-version" class="update-version-highlight"></span><span id="update-latest-suffix">，无需更新</span></p>
           </div>
         </div>
       </div>
@@ -681,6 +695,10 @@
         <h2 id="confirm-dialog-title">确认</h2>
       </div>
       <div class="dialog-content">
+        <div id="confirm-dialog-warning" class="dialog-warning hidden">
+          <span class="dialog-warning-icon" aria-hidden="true">⚠</span>
+          <span id="confirm-dialog-warning-text"></span>
+        </div>
         <p id="confirm-dialog-message" style="white-space: pre-line;">确定要恢复默认设置吗？</p>
       </div>
       <div class="dialog-footer">
@@ -714,10 +732,10 @@
         <h2 id="close-dialog-title">关闭应用</h2>
       </div>
       <div class="dialog-content">
-        <p>请选择关闭应用时的操作：</p>
+        <p id="close-dialog-msg">请选择关闭应用时的操作：</p>
         <label class="close-dialog-remember-label">
           <input type="checkbox" id="close-dialog-remember">
-          <span>记住选择，不再询问</span>
+          <span id="close-dialog-remember-label-text">记住选择，不再询问</span>
         </label>
       </div>
       <div class="dialog-footer">
@@ -1049,8 +1067,8 @@
           <div class="settings-row settings-row-stacked">
             <label>图片存储路径</label>
             <div class="radio-group" id="settings-image-asset-path-mode">
-              <label><input type="radio" name="settings-image-asset-path" value="relative" checked /> <span>相对路径</span></label>
-              <label><input type="radio" name="settings-image-asset-path" value="absolute" /> <span>绝对路径</span></label>
+              <label><input type="radio" name="settings-image-asset-path" value="relative" checked /> <span id="setting-image-asset-path-relative">相对路径</span></label>
+              <label><input type="radio" name="settings-image-asset-path" value="absolute" /> <span id="setting-image-asset-path-absolute">绝对路径</span></label>
             </div>
             <input type="text" id="settings-image-asset-path" value="assets" class="settings-text-input" />
             <p class="form-hint" id="setting-image-asset-path-hint">
@@ -1082,6 +1100,7 @@
       <div class="dialog-footer">
         <button id="settings-reset" class="dialog-btn">恢复默认</button>
         <button id="settings-cancel-btn" class="dialog-btn">取消</button>
+        <button id="settings-apply-btn" class="dialog-btn dialog-btn-primary">应用</button>
         <button id="settings-save-btn" class="dialog-btn dialog-btn-primary">保存</button>
       </div>
     </div>
@@ -1187,7 +1206,7 @@
     <div class="context-menu-item" data-action="tab-copy-path"><span>复制文件路径</span></div>
   </div>
 
-  <!-- 文件树右键菜单：action 用 file- 前缀避免与编辑器菜单的 cut/copy/paste 冲突 -->
+<!-- 文件树右键菜单：action 用 file- 前缀避免与编辑器菜单的 cut/copy/paste 冲突 -->
   <div id="context-menu-file-tree" class="context-menu hidden">
     <div class="context-menu-item" data-action="file-new-file"><span>新建文件</span><span class="shortcut">Ctrl+Alt+N</span></div>
     <div class="context-menu-item" data-action="file-new-folder"><span>新建文件夹</span><span class="shortcut">Ctrl+Shift+N</span></div>
@@ -1200,6 +1219,13 @@
     <div class="context-menu-item" data-action="file-copy-path"><span>复制路径</span></div>
     <div class="context-menu-separator"></div>
     <div class="context-menu-item" data-action="file-delete" style="color:var(--color-danger)"><span>删除</span><span class="shortcut">Delete</span></div>
+  </div>
+  <div class="context-menu-separator"></div>
+  <!-- 文件目录右键菜单 -->
+  <div id="context-menu-folder" class="context-menu hidden">
+    <div class="context-menu-item" data-action="folder-open-containing"><span id="folder-open-label">打开所在目录</span></div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" data-action="folder-copy-path"><span>复制文件路径</span></div>
   </div>
 
   <div id="loading-overlay" class="loading-overlay">

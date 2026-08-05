@@ -15,15 +15,15 @@
 (function () {
   'use strict';
 
-  // 自定义命令（唯一真源；须与 src-tauri/src/lib.rs generate_handler! 集合一致 — C17 契约）
+// 自定义命令（唯一真源；须与 src-tauri/src/lib.rs generate_handler! 集合一致 — C17 契约）；方法由其生成。契约测试反解析 lib.rs 的 generate_handler! 校验集合一致。
   const COMMANDS = [
     'read_file', 'write_file', 'write_binary_file', 'file_meta', 'is_directory',
     'list_dir', 'ensure_dir', 'app_data_dir', 'read_bundled_file',
     'read_bundled_image_as_base64', 'fetch_image_as_base64', 'save_image_to_assets',
     'watch_folder', 'stop_watch', 'search_in_files', 'generate_toc',
     'get_cli_args', 'quit_app', 'open_devtools', 'set_window_behavior',
-    // dev2 文件树右键操作：重命名 / 删除 / 复制 / 移动（lib.rs 已注册对应 handler）
-    'rename_path', 'remove_path', 'copy_path', 'move_path',
+// dev2 文件树右键操作：重命名 / 删除 / 复制 / 移动（lib.rs 已注册对应 handler）
+    'rename_path', 'remove_path', 'copy_path', 'move_path', 'reveal_in_folder',
   ];
 
   // 延迟求值：调用时才读取 invoke（根治白屏单点）

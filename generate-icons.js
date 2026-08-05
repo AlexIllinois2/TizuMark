@@ -1,7 +1,7 @@
 const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
-const toIco = require('to-ico');
+const toIco = require('png-to-ico').default;
 const { Icns, IcnsImage } = require('@fiahfy/icns');
 
 const svgBuffer = fs.readFileSync(path.join(__dirname, 'icon-source.svg'));

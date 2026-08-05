@@ -215,11 +215,13 @@ test('D4 编辑器初始化时 indentUnit 取自 settings.tabSize', async () => 
     '源码应出现 indentUnit: this.settings.tabSize');
 });
 
-test('D5 设置变更 handler 读取 Tab 宽度并同步 indentUnit', async () => {
+test('D5 设置变更 handler 读取 Tab 宽度，applySettings 统一同步 indentUnit', async () => {
+  // 新架构：change handler 只把 select 值写入 settings.tabSize，
+  // 真正的 indentUnit 同步在 applySettings（this.cm.setOption('indentUnit', s.tabSize)）统一应用。
   assert.ok(APP.includes('this.settings.tabSize = Number(e.target.value)'),
     'handler 应读取 select 值写入 settings.tabSize');
-  assert.ok(APP.includes("cm.setOption('indentUnit', this.settings.tabSize)"),
-    'handler 应将 indentUnit 设为 settings.tabSize');
+  assert.ok(APP.includes("this.cm.setOption('indentUnit', s.tabSize)"),
+    'applySettings 应将 indentUnit 设为 settings.tabSize');
 });
 
 test('D6 applySettings 将 indentUnit 设为 tabSize', async () => {

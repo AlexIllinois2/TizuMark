@@ -238,8 +238,24 @@ function main() {
   }
   const browserFiles = files.filter(isBrowserTest);
   const normalFiles = files.filter((f) => !isBrowserTest(f));
+  // 浏览器测试依赖系统 Chrome + 本机 node_modules 中的 puppeteer-core（本地范式，
+  // 见 ADR-7）。CI（ubuntu）/ 任何缺少该环境的机器上自动跳过，避免「找不到
+  // puppeteer-core」直接崩溃导致整批测试失败。
+  if (browserFiles.length) {
+    const mods = resolvePuppeteerModules();
+    let hasPuppeteer = false;
+    try { require.resolve('puppeteer-core'); hasPuppeteer = true; } catch (_) {}
+    if (!hasPuppeteer) {
+      try { hasPuppeteer = fs.existsSync(path.join(mods, 'puppeteer-core', 'package.json')); } catch (_) {}
+    }
+    if (!hasPuppeteer) {
+      console.log(`⚠ 跳过 ${browserFiles.length} 个浏览器测试（环境缺少 puppeteer-core / 系统 Chrome；属本地范式）。\n`);
+      browserFiles.length = 0;
+    }
+  }
+  const total = normalFiles.length + browserFiles.length;
   const scope = filters.length ? `（过滤：${filters.join(', ')}）` : '';
-  console.log(`运行 ${files.length} 个测试文件${scope}（jsdom ${normalFiles.length} + 浏览器 ${browserFiles.length}）...\n`);
+  console.log(`运行 ${total} 个测试文件${scope}（jsdom ${normalFiles.length} + 浏览器 ${browserFiles.length}）...\n`);
 
   const results = [];
   results.push(...runBatch(normalFiles, files.length, runOne, 0));

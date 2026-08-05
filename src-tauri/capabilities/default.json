@@ -22,7 +22,10 @@
     "dialog:allow-save",
     "dialog:allow-confirm",
     "dialog:allow-ask",
-    "shell:allow-open",
+    {
+      "identifier": "shell:allow-open",
+      "allow": [{ "path": "**" }]
+    },
     "updater:default"
   ]
 }

@@ -254,3 +254,91 @@ test('事件处理器 on* 仍被剥离', async () => {
   assert.ok(html.includes('color: red'), '合法 style 仍保留');
 });
 
+// ===== 引用块内块级公式（blockquote + $$...$$）回归 =====
+
+test('引用块内规范写法 > $$...$$ 渲染为块级公式', async () => {
+  const md = [
+    '> **数学提示**：速率为 $v$，通量分别为',
+    '> $$',
+    '> \\rho v,\\; p+\\rho v^{2}',
+    '> $$',
+    '> 上述通量相等',
+  ].join('\n');
+  const html = renderMarkdown(md, { softBreaks: false });
+  assert.ok(html.includes('blockquote'), '应保留引用块结构');
+  assert.ok((html.match(/math-display/g) || []).length === 1, '应生成一个块级公式占位');
+  assert.ok(!html.includes('MATHBLOCK'), '不应残留未替换占位符');
+});
+
+test('引用块 lazy continuation 写法不影响下方独立公式和列表', async () => {
+  // 用户复现：> $$ 开头、中间行无 > 前缀（markdown lazy continuation），
+  // 下方还有独立公式和列表——上方公式配对绝不能跨段吞掉下方内容。
+  const md = [
+    '> **数学提示**：若气体速率为 $v$，则通量分别为',
+    '> $$',
+    '\\rho v,\\; p+\\rho v^{2}',
+    '$$',
+    '> 当控制体内没有源时，上述通量相等。',
+    '',
+    '- 32323',
+    '- 322323',
+    '',
+    '$$',
+    '\\rho v,\\; p+\\rho v^{2}',
+    '$$',
+  ].join('\n');
+  const html = renderMarkdown(md, { softBreaks: false });
+  const displays = html.match(/math-display/g) || [];
+  assert.strictEqual(displays.length, 2, '引用块公式 + 下方独立公式各一个块级占位');
+  assert.ok((html.match(/<li/g) || []).length === 2, '列表项不应被公式配对吞掉');
+  assert.ok(html.includes('32323') && html.includes('322323'), '列表内容应保留');
+  assert.ok(!html.includes('MATHBLOCK'), '不应残留未替换占位符');
+});
+
+test('空行隔开的两个独立 $$...$$ 不互相跨段配对', async () => {
+  const md = [
+    '公式一：',
+    '$$',
+    'a^2',
+    '$$',
+    '',
+    '公式二：',
+    '$$',
+    'b^2',
+    '$$',
+  ].join('\n');
+  const html = renderMarkdown(md, { softBreaks: false });
+  const displays = html.match(/math-display/g) || [];
+  assert.strictEqual(displays.length, 2, '两个独立公式各生成一个块级占位');
+  assert.ok(html.includes('公式一') && html.includes('公式二'), '段落文字应保留');
+  assert.ok(!html.includes('MATHBLOCK'), '不应残留未替换占位符');
+});
+
+// ===== 表格单元格内行内公式含 | 不被切断（用户复现）=====
+
+test('表格单元格内成对公式含 | 不切断表格列', async () => {
+  // 用户复现：$p(x_k|z_{1:k-1})$ 中的 | 曾被 markdown-it 当列分隔符切断成两列。
+  // 现在成对公式优先保护，表格保持 4 列、公式完整留在单个 td 内供 DOM 阶段 KaTeX 渲染。
+  const md = [
+    '| 表述 | 出发点 | 过程 | 结果 |',
+    '| --- | --- | --- | --- |',
+    '| **CK 积分** | 整个分布 $p(x_k|z_{1:k-1})$ | 全概率 + 马尔可夫 | 完整预测分布(含 $\\mu$) |',
+    '| **条件期望捷径** | 只用均值 $\\hat{x}_{k|k-1}$ | 直接算 $E[x_k|z_{1:k-1}]$ | 只用均值 |',
+  ].join('\n');
+  const html = renderMarkdown(md, { softBreaks: false });
+  assert.ok(html.includes('<table'), '应渲染为 <table>');
+  assert.strictEqual((html.match(/<td/g) || []).length, 8, '4 列 × 2 行 = 8 个单元格，不错位');
+  assert.ok(html.includes('$p(x_k|z_{1:k-1})$'), '成对公式应完整保留在单个单元格内');
+  assert.ok(html.includes('$\\hat{x}_{k|k-1}$'), '含 | 的下标公式应完整保留');
+  assert.ok(html.includes('$E[x_k|z_{1:k-1}]$'), '含 | 的期望公式应完整保留');
+});
+
+test('跨单元格的孤立 $ 不配对成公式', async () => {
+  // 原有保守规则：$x 与 y$ 分处两个单元格时，不应跨单元格配对成 $x | y$ 吞掉列分隔符
+  const md = '| a | b |\n| - | - |\n| $x | y$ |';
+  const html = renderMarkdown(md, { softBreaks: false });
+  assert.strictEqual((html.match(/<td/g) || []).length, 2, '数据行 2 个单元格（表头是 th 不计数）');
+  assert.ok(html.includes('$x') && html.includes('y$'), '孤立 $ 各自保留在单元格内');
+  assert.ok(!html.includes('MATHBLOCK'), '不应生成跨单元格 MATHBLOCK');
+});
+

@@ -61,10 +61,26 @@ function showConfirmDialog(opts) {
     // 安全：message 一律按纯文本渲染（历史 bug：innerHTML 会让含 <img onerror> 的
     // 目录路径 / 用户文本在确认框执行，跨平台路径注入 XSS）。需要换行用 \n + pre-line。
     doc.getElementById('confirm-dialog-message').textContent = opts.message || '';
+    // 可选警示块：默认隐藏，由调用方传 opts.warning 时打开（同样 textContent 防 XSS）。
+    // DOM 不存在时静默跳过——dialogs.test.cjs 的 buildDom() 只造了 4 个 id，不含此节点。
+    const warnEl = doc.getElementById('confirm-dialog-warning');
+    const warnTextEl = doc.getElementById('confirm-dialog-warning-text');
+    if (warnEl) {
+      if (opts.warning) {
+        if (warnTextEl) warnTextEl.textContent = opts.warning;
+        warnEl.classList.remove('hidden');
+      } else {
+        if (warnTextEl) warnTextEl.textContent = '';
+        warnEl.classList.add('hidden');
+      }
+    }
     dialog.classList.remove('hidden');
 
     const cleanup = () => {
       dialog.classList.add('hidden');
+      // 复位警示块：避免单例对话框下次给"删除字体/重置设置/切换工作区"用时残留 PDF 警示
+      if (warnEl) warnEl.classList.add('hidden');
+      if (warnTextEl) warnTextEl.textContent = '';
       confirmBtn.removeEventListener('click', onConfirm);
       cancelBtn.removeEventListener('click', onCancel);
     };

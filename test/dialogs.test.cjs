@@ -20,6 +20,9 @@ function buildDom() {
   const cd = mk('confirm-dialog'); cd.classList.add('hidden');
   mk('confirm-dialog-title', 'span'); mk('confirm-dialog-message', 'span');
   mk('confirm-dialog-confirm', 'button'); mk('confirm-dialog-cancel', 'button');
+  // 警示块：默认 hidden；传 warning 时移除 hidden。
+  const warn = mk('confirm-dialog-warning'); warn.classList.add('hidden');
+  mk('confirm-dialog-warning-text', 'span');
   return { dom, d };
 }
 
@@ -118,4 +121,64 @@ test('showConfirmDialog action 抛错时调用 showToast 且不崩溃', async ()
   assert.strictEqual(r, true, '异常仍应 resolve true');
   assert.strictEqual(toasts.length, 1, '应调用 showToast');
   assert.ok(toasts[0].msg.includes('boom'));
+});
+
+test('showConfirmDialog 传 warning 时打开警示块并按 textContent 渲染', async () => {
+  const { d } = buildDom();
+  const p = showConfirmDialog({
+    title: '导出 PDF', message: '…', warning: '文件较大时请耐心等待', doc: d, t,
+  });
+  const warn = d.getElementById('confirm-dialog-warning');
+  const warnText = d.getElementById('confirm-dialog-warning-text');
+  assert.ok(warn, '应存在警示块');
+  assert.ok(!warn.classList.contains('hidden'), '传 warning 时警示块必须打开');
+  assert.strictEqual(warnText.textContent, '文件较大时请耐心等待', 'warning 必须按 textContent 渲染');
+  d.getElementById('confirm-dialog-confirm').click();
+  await p;
+});
+
+test('showConfirmDialog 不传 warning 时警示块保持 hidden', async () => {
+  const { d } = buildDom();
+  const warn = d.getElementById('confirm-dialog-warning');
+  assert.ok(warn.classList.contains('hidden'), '初始应 hidden');
+  const p = showConfirmDialog({ title: '删除?', doc: d, t });
+  assert.ok(warn.classList.contains('hidden'), '不传 warning 时必须保持 hidden');
+  d.getElementById('confirm-dialog-cancel').click();
+  await p;
+});
+
+test('showConfirmDialog 关闭后复位警示块（避免单例残留）', async () => {
+  const { d } = buildDom();
+  const warn = d.getElementById('confirm-dialog-warning');
+  const warnText = d.getElementById('confirm-dialog-warning-text');
+  // 第一次：打开时传 warning
+  const p1 = showConfirmDialog({ title: '导出 PDF', warning: 'PDF 警示', doc: d, t });
+  assert.ok(!warn.classList.contains('hidden'));
+  d.getElementById('confirm-dialog-cancel').click();
+  await p1;
+  // cleanup 后警示块必须复位
+  assert.ok(warn.classList.contains('hidden'), '关闭后警示块应重新 hidden');
+  assert.strictEqual(warnText.textContent, '', '关闭后警示文本应清空，避免下次给"删除字体/重置设置"用时残留 PDF 警示');
+  // 第二次：不传 warning（模拟删除字体等其他确认）
+  const p2 = showConfirmDialog({ title: '删除?', doc: d, t });
+  assert.ok(warn.classList.contains('hidden'), '第二次打开时警示块不应残留为打开');
+  d.getElementById('confirm-dialog-cancel').click();
+  await p2;
+});
+
+test('showConfirmDialog warning 含恶意 HTML 不执行（XSS）', async () => {
+  const { d } = buildDom();
+  const win = d.defaultView;
+  const p = showConfirmDialog({
+    title: '导出 PDF',
+    warning: '警示 <img src=x onerror="window.__xss=1"> 内容',
+    doc: d, t,
+  });
+  const warnText = d.getElementById('confirm-dialog-warning-text');
+  assert.strictEqual(warnText.children.length, 0, 'warning 不得产生子元素');
+  assert.ok(warnText.textContent.includes('<img src=x onerror="window.__xss=1">'),
+    '恶意文本按字面量显示');
+  assert.strictEqual(win.__xss, undefined, 'onerror 不得执行');
+  d.getElementById('confirm-dialog-cancel').click();
+  await p;
 });

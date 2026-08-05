@@ -196,6 +196,10 @@ const I18N = {
     tabSize: 'Tab 宽度',
     lineWrap: '自动换行',
     lineNumbers: '显示行号',
+    codeLineNumbers: '代码块行号',
+    codeBlockWrap: '代码块自动换行',
+    langZh: '中文',
+    langEn: 'English',
     previewFontSize: '正文字号',
     lineHeight: '行高',
     maxWidth: '最大宽度',
@@ -269,9 +273,9 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: '本软件基于 GPL v3 开源协议发布。',
     noUnauthorized: '欢迎自由使用、修改和分发，衍生作品须延续 GPL v3 协议。',
-    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', fileSearch: '文件搜索',
+shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', fileSearch: '文件搜索',
     globalSearch: '全局搜索',
-    toggleSidebar: '显示/隐藏侧边栏', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要', moveLineUp: '上移行/选区', moveLineDown: '下移行/选区' },
+    toggleSidebar: '显示/隐藏侧边栏', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要', moveLineUp: '上移行/选区', moveLineDown: '下移行/选区', closeToTray: '关闭到托盘' },
     shortcutGroup: { file: '文件', search: '查找与搜索', tabView: '标签页与视图', format: '文本格式', insert: '插入', heading: '标题', callout: '提示块' },
     shortcutScheme: '快捷键方案',
     shortcutList: '快捷键',
@@ -304,8 +308,13 @@ const I18N = {
     exportedHTML: '已导出 HTML',
     exportedPDF: '已导出 PDF',
     exportError: '导出失败',
-    printTip1: '可在<b>更多设置</b>中<b>取消勾选"页眉和页脚"</b>，去除 PDF 顶部的日期、标题等多余信息。',
-    printTip2: '如果代码高亮或背景色显示异常，请在<b>更多设置</b>中<b>勾选"背景图形"</b>。',
+printTip1: '可在「更多设置」中「取消勾选"页眉和页脚"」，去除 PDF 顶部的日期、标题等多余信息。',
+    printTip2: '如果代码高亮或背景色显示异常，请在「更多设置」中「勾选"背景图形"」。',
+    pdfBigFileWarn: '⚠ 文件较大时生成 PDF 耗时较长，请耐心等待；如果未生成完就打开 PDF，会提示文件损坏',
+    backendDown: '⚠ 开发环境：后端已断开，文件功能不可用。请重启 npm run dev。',
+    folderWatchErrorTitle: '文件夹监听异常',
+    folderWatchErrorMessage: '目录树可能不会自动刷新。点击「确认」重新监听，或点击「取消」继续使用。',
+    folderWatchRecovered: '已重新监听文件夹',
     editor: '编辑器',
     previewSection: '预览',
     paneEdit: '编辑',
@@ -344,6 +353,44 @@ const I18N = {
     depTauri: '桌面应用框架',
     spaces: '空格',
     settingsReset: '已恢复默认设置',
+    settingsApplying: '正在应用…',
+    applying: '应用中…',
+    saving: '正在保存…',
+    apply: '应用',
+    ok: '确定',
+    browse: '浏览...',
+    reloadFile: '重新加载文件',
+    toggleTheme: '切换主题',
+    collapseExpandToolbar: '折叠/展开工具栏',
+    closeNotice: '关闭提示',
+    insertLink: '插入链接',
+    insertImage: '插入图片',
+    imageSourceLocal: '本地图片',
+    imageSourceWeb: '网络图片',
+    imageAltLabel: '替代文本',
+    closeAppTitle: '关闭应用',
+    minimizeToTray: '最小化到托盘',
+    quitApp: '退出应用',
+    updateAvailableSuffix: '可用',
+    updateCurrentVersionLabel: '当前版本:',
+    updateNotes: '更新内容',
+    updateLatestPrefix: '当前已是最新版本',
+    updateLatestSuffix: '，无需更新',
+    updateSkip: '稍后再说',
+    csDirPlaceholder: '目录路径',
+    largeFileNotice: '⚠ 文档过大（约 {lines} 行 / {size} MB），预览仅显示当前位置附近内容，滚动编辑区可逐步查看全文。',
+    shortcutOccupied: '快捷键 "{key}" 已被「{name}」占用',
+    progressCheckingEula: '正在检查许可协议…',
+    progressInitEditor: '正在初始化编辑器…',
+    progressRegisterEvents: '正在注册事件监听…',
+    progressLoadingFile: '正在加载文件…',
+    progressReady: '准备就绪',
+    devtoolsOpened: 'DevTools 已打开',
+    devtoolsOpenFailed: 'DevTools 打开失败: {err}',
+    devtools: '开发者工具',
+    closeAppMsg: '请选择关闭应用时的操作：',
+    rememberChoice: '记住选择，不再询问',
+    errorCodePrefix: '错误码 {code}',
     shortcutsReset: '已恢复默认快捷键',
     saveDialogMessage: '文件已修改，是否保存？',
     imageLoadFailed: '[图片加载失败]',
@@ -391,7 +438,7 @@ const I18N = {
     imageAssetPathLabel: '图片存储路径',
     imageAssetPathModeRelative: '相对路径',
     imageAssetPathModeAbsolute: '绝对路径',
-    imageAssetPathRelativeHint: '相对于 markdown 文件所在目录的路径。例如 assets → 图片将保存在 docs/assets/。将整个文件夹移动到其他位置后，路径仍然有效，无需额外操作。',
+    imageAssetPathRelativeHint: '相对于 markdown 文件所在目录的路径。例如 <code>assets</code> → 图片将保存在 <code>docs/assets/</code>。将整个文件夹移动到其他位置后，路径仍然有效，无需额外操作。',
     imageAssetPathAbsoluteHint: '完整的磁盘路径。例如 D:/images → 图片将直接保存到 D:/images/。如果将 markdown 文件夹移动到其他位置，图片路径会失效，需要手动更新引用。',
     imageAssetPathPlaceholder: 'assets',
     imageFileRequired: '请选择要插入的本地图片',
@@ -423,6 +470,13 @@ const I18N = {
     openFolder: '打开文件夹',
     files: '文件',
     closeFolder: '关闭文件夹',
+    openContainingFolder: '打开所在目录',
+    openFolderFailed: '无法打开文件管理器，请手动定位目录',
+    sortBy: '排序',
+    sortByName: '名称',
+    sortByTime: '修改时间',
+    sortAsc: '升序',
+    sortDesc: '降序',
     folderOpened: '已打开文件夹: {path}',
     extraDirsIgnoredBatch: '已忽略 {n} 个多余目录（每次仅打开一个文件夹）',
     fontSizeChanged: '字号 {size}px',
@@ -564,6 +618,10 @@ const I18N = {
     tabSize: 'Tab Size',
     lineWrap: 'Line Wrap',
     lineNumbers: 'Line Numbers',
+    codeLineNumbers: 'Code line numbers',
+    codeBlockWrap: 'Wrap code blocks',
+    langZh: 'Chinese',
+    langEn: 'English',
     previewFontSize: 'Preview Font Size',
     lineHeight: 'Line Height',
     maxWidth: 'Max Width',
@@ -637,9 +695,9 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: 'This software is released under the GPL v3 open-source license.',
     noUnauthorized: 'Free to use, modify, and distribute. Derivative works must remain under GPL v3.',
-    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', fileSearch: 'File Search',
+shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', fileSearch: 'File Search',
     globalSearch: 'Global Search',
-    toggleSidebar: 'Toggle Sidebar', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important', moveLineUp: 'Move Line/Selection Up', moveLineDown: 'Move Line/Selection Down' },
+    toggleSidebar: 'Toggle Sidebar', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important', moveLineUp: 'Move Line/Selection Up', moveLineDown: 'Move Line/Selection Down', closeToTray: 'Hide to tray' },
     shortcutGroup: { file: 'File', search: 'Find & Search', tabView: 'Tabs & View', format: 'Text Format', insert: 'Insert', heading: 'Headings', callout: 'Callouts' },
     shortcutScheme: 'Shortcut Scheme',
     shortcutList: 'Shortcuts',
@@ -672,8 +730,13 @@ const I18N = {
     exportedHTML: 'Exported HTML',
     exportedPDF: 'PDF exported',
     exportError: 'Export failed',
-    printTip1: 'Go to <b>More settings</b> and <b>uncheck "Headers and footers"</b> to remove date, title and other extra info from the PDF.',
-    printTip2: 'If code highlighting or background colors look wrong, go to <b>More settings</b> and <b>check "Background graphics"</b>.',
+printTip1: 'Go to "More settings" and uncheck "Headers and footers" to remove date, title and other extra info from the PDF.',
+    printTip2: 'If code highlighting or background colors look wrong, go to "More settings" and check "Background graphics".',
+    pdfBigFileWarn: '⚠ Generating a large PDF takes time — please be patient. Opening the PDF before it finishes will report file corruption.',
+    backendDown: '⚠ Dev backend disconnected — file features unavailable. Restart with npm run dev.',
+    folderWatchErrorTitle: 'Folder watcher error',
+    folderWatchErrorMessage: 'The folder tree may not auto-refresh. Click "OK" to re-watch the folder, or "Cancel" to keep using.',
+    folderWatchRecovered: 'Folder watcher restarted',
     editor: 'Editor',
     previewSection: 'Preview',
     paneEdit: 'Edit',
@@ -713,6 +776,44 @@ const I18N = {
     depTauri: 'Desktop application framework',
     spaces: 'spaces',
     settingsReset: 'Settings reset to defaults',
+    settingsApplying: 'Applying…',
+    applying: 'Applying…',
+    saving: 'Saving…',
+    apply: 'Apply',
+    ok: 'OK',
+    browse: 'Browse...',
+    reloadFile: 'Reload File',
+    toggleTheme: 'Toggle Theme',
+    collapseExpandToolbar: 'Collapse/Expand Toolbar',
+    closeNotice: 'Close Notice',
+    insertLink: 'Insert Link',
+    insertImage: 'Insert Image',
+    imageSourceLocal: 'Local Image',
+    imageSourceWeb: 'Web Image',
+    imageAltLabel: 'Alt Text',
+    closeAppTitle: 'Close App',
+    minimizeToTray: 'Minimize to Tray',
+    quitApp: 'Quit App',
+    updateAvailableSuffix: 'available',
+    updateCurrentVersionLabel: 'Current version:',
+    updateNotes: 'Release Notes',
+    updateLatestPrefix: 'You are on the latest version',
+    updateLatestSuffix: '. No update needed.',
+    updateSkip: 'Later',
+    csDirPlaceholder: 'Folder path',
+    largeFileNotice: '⚠ Large document ({lines} lines / {size} MB): preview shows only the area near the current position; scroll the editor to view the full content gradually.',
+    shortcutOccupied: 'Shortcut "{key}" is already used by "{name}"',
+    progressCheckingEula: 'Checking license agreement…',
+    progressInitEditor: 'Initializing editor…',
+    progressRegisterEvents: 'Registering event listeners…',
+    progressLoadingFile: 'Loading file…',
+    progressReady: 'Ready',
+    devtoolsOpened: 'DevTools opened',
+    devtoolsOpenFailed: 'Failed to open DevTools: {err}',
+    devtools: 'Developer Tools',
+    closeAppMsg: 'Choose an action when closing the app:',
+    rememberChoice: 'Remember my choice, don\'t ask again',
+    errorCodePrefix: 'Error code {code}',
     shortcutsReset: 'Shortcuts reset to defaults',
     saveDialogMessage: 'File has been modified. Save?',
     imageLoadFailed: '[Image failed to load]',
@@ -760,7 +861,7 @@ const I18N = {
     imageAssetPathLabel: 'Image Asset Path',
     imageAssetPathModeRelative: 'Relative Path',
     imageAssetPathModeAbsolute: 'Absolute Path',
-    imageAssetPathRelativeHint: 'Relative to the markdown file\'s directory. Example: assets → images saved in docs/assets/. Path remains valid when moving the entire folder to another location.',
+    imageAssetPathRelativeHint: 'Relative to the markdown file\'s directory. Example: <code>assets</code> → images saved in <code>docs/assets/</code>. Path remains valid when moving the entire folder to another location.',
     imageAssetPathAbsoluteHint: 'Full disk path. Example: D:/images → images saved directly in D:/images/. Path will break if the markdown folder is moved to another location.',
     imageAssetPathPlaceholder: 'assets',
     imageFileRequired: 'Please select a local image file',
@@ -792,6 +893,13 @@ const I18N = {
     openFolder: 'Open Folder',
     files: 'Files',
     closeFolder: 'Close Folder',
+    openContainingFolder: 'Open Containing Folder',
+    openFolderFailed: 'Failed to open file manager, please locate the folder manually',
+    sortBy: 'Sort',
+    sortByName: 'Name',
+    sortByTime: 'Modified',
+    sortAsc: 'Ascending',
+    sortDesc: 'Descending',
     folderOpened: 'Opened folder: {path}',
     extraDirsIgnoredBatch: 'Ignored {n} extra folders (only one folder can be opened at a time)',
     fontSizeChanged: 'Font size {size}px',
@@ -902,6 +1010,7 @@ class MarkdownEditor {
       setTimeout(() => this.checkUpdate(false), 5000);
     }
     this.updateSideButtons();
+    this.initBackendHealth();
     this.applyLanguage();
   }
 
@@ -960,7 +1069,7 @@ class MarkdownEditor {
     const textEl = document.getElementById('large-file-banner-text');
     if (!banner || !textEl) return;
     const sizeMB = (totalChars / 1048576).toFixed(1);
-    textEl.textContent = `⚠ 文档过大（约 ${totalLines} 行 / ${sizeMB} MB），预览仅显示当前位置附近内容，滚动编辑区可逐步查看全文。`;
+    textEl.textContent = this.t('largeFileNotice', { lines: totalLines, size: sizeMB });
     banner.classList.remove('hidden');
     this._largeFileNoticeKey = key;
   }
@@ -1023,6 +1132,10 @@ class MarkdownEditor {
     updateMenuText('btn-settings', t('settings'));
     updateMenuText('btn-user-guide', t('userGuide'));
     updateMenuText('btn-about', t('about'));
+    updateMenuText('btn-open-folder', t('openFolder'));
+    updateMenuText('btn-reload-menu', t('reloadFile'));
+    updateMenuText('btn-check-update', t('checkUpdate'));
+    updateMenuText('btn-devtools', t('devtools'));
 
     // View mode tabs
     updateMenuText('btn-view-preview', t('preview'));
@@ -1088,15 +1201,32 @@ class MarkdownEditor {
     setRowLabel('set-default-view', t('defaultView'));
     setRowLabel('set-scroll-sync', t('scrollSync'));
     setRowLabel('set-soft-breaks', t('softBreaks'));
+    setRowLabel('set-code-line-numbers', t('codeLineNumbers'));
+    setRowLabel('set-code-wrap', t('codeBlockWrap'));
+    setRowLabel('set-close-action', t('closeAction'));
+    setRowLabel('set-show-tray-icon', t('showTrayIcon'));
+    setRowLabel('settings-image-store-mode', t('imageSettingLabel'));
+    setRowLabel('settings-image-asset-path-mode', t('imageAssetPathLabel'));
+    setSectionTitle('btn-add-font', t('customFonts'));
+    setRowLabel('set-editor-font', t('editorFont'));
+    setRowLabel('set-preview-font', t('previewFont'));
+    setRowLabel('font-preview-sample', t('fontPreview'));
     const softBreaksHint = document.querySelector('#setting-soft-breaks-hint .hint-text');
     if (softBreaksHint) softBreaksHint.textContent = t('softBreaksHint');
     const tabSizeHint = document.querySelector('#setting-tab-size-hint .hint-text');
     if (tabSizeHint) tabSizeHint.textContent = t('tabSizeHint');
+    const trayHint = document.querySelector('#setting-show-tray-icon-hint .hint-text');
+    if (trayHint) trayHint.textContent = t('showTrayIconHint');
     setText('setting-image-store-assets', t('imageSettingAssets'));
     setText('setting-image-store-base64', t('imageSettingBase64'));
     document.querySelector('#setting-image-store-hint .hint-text').textContent = t('imageSettingHint');
+    setText('setting-image-asset-path-relative', t('imageAssetPathModeRelative'));
+    setText('setting-image-asset-path-absolute', t('imageAssetPathModeAbsolute'));
+    const assetPathHint = document.querySelector('#setting-image-asset-path-hint-text');
+    if (assetPathHint) assetPathHint.innerHTML = t('imageAssetPathRelativeHint');
     document.getElementById('settings-reset').textContent = t('resetDefault');
     document.getElementById('settings-cancel-btn').textContent = t('cancel');
+    document.getElementById('settings-apply-btn').textContent = t('apply');
     document.getElementById('settings-save-btn').textContent = t('save');
     document.getElementById('settings-close-x').setAttribute('aria-label', t('cancel'));
     document.getElementById('confirm-dialog-confirm').textContent = t('confirm');
@@ -1139,6 +1269,82 @@ class MarkdownEditor {
     // Update tab bar
     this.updateTabBar();
     this.updateWordCount();
+    this.updateOutline();
+
+    // Toolbar / panel title attributes（2026-08-04 i18n 补漏）
+    setTitle('btn-reload', t('reloadFile'));
+    setTitle('btn-theme', t('toggleTheme'));
+    setTitle('fmt-collapse', t('collapseExpandToolbar'));
+    setTitle('outline-close', t('close'));
+    setTitle('folder-close', t('closeFolder'));
+    // 文件目录排序控件文案
+    const sortKey = document.getElementById('folder-sort-key');
+    if (sortKey) {
+      sortKey.title = t('sortBy');
+      if (sortKey.options[0]) sortKey.options[0].text = t('sortByName');
+      if (sortKey.options[1]) sortKey.options[1].text = t('sortByTime');
+    }
+    this.updateFolderSortOrderButton();
+    this.updateFolderMenuLabel();
+    setTitle('large-file-banner-close', t('closeNotice'));
+    // fmt-icon-btn 系列（加粗/斜体/删除线/链接/图片/水平线/高亮/上标/下标）
+    const fmtActionTitleKeys = {
+      'insert-bold': 'bold',
+      'insert-italic': 'italic',
+      'insert-strikethrough': 'strikethrough',
+      'insert-link': 'link',
+      'insert-image': 'image',
+      'insert-hr': 'hr',
+      'insert-highlight': 'highlight',
+      'insert-superscript': 'superscript',
+      'insert-subscript': 'subscript',
+    };
+    document.querySelectorAll('#format-toolbar .fmt-icon-btn[data-action]').forEach(el => {
+      const key = fmtActionTitleKeys[el.dataset.action];
+      if (key) el.title = t(key);
+    });
+
+    // Insert-link dialog
+    setText('insert-link-title', t('insertLink'));
+    setText('insert-link-text-label', t('linkText'));
+    setText('insert-link-url-label', t('linkUrl'));
+    setText('insert-link-cancel', t('cancel'));
+    setText('insert-link-ok', t('ok'));
+
+    // Insert-image dialog
+    setText('insert-image-title', t('insertImage'));
+    setText('insert-image-source-label', t('imageSource'));
+    setText('insert-image-source-local', t('imageSourceLocal'));
+    setText('insert-image-source-web', t('imageSourceWeb'));
+    setText('insert-image-file-label', t('file'));
+    setText('insert-image-browse', t('browse'));
+    setText('insert-image-url-label', t('imageUrlLabel'));
+    setText('insert-image-alt-label', t('imageAltLabel'));
+    setText('insert-image-cancel', t('cancel'));
+    setText('insert-image-ok', t('ok'));
+    // 自定义字体导入按钮（省略号后缀）
+    setText('btn-add-font', t('addFont') + '…');
+
+    // Close-confirm dialog
+    setText('close-dialog-title', t('closeAppTitle'));
+    setText('close-dialog-msg', t('closeAppMsg'));
+    setText('close-dialog-remember-label-text', t('rememberChoice'));
+    setText('close-dialog-minimize', t('minimizeToTray'));
+    setText('close-dialog-quit', t('quitApp'));
+
+    // Update dialog 静态文本（标题随状态由 showUpdateState 动态设置）
+    setText('update-state-checking-text', t('updateChecking'));
+    setText('update-available-suffix', t('updateAvailableSuffix'));
+    setText('update-current-version-label', t('updateCurrentVersionLabel'));
+    setText('update-notes-title', t('updateNotes'));
+    setText('update-latest-title', t('updateLatest'));
+    setText('update-latest-prefix', t('updateLatestPrefix'));
+    setText('update-latest-suffix', t('updateLatestSuffix'));
+    setText('update-skip', t('updateSkip'));
+    setText('update-action', t('updateChecking'));
+
+    // 跨文件搜索：目录路径 placeholder 补漏
+    setPlaceholder('cs-dir', t('csDirPlaceholder'));
 
     // Side buttons
     this.applyViewMode();
@@ -1346,7 +1552,7 @@ class MarkdownEditor {
       'tab-close-others': 'closeOther',
       'tab-close-all': 'closeAll',
       'tab-copy-path': 'copyFilePath',
-      // 文件树右键菜单（file- 前缀避免与编辑器菜单的 cut/copy/paste 冲突）
+// 文件树右键菜单（file- 前缀避免与编辑器菜单的 cut/copy/paste 冲突）
       'file-new-file': 'fileNewFile',
       'file-new-folder': 'fileNewFolder',
       'file-cut': 'cut',
@@ -1355,6 +1561,9 @@ class MarkdownEditor {
       'file-rename': 'fileRename',
       'file-copy-path': 'fileCopyPath',
       'file-delete': 'fileDelete',
+      // 注意：'folder-open-containing' 文案由 updateFolderMenuLabel() 按 _folderCtxIsDir 动态切换
+      // （文件夹→openFolder / 文件→openContainingFolder），不走这里的静态映射。
+      'folder-copy-path': 'copyFilePath',
     };
     document.querySelectorAll('.context-menu-item[data-action]').forEach(el => {
       const key = ctxActionKeys[el.dataset.action];
@@ -1390,7 +1599,21 @@ class MarkdownEditor {
     if (maxWSel && maxWSel.options.length > 0) {
       maxWSel.options[0].text = t('unlimited');
     }
-    // Language selector — keep option text fixed (中文 / English)
+    // Close action
+    const closeSel = document.getElementById('set-close-action');
+    if (closeSel) {
+      closeSel.options[0].text = t('closeActionAsk');
+      closeSel.options[1].text = t('closeActionQuit');
+      closeSel.options[2].text = t('closeActionMinimize');
+    }
+    // Language selector
+    const langSel = document.getElementById('set-language');
+    if (langSel) {
+      langSel.options[0].text = t('langZh');
+      langSel.options[1].text = t('langEn');
+    }
+    // 自定义字体区（空状态 + 编辑/预览字体下拉的「跟随方案」）随语言刷新
+    this.renderCustomFontSettings();
   }
 
   defaultSettings() {
@@ -1423,6 +1646,8 @@ class MarkdownEditor {
       customFonts: [],
       editorFont: '',
       previewFont: '',
+      fileSortKey: 'name',
+      fileSortOrder: 'asc',
     };
   }
 
@@ -1483,16 +1708,8 @@ class MarkdownEditor {
     try { localStorage.setItem('tizumark-settings', JSON.stringify(this.settings)); } catch {}
   }
 
-  async initSettings() {
-    document.getElementById('btn-settings').addEventListener('click', () => this.showSettings());
-    document.getElementById('settings-close-x').addEventListener('click', () => this.hideSettings());
-    document.getElementById('settings-save-btn').addEventListener('click', () => this.hideSettings());
-    document.getElementById('settings-cancel-btn').addEventListener('click', () => this.hideSettings());
-    document.getElementById('settings-dialog').addEventListener('click', (e) => {
-      if (e.target.id === 'settings-dialog') this.hideSettings();
-    });
-    document.getElementById('settings-reset').addEventListener('click', () => this.resetSettings());
-
+  // 把 this.settings 同步到设置面板各控件（initSettings 与「取消/X 恢复」共用）
+  syncSettingsControls() {
     const s = this.settings;
     document.getElementById('set-font-size').value = s.fontSize;
     document.getElementById('font-size-label').textContent = s.fontSize + 'px';
@@ -1513,140 +1730,160 @@ class MarkdownEditor {
     document.getElementById('set-language').value = s.language || 'zh';
     const modeRadio = document.querySelector(`#settings-image-store-mode input[value="${s.imageInsertMode || 'assets'}"]`);
     if (modeRadio) modeRadio.checked = true;
+    document.getElementById('set-soft-breaks').checked = s.softBreaks !== false;
+    document.getElementById('set-show-tray-icon').checked = s.showTrayIcon !== false;
+    document.getElementById('set-close-action').value = s.closeAction || 'ask';
+    document.getElementById('settings-image-asset-path').value = s.imageAssetPath || 'assets';
+    const pathModeRadio = document.querySelector(`#settings-image-asset-path-mode input[value="${s.imageAssetPathMode || 'relative'}"]`);
+    if (pathModeRadio) pathModeRadio.checked = true;
+  }
+
+  // 设置重渲染的 loading toast（引用计数）：主题/配色/字体/代码块选项变更会触发全量重渲染
+  // （mermaid 图表多时较慢），期间在页面顶部 toast 位置显示持续提示，计数归零才移除。
+  // msgKey 可选：应用时「正在应用设置…」/ 保存时「保存中…」（与按钮 loading 文案对应）。
+  _beginSettingsBusy(msgKey = 'settingsApplying') {
+    this._settingsBusyCount = (this._settingsBusyCount || 0) + 1;
+    if (this._settingsBusyCount !== 1) return;
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    if (this._settingsBusyToast && this._settingsBusyToast.isConnected) return;
+    const el = document.createElement('div');
+    el.className = 'toast settings-loading-toast';
+    const spinner = document.createElement('span');
+    spinner.className = 'settings-loading-toast-spinner';
+    const body = document.createElement('div');
+    body.className = 'toast-body';
+    body.textContent = this.t(msgKey);
+    el.appendChild(spinner);
+    el.appendChild(body);
+    container.appendChild(el);
+    this._settingsBusyToast = el;
+  }
+
+  _endSettingsBusy() {
+    this._settingsBusyCount = Math.max(0, (this._settingsBusyCount || 0) - 1);
+    if (this._settingsBusyCount === 0 && this._settingsBusyToast && this._settingsBusyToast.isConnected) {
+      this._settingsBusyToast.remove();
+      this._settingsBusyToast = null;
+    }
+  }
+
+  async initSettings() {
+    document.getElementById('btn-settings').addEventListener('click', () => this.showSettings());
+    document.getElementById('settings-close-x').addEventListener('click', () => this.hideSettings(true));
+    const applyBtn = document.getElementById('settings-apply-btn');
+    applyBtn.addEventListener('click', async () => {
+      // 点「应用」= 生效 + 落盘，面板保持打开：按钮进入 loading 态（让一帧确保可见）
+      applyBtn.classList.add('is-loading');
+      applyBtn.disabled = true;
+      applyBtn.innerHTML = '<span class="btn-spinner"></span>' + this.t('applying');
+      await new Promise(r => requestAnimationFrame(r));
+      try {
+        await this.applyPendingSettings('settingsApplying');
+      } finally {
+        applyBtn.disabled = false;
+        applyBtn.classList.remove('is-loading');
+        applyBtn.textContent = this.t('apply');
+      }
+    });
+    const saveBtn = document.getElementById('settings-save-btn');
+    saveBtn.addEventListener('click', async () => {
+      // 点「保存」= 应用 + 落盘 + 关闭：按钮进入 loading 态（让一帧确保可见）
+      saveBtn.classList.add('is-loading');
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="btn-spinner"></span>' + this.t('saving');
+      await new Promise(r => requestAnimationFrame(r));
+      try {
+        await this.applyPendingSettings('saving');
+        this.hideSettings(false);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.classList.remove('is-loading');
+        saveBtn.textContent = this.t('save');
+      }
+    });
+    document.getElementById('settings-cancel-btn').addEventListener('click', () => this.hideSettings(true));
+    // 注：不支持点击遮罩层关闭设置框，只能点「取消」或「×」关闭
+    document.getElementById('settings-reset').addEventListener('click', () => this.resetSettings());
+
+    this.syncSettingsControls();
 
     document.getElementById('set-font-size').addEventListener('input', (e) => {
-      const v = Number(e.target.value);
-      if (this.activeTab) this.activeTab.fontSize = v;
-      this.cm.getWrapperElement().style.fontSize = v + 'px';
-      document.getElementById('font-size-label').textContent = v + 'px';
-      this.cm.refresh();
+      // 应用式：拖动只更新数值显示，实际字号在点「应用/保存」后生效
+      document.getElementById('font-size-label').textContent = Number(e.target.value) + 'px';
     });
     document.getElementById('set-font-size').addEventListener('change', (e) => {
       this.settings.fontSize = Number(e.target.value);
-      this.saveSettings();
     });
     document.getElementById('set-tab-size').addEventListener('change', (e) => {
       this.settings.tabSize = Number(e.target.value);
-      this.cm.setOption('tabSize', this.settings.tabSize);
-      this.cm.setOption('indentUnit', this.settings.tabSize);
-      this.saveSettings();
     });
     document.getElementById('set-line-wrap').addEventListener('change', (e) => {
       this.settings.lineWrap = e.target.checked;
-      this.cm.setOption('lineWrapping', this.settings.lineWrap);
-      this.saveSettings();
     });
     document.getElementById('set-line-numbers').addEventListener('change', (e) => {
       this.settings.lineNumbers = e.target.checked;
-      this.cm.setOption('lineNumbers', this.settings.lineNumbers);
-      this.saveSettings();
     });
     document.getElementById('set-preview-font-size').addEventListener('input', (e) => {
-      const v = Number(e.target.value);
-      this.preview.style.fontSize = v + 'px';
-      document.getElementById('preview-font-size-label').textContent = v + 'px';
+      document.getElementById('preview-font-size-label').textContent = Number(e.target.value) + 'px';
     });
     document.getElementById('set-preview-font-size').addEventListener('change', (e) => {
       this.settings.previewFontSize = Number(e.target.value);
-      this.saveSettings();
     });
     document.getElementById('set-line-height').addEventListener('change', (e) => {
       this.settings.lineHeight = Number(e.target.value);
-      this.preview.style.lineHeight = String(e.target.value);
-      this.saveSettings();
     });
     document.getElementById('set-max-width').addEventListener('change', (e) => {
       this.settings.maxWidth = Number(e.target.value);
-      if (this.settings.maxWidth) {
-        this.preview.style.maxWidth = this.settings.maxWidth + 'px';
-        this.preview.style.margin = '0 auto';
-        this.preview.classList.add('max-width-active');
-      } else {
-        this.preview.style.maxWidth = '';
-        this.preview.style.margin = '';
-        this.preview.classList.remove('max-width-active');
-      }
-      this.saveSettings();
     });
-    document.getElementById('set-theme-mode').addEventListener('change', async (e) => {
+    document.getElementById('set-theme-mode').addEventListener('change', (e) => {
       this.settings.themeMode = e.target.value;
-      await this.applyThemeMode();
-      this.saveSettings();
     });
-    document.getElementById('set-color-scheme').addEventListener('change', async (e) => {
+    document.getElementById('set-color-scheme').addEventListener('change', (e) => {
       this.settings.colorScheme = e.target.value;
-      await this.applyThemeMode();
-      this.saveSettings();
     });
     document.getElementById('set-font-scheme').addEventListener('change', (e) => {
       this.settings.fontScheme = e.target.value;
-      this.applyFontScheme();
-      this.saveSettings();
     });
     document.getElementById('set-default-view').addEventListener('change', (e) => {
       this.settings.defaultView = e.target.value;
-      this.saveSettings();
     });
     document.getElementById('set-scroll-sync').addEventListener('change', (e) => {
       this.settings.scrollSync = e.target.checked;
-      this.saveSettings();
     });
-    document.getElementById('set-soft-breaks').checked = s.softBreaks !== false;
     document.getElementById('set-soft-breaks').addEventListener('change', (e) => {
       this.settings.softBreaks = e.target.checked;
-      this.saveSettings();
-      this.updatePreview();
     });
-    document.getElementById('set-show-tray-icon').checked = s.showTrayIcon !== false;
     document.getElementById('set-show-tray-icon').addEventListener('change', (e) => {
       this.settings.showTrayIcon = e.target.checked;
-      this.saveSettings();
-      this.applyWindowBehavior();
     });
-    document.getElementById('set-close-action').value = s.closeAction || 'ask';
     document.getElementById('set-close-action').addEventListener('change', (e) => {
       this.settings.closeAction = e.target.value;
-      this.saveSettings();
     });
     document.getElementById('set-code-line-numbers').addEventListener('change', (e) => {
       this.settings.codeLineNumbers = e.target.checked;
-      this.preview.classList.toggle('code-line-numbers', e.target.checked);
-      if (this._hljsCache) this._hljsCache.clear();
-      this.saveSettings();
-      this.updatePreview();
     });
     document.getElementById('set-code-wrap').addEventListener('change', (e) => {
       this.settings.codeWrap = e.target.checked;
-      this.preview.classList.toggle('code-wrap', e.target.checked);
-      this.saveSettings();
-      this.updatePreview();
     });
     document.getElementById('set-language').addEventListener('change', (e) => {
       this.settings.language = e.target.value;
-      this.saveSettings();
-      this.applyLanguage();
     });
     document.querySelectorAll('#settings-image-store-mode input[name="settings-image-store"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         this.settings.imageInsertMode = e.target.value;
-        this.saveSettings();
       });
     });
 
-    document.getElementById('settings-image-asset-path').value = s.imageAssetPath || 'assets';
     document.getElementById('settings-image-asset-path').addEventListener('change', (e) => {
       this.settings.imageAssetPath = e.target.value.trim() || 'assets';
-      this.saveSettings();
     });
 
-    const pathModeRadio = document.querySelector(`#settings-image-asset-path-mode input[value="${s.imageAssetPathMode || 'relative'}"]`);
-    if (pathModeRadio) pathModeRadio.checked = true;
     document.querySelectorAll('#settings-image-asset-path-mode input[name="settings-image-asset-path"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         this.settings.imageAssetPathMode = e.target.value;
         this.settings.imageAssetPath = e.target.value === 'absolute' ? 'D:/images' : 'assets';
         document.getElementById('settings-image-asset-path').value = this.settings.imageAssetPath;
-        this.saveSettings();
         this.updateImageAssetPathHint();
       });
     });
@@ -1658,15 +1895,11 @@ class MarkdownEditor {
     const edFont = document.getElementById('set-editor-font');
     if (edFont) edFont.addEventListener('change', (e) => {
       this.settings.editorFont = e.target.value;
-      this.saveSettings();
-      this.applyCustomFonts();
       this.refreshFontSelectors();
     });
     const pvFont = document.getElementById('set-preview-font');
     if (pvFont) pvFont.addEventListener('change', (e) => {
       this.settings.previewFont = e.target.value;
-      this.saveSettings();
-      this.applyCustomFonts();
       this.refreshFontSelectors();
     });
 
@@ -2022,7 +2255,7 @@ class MarkdownEditor {
         this.settings.editorFont = last;
         this.settings.previewFont = last;
       }
-      this.saveSettings();
+      // 应用式：字体列表在面板内即时更新，落盘随「应用/保存」
       await this.registerCustomFonts();
       this.applyCustomFonts();
       this.renderCustomFontSettings();
@@ -2091,7 +2324,7 @@ class MarkdownEditor {
         this.settings.customFonts = (this.settings.customFonts || []).filter(f => f.id !== id);
         if (this.settings.editorFont === id) this.settings.editorFont = '';
         if (this.settings.previewFont === id) this.settings.previewFont = '';
-        this.saveSettings();
+        // 应用式：删除在面板内即时生效，落盘随「应用/保存」
         await this.registerCustomFonts();
         this.applyCustomFonts();
         this.renderCustomFontSettings();
@@ -2225,18 +2458,73 @@ class MarkdownEditor {
         securityLevel: 'loose',
         fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-preview').trim() || '-apple-system, sans-serif',
       });
-      await mermaid.run({ nodes: Array.from(this.preview.querySelectorAll('.mermaid-container')) });
+      // 主题切换重渲染全部图表。一次性 mermaid.run(全部节点) 是同步 CPU 密集任务
+      // （layout 计算），图表多时阻塞主线程造成明显卡顿（含转圈动画被卡住）。
+      // 分批渲染：每批【渲染前】先让出主线程一帧（保证转圈持续转动、不被阻塞），
+      // 图表较多时再叠加预览区 loading 提示。
+      const nodes = Array.from(this.preview.querySelectorAll('.mermaid-container'));
+      const BATCH = 2;
+      const showLoading = nodes.length > 6;
+      if (showLoading) this._beginPaneLoad();
+      try {
+        for (let i = 0; i < nodes.length; i += BATCH) {
+          if (this._mermaidGeneration !== gen) return; // 中途又切主题，放弃本次
+          // 每批渲染前让出主线程一帧：mermaid.run 是同步 CPU 密集，若首批立即执行，
+          // 转圈动画帧会被阻塞（表现为"点完停顿一下才开始转"）
+          await new Promise((r) => requestAnimationFrame(r));
+          const batch = nodes.slice(i, i + BATCH);
+          try {
+            await mermaid.run({ nodes: batch });
+          } catch (e) {
+            console.error('Mermaid re-render error:', e);
+          }
+        }
+      } finally {
+        if (showLoading) this._endPaneLoad();
+      }
     } catch (e) {
       console.error('Mermaid re-render error:', e);
     }
   }
 
   showSettings() {
+    // 打开设置面板：备份当前设置快照。应用式：面板内改动只改内存与控件显示，
+    // 点「应用/保存」才生效并落盘，未生效直接关闭（取消 / ×）时按快照恢复。
+    this._settingsSnapshot = JSON.parse(JSON.stringify(this.settings));
     document.getElementById('settings-dialog').classList.remove('hidden');
   }
 
-  hideSettings() {
+  hideSettings(revert = false) {
+    // 先取走快照（防连点：恢复只执行一次，重复触发直接走关闭分支）
+    const snapshot = revert ? this._settingsSnapshot : null;
+    this._settingsSnapshot = null;
+    if (snapshot) {
+      // 未应用直接关闭：恢复内存设置与控件显示。
+      // 面板内改动从不实时触碰编辑器/预览，无需 applySettings / 重渲染，瞬间完成。
+      this.settings = JSON.parse(JSON.stringify(snapshot));
+      this.syncSettingsControls();
+      this.renderCustomFontSettings();
+      this.updateImageAssetPathHint();
+    }
     document.getElementById('settings-dialog').classList.add('hidden');
+  }
+
+  // 「应用」：把面板内改动生效（applySettings）并落盘，面板保持打开（可连续调整）；
+  // 「保存」= applyPendingSettings + 关闭面板。重渲染期间显示 loading toast。
+  // 「应用」/「保存」统一入口：生效 + 落盘 + 快照推进。msgKey 控制顶部 loading toast 文案
+  // （'settingsApplying' = 正在应用… / 'saving' = 正在保存…），与按钮 loading 文案对应。
+  async applyPendingSettings(msgKey = 'settingsApplying') {
+    this._beginSettingsBusy(msgKey);
+    try {
+      await this.applySettings();
+    } finally {
+      this._endSettingsBusy();
+    }
+    this.applyLanguage();       // 语言/界面文本生效
+    this.applyWindowBehavior(); // 托盘显隐生效
+    this.saveSettings();        // 应用 = 落盘
+    // 应用即确认：快照推进到当前值，之后「取消」回滚到最近一次应用/保存的状态
+    this._settingsSnapshot = JSON.parse(JSON.stringify(this.settings));
   }
 
   async resetSettings() {
@@ -2250,41 +2538,19 @@ class MarkdownEditor {
     // 恢复默认：保留已导入的自定义字体，仅把编辑器/预览字体选择重置为「跟随方案」
     const savedCustomFonts = this.settings.customFonts || [];
     this.settings = { ...defaults, customFonts: savedCustomFonts };
-    this.saveSettings();
-
-    document.getElementById('set-font-size').value = defaults.fontSize;
-    document.getElementById('font-size-label').textContent = defaults.fontSize + 'px';
-    document.getElementById('set-tab-size').value = defaults.tabSize;
-    document.getElementById('set-line-wrap').checked = defaults.lineWrap;
-    document.getElementById('set-line-numbers').checked = defaults.lineNumbers;
-    document.getElementById('set-preview-font-size').value = defaults.previewFontSize;
-    document.getElementById('preview-font-size-label').textContent = defaults.previewFontSize + 'px';
-    document.getElementById('set-line-height').value = defaults.lineHeight;
-    document.getElementById('set-max-width').value = defaults.maxWidth;
-    document.getElementById('set-theme-mode').value = defaults.themeMode;
-    document.getElementById('set-color-scheme').value = defaults.colorScheme;
-    document.getElementById('set-font-scheme').value = defaults.fontScheme;
-    document.getElementById('set-default-view').value = defaults.defaultView;
-    document.getElementById('set-scroll-sync').checked = defaults.scrollSync;
-    document.getElementById('set-soft-breaks').checked = defaults.softBreaks !== false;
-    document.getElementById('set-language').value = defaults.language;
-    const defaultRadio = document.querySelector(`#settings-image-store-mode input[value="${defaults.imageInsertMode}"]`);
-    if (defaultRadio) defaultRadio.checked = true;
-    document.getElementById('settings-image-asset-path').value = defaults.imageAssetPath;
-    const defaultPathRadio = document.querySelector(`#settings-image-asset-path-mode input[value="${defaults.imageAssetPathMode}"]`);
-    if (defaultPathRadio) defaultPathRadio.checked = true;
-    this.updateImageAssetPathHint();
-
-    await this.applySettings();
+    this.syncSettingsControls();
     this.renderCustomFontSettings();
-    this.setStatus(this.t('settingsReset'));
+    this.updateImageAssetPathHint();
+    // 恢复默认立即生效并落盘（等同自动执行一次「应用」），面板保持打开可继续调整
+    await this.applyPendingSettings();
   }
 
   updateImageAssetPathHint() {
     const mode = this.settings.imageAssetPathMode || 'relative';
     const hintEl = document.getElementById('setting-image-asset-path-hint-text');
     if (hintEl) {
-      hintEl.textContent = mode === 'relative'
+      // 文案含 <code> 高亮片段，须用 innerHTML
+      hintEl.innerHTML = mode === 'relative'
         ? this.t('imageAssetPathRelativeHint')
         : this.t('imageAssetPathAbsoluteHint');
     }
@@ -2350,9 +2616,10 @@ class MarkdownEditor {
       insertCalloutWarning: { key: '', label: 'Warning 警告' },
       insertCalloutCaution: { key: '', label: 'Caution 注意' },
       insertCalloutImportant: { key: '', label: 'Important 重要' },
-      // 行/选区移动：CM 原生 moveLineUp/Down，无选区移当前行，有选区移选中范围内的所有行
+// 行/选区移动：CM 原生 moveLineUp/Down，无选区移当前行，有选区移选中范围内的所有行
       moveLineUp: { key: '', label: '上移行/选区' },
       moveLineDown: { key: '', label: '下移行/选区' },
+      closeToTray: { key: '', label: '关闭到托盘' },
     };
   }
 
@@ -2492,13 +2759,20 @@ class MarkdownEditor {
     }
   }
 
+  clearShortcut(action) {
+    // 仅更新面板内编辑草稿（内存），不落盘、不应用；点「确认」才生效
+    this.shortcuts[action].key = '';
+    if (this.shortcutScheme !== 'custom') this.shortcutScheme = 'custom';
+    this.renderShortcutsList();
+  }
+
   resetShortcuts() {
+    // 仅把面板内各选项值重置为默认（内存草稿预览），不落盘、不立即应用到 CM。
+    // 必须点「确认」按钮才正式生效；未确认关闭面板后，重开仍读 localStorage 旧值。
     this.shortcuts = this.getDefaultShortcuts();
-    localStorage.removeItem('tizumark-shortcuts');
     this.shortcutScheme = 'default';
     this.saveShortcutScheme('default');
     this.renderShortcutsList();
-    this.applyShortcuts();
     this.setStatus(this.t('shortcutsReset'));
   }
 
@@ -2574,7 +2848,7 @@ class MarkdownEditor {
     const groupLabels = this.t('shortcutGroup') || {};
     // 按功能分组展示，便于在长列表中查找
     const groups = [
-      { key: 'file', ids: ['newFile', 'openFile', 'saveFile', 'saveAs', 'closeTab', 'exportPDF'] },
+{ key: 'file', ids: ['newFile', 'openFile', 'saveFile', 'saveAs', 'closeTab', 'exportPDF', 'closeToTray'] },
       { key: 'search', ids: ['find', 'crossSearch', 'fileSearch', 'globalSearch'] },
       { key: 'tabView', ids: ['nextTab', 'prevTab', 'toggleView', 'toggleTheme', 'toggleSidebar'] },
       { key: 'format', ids: ['bold', 'italic', 'strikethrough', 'inlineCode', 'highlight', 'insertSuperscript', 'insertSubscript', 'moveLineUp', 'moveLineDown'] },
@@ -2623,11 +2897,7 @@ class MarkdownEditor {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const action = btn.dataset.action;
-        this.shortcuts[action].key = '';
-        this._markShortcutCustom();
-        this.saveShortcuts();
-        this.renderShortcutsList();
-        this.applyShortcuts();
+        this.clearShortcut(action);
       });
     });
   }
@@ -2660,17 +2930,17 @@ class MarkdownEditor {
     const keyStr = parts.join('+');
     const dup = this.findDuplicateShortcut(keyStr, this.recordingAction);
     if (dup) {
-      this.showToast(`快捷键 "${keyStr}" 已被「${this.t('shortcutLabel')[dup] || dup}」占用`);
+      this.showToast(this.t('shortcutOccupied', { key: keyStr, name: this.t('shortcutLabel')[dup] || dup }));
       this.recordingAction = null;
       this.renderShortcutsList();
       return true;
     }
     this.shortcuts[this.recordingAction].key = keyStr;
     this.recordingAction = null;
-    this._markShortcutCustom();
-    this.saveShortcuts();
+    // 仅更新面板内的编辑草稿（内存 this.shortcuts），不落盘、不应用到 CM/全局派发。
+    // 必须点「确认」按钮（shortcuts-save-btn）才正式 saveShortcuts + applyShortcuts 生效。
+    if (this.shortcutScheme !== 'custom') this.shortcutScheme = 'custom'; // 内存预览标记，不落盘
     this.renderShortcutsList();
-    this.applyShortcuts();
     return true;
   }
 
@@ -2723,6 +2993,10 @@ class MarkdownEditor {
 
   showShortcutsDialog() {
     this.recordingAction = null;
+    // 每次打开都从 localStorage 重新加载已保存键位 + 方案，作为编辑基线。
+    // 这样「未点确认就关闭面板」留下的内存草稿不会残留，重开仍显示已保存值。
+    this.shortcuts = this.loadShortcuts();
+    this.shortcutScheme = this.loadShortcutScheme();
     this.renderShortcutsList();
     this.populateSchemeSelect();
     document.getElementById('shortcuts-dialog').classList.remove('hidden');
@@ -2840,6 +3114,7 @@ class MarkdownEditor {
         const next = (this.activeTabIndex + 1) % this.tabs.length;
         this.switchTab(next);
       },
+      closeToTray: () => this.hideToTray(),
       prevTab: () => {
         const prev = this.activeTabIndex > 0 ? this.activeTabIndex - 1 : this.tabs.length - 1;
         this.switchTab(prev);
@@ -3684,6 +3959,26 @@ class MarkdownEditor {
     document.getElementById('folder-close').addEventListener('click', () => {
       this.closeFolder();
     });
+    // 文件目录排序控件
+    const sortKeyEl = document.getElementById('folder-sort-key');
+    if (sortKeyEl) {
+      sortKeyEl.value = this.settings.fileSortKey || 'name';
+      sortKeyEl.addEventListener('change', () => {
+        this.settings.fileSortKey = sortKeyEl.value;
+        this.saveSettings();
+        this.renderFolderTree();
+      });
+    }
+    const sortOrderEl = document.getElementById('folder-sort-order');
+    if (sortOrderEl) {
+      sortOrderEl.addEventListener('click', () => {
+        this.settings.fileSortOrder = this.settings.fileSortOrder === 'desc' ? 'asc' : 'desc';
+        this.saveSettings();
+        this.updateFolderSortOrderButton();
+        this.renderFolderTree();
+      });
+    }
+    this.updateFolderSortOrderButton();
     document.getElementById('tab-outline').addEventListener('click', () => {
       this.showSidebarTab('outline');
     });
@@ -4458,7 +4753,7 @@ class MarkdownEditor {
   // 与编辑器高亮共用同一配色（醒目黄色）。从后往前包裹，避免节点切分影响更早偏移。
   clearPreviewHighlights() {
     const pv = this.preview;
-    if (!pv) { window.getSelection().removeAllRanges(); return; }
+    if (!pv) { this._safeClearSelection(); return; }
     const marks = pv.querySelectorAll('mark.preview-search-hl');
     marks.forEach(mk => {
       const parent = mk.parentNode;
@@ -4466,7 +4761,20 @@ class MarkdownEditor {
       parent.removeChild(mk);
     });
     pv.normalize();
-    window.getSelection().removeAllRanges();
+    this._safeClearSelection();
+  }
+
+  // 仅清空落在 #preview 内的文档选区。
+  // 关键修复：若焦点落在搜索框 / 编辑器等可编辑元素上（其选区不在 #preview 内），
+  // 绝不调用 window.getSelection().removeAllRanges()——WebView2/Chromium 下该调用会令
+  // 当前聚焦的 <input> 失焦，表现为「搜索框里打一个字符光标就移走」。
+  _safeClearSelection() {
+    const sel = window.getSelection && window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const pv = this.preview;
+    // 选区锚点不在预览内（例如在搜索输入框里）→ 不动它，避免抢焦点
+    if (!pv || !pv.contains(sel.anchorNode)) return;
+    sel.removeAllRanges();
   }
 
   highlightPreviewMatches(query, caseSensitive, useRegex) {
@@ -4881,11 +5189,16 @@ class MarkdownEditor {
         return;
       }
 
-      const mermaidSvg = e.target.closest('.mermaid-container svg');
-      if (mermaidSvg) {
+      const mermaidContainer = e.target.closest('.mermaid-container');
+      if (mermaidContainer) {
         e.preventDefault();
         e.stopPropagation();
-        this.showLightbox(mermaidSvg, 'svg');
+        // 锚点必须是容器而非 svg：closest('.mermaid-container svg') 只匹配「自身是 svg 且
+        // 祖先有 container」的节点——点击 svg 内部（rect/text 等）能向上命中 svg，但点击
+        // 容器内边距（两侧灰色区，target 是 div 本身）匹配不到，lightbox 打不开。
+        // 改为容器锚点 + 内部取 svg：中央与空白区点击都能打开图表查看器。
+        const svg = mermaidContainer.querySelector('svg');
+        if (svg) this.showLightbox(svg, 'svg');
         return;
       }
 
@@ -4954,7 +5267,24 @@ class MarkdownEditor {
             // 直接读取文件（不要 fetch webview 源，否则会被 SPA 回退返回 index.html）。
             const tab = this.activeTab;
             if (tab && tab.filePath) {
-              const targetPath = resolveDocPath(tab.filePath, this.normalizeLinkHref(href));
+              const normHref = this.normalizeLinkHref(href);
+              // 简单文件名链接：可能是 bundled 资源（demo.md / guide.md 等，dev 项目根 /
+              // prod 资源目录）。先 read_bundled_file 探针——命中走 _openBundledFile
+              // （isBundled=true，否则 processImages 不启用 read_bundled_image_as_base64
+              // 回退，demo.md 内相对图片会显示失败框）；未命中（用户自己的笔记）再走下方
+              // 本地路径，行为不变。
+              if (!/[\/\\]/.test(normHref)) {
+                try {
+                  const probe = await TauriApi.readBundledFile({ filename: normHref });
+                  const probeContent = probe && typeof probe === 'object' ? probe.content : probe;
+                  if (probeContent && !probeContent.trim().startsWith('<!DOCTYPE') && !probeContent.trim().startsWith('<html')) {
+                    const probePath = probe && typeof probe === 'object' ? probe.path : normHref;
+                    await this._openBundledFile(href, probeContent, probePath);
+                    return;
+                  }
+                } catch (_) { /* 非 bundled 资源，走下方本地路径 */ }
+              }
+              const targetPath = resolveDocPath(tab.filePath, normHref);
               const existingIndex = this.tabs.findIndex(t => t.filePath === targetPath);
               if (existingIndex !== -1) {
                 this.switchTab(existingIndex);
@@ -5249,9 +5579,9 @@ class MarkdownEditor {
     });
   }
 
-  showConfirmDialog(title, message, action = null) {
+  showConfirmDialog(title, message, action = null, warning = null) {
     return Dialogs.showConfirmDialog({
-      title, message, action,
+      title, message, action, warning,
       t: (k, p) => this.t(k, p),
       showToast: (msg, type) => this.showToast(msg, type),
       doc: document,
@@ -5814,6 +6144,27 @@ class MarkdownEditor {
     catch (e) { console.warn('[folder-watch] failed:', e); }
   }
 
+  // 文件夹监听异常处理：弹确认框提供「重新监听（确认）/ 继续使用（取消）」。
+  // 手动触发所以无自动重挂的风暴风险；_folderWatchDialogOpen 防重入（panic 反复时
+  // 避免弹窗互相覆盖、监听叠加）
+  async _handleFolderWatchError(event) {
+    if (this._folderWatchDialogOpen) return;
+    this._folderWatchDialogOpen = true;
+    try {
+      const detail = event && event.payload && event.payload.message
+        ? '：' + event.payload.message
+        : '';
+      const ok = await this.showConfirmDialog(
+        this.t('folderWatchErrorTitle'),
+        this.t('folderWatchErrorMessage') + detail,
+        async () => { await this.startFolderWatch(); },
+      );
+      if (ok) this.showToast(this.t('folderWatchRecovered'), 'success');
+    } finally {
+      this._folderWatchDialogOpen = false;
+    }
+  }
+
   // 收到 folder-changed 后防抖重建文件树（保留已展开目录），避免单次操作触发多次重渲染
   _scheduleTreeRefresh() {
     if (this._treeRefreshTimer) clearTimeout(this._treeRefreshTimer);
@@ -5821,6 +6172,75 @@ class MarkdownEditor {
       this._treeRefreshTimer = null;
       if (this.workspaceFolder) this.renderFolderTree();
     }, 400);
+  }
+
+  sortFolderEntries(entries, key, order, dirFirst = true) {
+    const arr = entries.slice();
+    const sign = order === 'desc' ? -1 : 1;
+    arr.sort((a, b) => {
+      if (dirFirst && a.is_dir !== b.is_dir) {
+        return a.is_dir ? -1 : 1;
+      }
+      let cmp;
+      if (key === 'time') {
+        cmp = (a.mtime || 0) - (b.mtime || 0);
+      } else {
+        cmp = String(a.name).toLowerCase().localeCompare(String(b.name).toLowerCase());
+      }
+      return cmp * sign;
+    });
+    return arr;
+  }
+
+  // 文件大小自适应格式化：B / KB / MB / GB（保留 1 位小数，>=1000 才进级）
+  formatFileSize(bytes) {
+    const b = Number(bytes) || 0;
+    if (b < 1024) return b + ' B';
+    const units = ['KB', 'MB', 'GB', 'TB'];
+    let val = b / 1024;
+    let i = 0;
+    while (val >= 1024 && i < units.length - 1) {
+      val /= 1024;
+      i += 1;
+    }
+    return val.toFixed(val >= 100 ? 0 : 1) + ' ' + units[i];
+  }
+
+  // 修改时间友好格式化：今天显示 HH:mm，今年显示 MM-DD HH:mm，跨年显示 YYYY-MM-DD
+  formatFileTime(mtime) {
+    const ms = Number(mtime) || 0;
+    if (!ms) return '';
+    const d = new Date(ms);
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const hm = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) {
+      return hm;
+    }
+    const md = pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    if (d.getFullYear() === now.getFullYear()) {
+      return md + ' ' + hm;
+    }
+    return d.getFullYear() + '-' + md;
+  }
+
+  updateFolderSortOrderButton() {
+    const el = document.getElementById('folder-sort-order');
+    if (!el) return;
+    const asc = (this.settings.fileSortOrder || 'asc') !== 'desc';
+    // 升序=上箭头、降序=下箭头（不同图标，直观指示当前方向）
+    el.innerHTML = asc
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><polyline points="6 11 12 5 18 11"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><polyline points="6 13 12 19 18 13"/></svg>';
+    el.classList.toggle('desc', !asc);
+    el.title = this.t(asc ? 'sortAsc' : 'sortDesc');
+  }
+
+  // 文件树右键菜单首项文案：文件夹→「打开文件夹」，文件→「打开所在目录」（动态切换，i18n 键均有）
+  updateFolderMenuLabel() {
+    const span = document.getElementById('folder-open-label');
+    if (!span) return;
+    span.textContent = this.t(this._folderCtxIsDir ? 'openFolder' : 'openContainingFolder');
   }
 
   async renderFolderTree() {
@@ -5855,10 +6275,20 @@ class MarkdownEditor {
     } catch (e) {
       return;
     }
+    entries = this.sortFolderEntries(entries, this.settings.fileSortKey, this.settings.fileSortOrder);
     for (const entry of entries) {
       const node = document.createElement('div');
       node.className = 'tree-node ' + (entry.is_dir ? 'tree-folder' : 'tree-file');
       node.dataset.path = entry.path;
+      node.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this._folderCtxPath = entry.path;
+        this._folderCtxIsDir = entry.is_dir;
+        this.updateFolderMenuLabel();
+        this.hideAllContextMenus();
+        this.showContextMenu('context-menu-folder', e.clientX, e.clientY);
+      });
 
       const row = document.createElement('div');
       row.className = 'tree-row';
@@ -5918,6 +6348,21 @@ class MarkdownEditor {
       row.appendChild(arrow);
       row.appendChild(icon);
       row.appendChild(label);
+
+      const meta = document.createElement('span');
+      meta.className = 'tree-meta';
+      if (!entry.is_dir && entry.size != null) {
+        const sizeEl = document.createElement('span');
+        sizeEl.className = 'tree-size';
+        sizeEl.textContent = this.formatFileSize(entry.size);
+        meta.appendChild(sizeEl);
+      }
+      const timeEl = document.createElement('span');
+      timeEl.className = 'tree-time';
+      timeEl.textContent = this.formatFileTime(entry.mtime);
+      meta.appendChild(timeEl);
+      row.appendChild(meta);
+
       containerEl.appendChild(node);
     }
     this.highlightTreeActiveFile();
@@ -6256,6 +6701,90 @@ class MarkdownEditor {
     }
   }
 
+  // 导出时把预览里的图片全部内联为 base64 data URI，使导出文档自包含、不受运行时
+  // blob: 回收 / 源解析影响（同源 srcdoc 打印帧在 PDF 导出、外部打开在 HTML 导出都适用）。
+  // 分支：blob:→fetch 还原；file://→Rust 读盘；相对路径→按文档目录 Rust 读盘；data:/http(s): 保留。
+  async _inlineImagesForExport(clone, filePath) {
+    if (!filePath) return; // 未保存文档：相对路径无法解析，跳过（保留原 src）
+    const dir = filePath.replace(/[/\\][^/\\]*$/, '');
+    const mimeOfExt = (name) => {
+      const ext = String(name).split('.').pop().toLowerCase();
+      if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+      if (ext === 'gif') return 'image/gif';
+      if (ext === 'svg') return 'image/svg+xml';
+      if (ext === 'webp') return 'image/webp';
+      if (ext === 'png') return 'image/png';
+      if (ext === 'bmp') return 'image/bmp';
+      return 'image/png';
+    };
+    const blobToDataUri = (blob) => new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => reject(fr.error || new Error('readAsDataURL failed'));
+      fr.readAsDataURL(blob);
+    });
+    const imgPromises = Array.from(clone.querySelectorAll('img')).map(async (img) => {
+      let src = img.getAttribute('src');
+      if (!src) return;
+      // 已内联（data:）或远程（http(s):）资源直接保留
+      if (src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://')) return;
+      try {
+        let dataUri = null;
+        if (src.startsWith('blob:')) {
+          // 预览里 img.src 已被 processImages 经 getCachedImageURL 缓存成 blob: URL，
+          // 导出时该 blob 可能已被 LRU 回收失效，必须还原为内联 base64。
+          // blob 与主窗口同源，可直接 fetch 还原。
+          const resp = await fetch(src);
+          if (resp.ok) {
+            const blob = await resp.blob();
+            dataUri = await blobToDataUri(blob);
+          }
+        } else if (src.startsWith('file://')) {
+          // file:// 走 Rust 读磁盘（绕过 CSP，与 processImages 一致）
+          const url = src.replace(/^file:\/\//, '');
+          const base64 = await TauriApi.fetchImageAsBase64({ url });
+          dataUri = `data:${mimeOfExt(url)};base64,${base64}`;
+        } else {
+          // 纯相对路径：按当前 .md 所在目录补全
+          let rel = src;
+          if (rel.startsWith('/')) rel = rel.slice(1);
+          const base64 = await TauriApi.fetchImageAsBase64({ url: dir + '/' + rel });
+          dataUri = `data:${mimeOfExt(rel)};base64,${base64}`;
+        }
+        if (dataUri) img.src = dataUri;
+      } catch (e) {
+        // 还原失败不阻断导出：保留原 src，至少用户能手动补
+        console.warn('[export] 图片内联失败，保留原 src:', src, e);
+      }
+    });
+    await Promise.allSettled(imgPromises);
+  }
+
+  // PDF 导出需要完整 styles.css。优先运行时 fetch（原始文本保真），失败则回退读取
+  // 已加载样式表的 CSSOM（自包含、不依赖网络/打包路径），彻底杜绝
+  // 「fetch 失败 → appCSS 空 → 打印样式大面积缺失」的软依赖风险。
+  async _loadStylesheetText(url) {
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const txt = await resp.text();
+        if (txt && txt.trim()) return txt;
+      }
+    } catch (e) { /* fallthrough to CSSOM */ }
+    try {
+      const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+      for (const link of links) {
+        const href = link.getAttribute('href') || '';
+        if (href.indexOf(url) === -1) continue;
+        const sheet = link.sheet;
+        if (!sheet) continue;
+        const rules = Array.from(sheet.cssRules).map((r) => r.cssText).join('\n');
+        if (rules && rules.trim()) return rules;
+      }
+    } catch (e) { /* cross-origin 等忽略 */ }
+    return '';
+  }
+
   async exportHTML() {
     try {
       const path = await dialogSave({
@@ -6279,26 +6808,7 @@ class MarkdownEditor {
       const abbrData = clone.querySelector('#abbr-data');
       if (abbrData) abbrData.remove();
 
-      const filePath = this.activeTab.filePath;
-      if (filePath) {
-        const dir = filePath.replace(/[/\\][^/\\]*$/, '');
-        const imgPromises = Array.from(clone.querySelectorAll('img')).map(async (img) => {
-          let src = img.getAttribute('src');
-          if (!src || src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://') || src.startsWith('file://') || src.startsWith('blob:')) return;
-          if (src.startsWith('/')) src = src.slice(1);
-          try {
-            const base64 = await invoke('fetch_image_as_base64', { url: dir + '/' + src });
-            const ext = src.split('.').pop().toLowerCase();
-            let mime = 'image/png';
-            if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
-            else if (ext === 'gif') mime = 'image/gif';
-            else if (ext === 'svg') mime = 'image/svg+xml';
-            else if (ext === 'webp') mime = 'image/webp';
-            img.src = `data:${mime};base64,${base64}`;
-          } catch (e) { /* skip unresolvable images */ }
-        });
-        await Promise.allSettled(imgPromises);
-      }
+await this._inlineImagesForExport(clone, this.activeTab.filePath);
 
       let katexCSS = '';
       try {
@@ -6337,8 +6847,17 @@ class MarkdownEditor {
     em { font-style: italic; }
     del { text-decoration: line-through; color: #5e5e62; }
     code { padding: 2px 6px; background: #f0efee; border: 1px solid #d4d4d8; border-radius: 4px; font-family: "SF Mono", "Fira Code", monospace; font-size: 0.88em; }
-    pre { padding: 16px; background: #f0efee; border-radius: 6px; overflow-x: auto; margin: 16px 0; max-width: 100%; border: 1px solid #d4d4d8; }
-    pre code { padding: 0; background: none; border: none; font-size: 0.9em; line-height: 1.5; }
+    pre { padding: 16px; background: #f6f5f4; border-radius: 6px; white-space: pre-wrap; word-wrap: break-word; word-break: break-word; overflow: visible; margin: 16px 0; max-width: 100%; border: 1px solid #d4d4d8; }
+    pre code { padding: 0; background: transparent; border: none; font-size: 0.9em; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; word-break: break-word; }
+    /* 代码块：hljs 主题里 .hljs{background:#fff}（specificity 0,1,0）会盖住上面 pre code(0,0,2) 的 transparent，
+       形成"内白外灰"。用 .hljs 同类选择 + !important 显式压住，让 pre 的灰底透出到 code 上。 */
+    pre code.hljs, pre code .hljs { background: transparent !important; padding: 0; }
+    /* 代码块行结构（code-block.js 输出的 .code-line/.code-line-num/.code-line-text 在导出里也要换行） */
+    .code-scroll { max-height: none; overflow: visible; }
+    .code-line { display: flex; line-height: 1.8; min-width: 0; }
+    .code-line-num { flex-shrink: 0; width: 3em; text-align: right; padding-right: 0.8em; color: #888; user-select: none; display: none; }
+    .preview-content.code-line-numbers .code-line-num { display: inline; }
+    .code-line-text { white-space: pre-wrap; word-wrap: break-word; word-break: break-word; flex: 1 1 auto; min-width: 0; }
     blockquote { padding: 12px 20px; margin: 0 0 16px 0; border-left: 4px solid #2563eb; background: #f6f5f4; border-radius: 0 6px 6px 0; color: #5e5e62; }
     blockquote p:last-child { margin-bottom: 0; }
     table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
@@ -6484,17 +7003,17 @@ ${clone.innerHTML}
   }
 
   async exportPDF() {
-    // Print tips before starting
+// Print tips + 醒目警示（"文件较大时生成 PDF 耗时较长..."）一起在确认框里展示，
+    // 用户点确认后直接走系统打印对话框，不再做任何"是否写完"的承诺。
     const proceed = await this.showConfirmDialog(
       this.t('exportPDF'),
-      `<div style="text-align:left;line-height:1.7;">
-        <p style="margin:0 0 8px;">${this.t('printTip1')}</p>
-        <p style="margin:0;">${this.t('printTip2')}</p>
-      </div>`
+      this.t('printTip1') + '\n\n' + this.t('printTip2'),
+      null,
+      this.t('pdfBigFileWarn'),
     );
     if (!proceed) return;
 
-    // --- Loading overlay ---
+    // --- Loading overlay (打印准备中，afterprint 立即收尾) ---
     const overlay = document.createElement('div');
     overlay.innerHTML = `<div class="pdf-loading-spinner"></div><div class="pdf-loading-text">${this.t('preparingPrint')}</div>`;
     overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);font-family:-apple-system,sans-serif;';
@@ -6512,14 +7031,22 @@ ${clone.innerHTML}
       overlayDone = true;
       if (overlay.parentNode) overlay.remove();
     };
-    const safetyTimer = setTimeout(hideOverlay, 30000);
 
     try {
       // Yield so the overlay paints before CPU-heavy Mermaid work
       await new Promise(r => requestAnimationFrame(r));
 
+      // 文件名：取自当前 md，去扩展名。系统打印对话框默认文件名走主窗口 document.title
+      // （_exportViaSystemPrint 在 iframe.onload 里临时覆盖为该值），无需在应用内另弹保存框。
+      const pdfBaseName = String(this.activeTab.name || '').replace(/\.[^.]+$/, '');
+      const safeBaseName = pdfBaseName || this.t('untitled') || 'document';
+
       const clone = this.preview.cloneNode(true);
       clone.querySelectorAll('.copy-btn, #abbr-data').forEach(el => el.remove());
+
+      // 图片内联：把预览里的 blob:/file:///相对路径图片全部转内联 base64，
+      // 使打印帧自包含（不受 blob LRU 回收 / 源解析影响，根除 PDF 空白图）。
+      await this._inlineImagesForExport(clone, this.activeTab.filePath);
 
       // Re-render Mermaid via mermaid.render() so every diagram gets a
       // consistent viewBox regardless of the current preview-pane width.
@@ -6556,14 +7083,15 @@ ${clone.innerHTML}
         }
       }
 
-      const escapedTitle = this.activeTab.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-      let appCSS = '';
-      try { const resp = await fetch('styles.css'); if (resp.ok) appCSS = await resp.text(); } catch (e) { /* skip */ }
+      // 完整 styles.css：优先 fetch（原始文本保真），失败回退已加载样式表 CSSOM（加固，避免软依赖）
+      const appCSS = await this._loadStylesheetText('styles.css');
       let hljsCSS = '';
       try { const themeLink = document.getElementById('highlight-theme'); if (themeLink) { const resp = await fetch(themeLink.getAttribute('href')); if (resp.ok) hljsCSS = await resp.text(); } } catch (e) { /* skip */ }
       let katexCSS = '';
       try { const resp = await fetch('lib/katex/katex.min.css'); if (resp.ok) katexCSS = await resp.text(); } catch (e) { /* skip */ }
+
+      // escapedTitle：用于打印帧 <title> / contentDocument.title（去扩展名文件名已在上文取得）
+      const escapedTitle = safeBaseName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
       const colorScheme = document.documentElement.getAttribute('data-color-scheme') || 'default';
 
@@ -6571,6 +7099,18 @@ ${clone.innerHTML}
 @page { margin: 1.5cm; }
 html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
 .preview-content { max-width: 680px !important; margin: 0 auto !important; padding: 16px 24px !important; }
+.preview-content pre { white-space: pre-wrap !important; word-wrap: break-word !important; word-break: break-word !important; overflow: visible !important; }
+.preview-content pre code { white-space: pre-wrap !important; word-wrap: break-word !important; word-break: break-word !important; }
+/* 代码块 hljs 默认主题里 .hljs 元素带 background:#ffffff，会盖住 pre 的灰色形成"内白外灰"。
+   强制透明 + 12px 内边距，让整个代码块统一是 pre 的 --code-bg 灰色（与软件预览一致）。 */
+.preview-content pre code.hljs,
+.preview-content pre .hljs { background: transparent !important; padding: 12px 16px !important; }
+/* 代码块行结构（导出 iframe 没载入 styles.css，code-block.js 输出的 .code-line 必须显式块级化） */
+.code-scroll { max-height: none !important; overflow: visible !important; }
+.code-line { display: flex !important; line-height: 1.8 !important; min-width: 0 !important; }
+.code-line-num { flex-shrink: 0 !important; width: 3em !important; text-align: right !important; padding-right: 0.8em !important; color: #888 !important; user-select: none !important; display: none !important; }
+.preview-content.code-line-numbers .code-line-num { display: inline !important; }
+.code-line-text { white-space: pre-wrap !important; word-wrap: break-word !important; word-break: break-word !important; flex: 1 1 auto !important; min-width: 0 !important; }
 .mermaid-container { margin: 8px 0 !important; max-width: 100% !important; overflow: hidden !important; break-inside: avoid; page-break-inside: avoid; }
 .mermaid-container svg { width: auto !important; max-width: 100% !important; height: auto !important; display: block !important; margin: 0 auto !important; }
 .mermaid-container svg text, .mermaid-container svg .nodeLabel, .mermaid-container svg .edgeLabel, .mermaid-container svg .label, .mermaid-container svg textPath { font-size: 14px !important; }
@@ -6593,34 +7133,68 @@ input[type="checkbox"]:checked::after { display: none !important; }
 <div class="preview-content">${clone.innerHTML}</div>
 </body></html>`;
 
-      // Hide overlay right before print dialog, so the user sees
-      // the spinner until the system print dialog appears.
-      const iframe = document.createElement('iframe');
-      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:680px;height:600px;border:none;';
-      iframe.srcdoc = html;
-      document.body.appendChild(iframe);
-
-      iframe.onload = () => {
-        const after = () => {
-          iframe.contentWindow.removeEventListener('afterprint', after);
-          iframe.remove();
-          this.setStatus(this.t('exportedPDF'));
-        };
-        iframe.contentWindow.addEventListener('afterprint', after);
-        setTimeout(() => {
-          iframe.contentWindow.removeEventListener('afterprint', after);
-          if (iframe.parentNode) iframe.remove();
-        }, 30000);
-        hideOverlay();
-        clearTimeout(safetyTimer);
-        iframe.contentWindow.print();
-      };
+      // 系统打印（iframe + contentWindow.print()）：用 OS 打印引擎生成 PDF，保证文字可选中。
+      // afterprint 即收尾，不做落盘检测——OS 打印后台异步落盘是浏览器架构限制，
+      // 应用拿不到"写完"回调。警示已在确认框里展示，由用户自己判断何时打开。
+      await this._exportViaSystemPrint(html, safeBaseName, escapedTitle, hideOverlay);
     } catch (e) {
       console.error('exportPDF error:', e);
       hideOverlay();
-      clearTimeout(safetyTimer);
       this.setStatus(this.t('exportError'));
     }
+  }
+
+  // 系统打印路径（iframe + contentWindow.print()）：用 OS 打印引擎生成 PDF。
+  // 不做落盘检测（OS 打印后台异步写盘，应用拿不到"写完"回调；警示已前置到确认框）。
+  // afterprint（用户在系统框里点完打印/取消后触发）一回调即收尾；30s watchdog 兜底异常。
+  async _exportViaSystemPrint(html, safeBaseName, escapedTitle, hideOverlay) {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:680px;height:600px;border:none;';
+    iframe.srcdoc = html;
+    document.body.appendChild(iframe);
+
+    // 文件名来源：Chromium 打印 PDF 默认文件名取自【主窗口】(顶层 frame) title，
+    // 而非 srcdoc 子 frame <title>。故 onload 临时覆盖主窗口 document.title 为 md 文件名，
+    // 打印结束后还原（afterprint 或 watchdog 兜底）。同时显式写 contentDocument.title 兼容。
+    const originalTitle = document.title;
+    let titleRestored = false;
+    const restoreTitle = () => {
+      if (titleRestored) return;
+      titleRestored = true;
+      document.title = originalTitle;
+    };
+
+    // 两条清理路径（afterprint / 30s 兜底 watchdog）共用 cleanupIframe + cleaned 互斥标志，
+    // 避免"iframe 已 remove 后再次读 contentWindow.removeEventListener"报 NPE。
+    let cleaned = false;
+    let finished = false;
+    const cleanupIframe = () => {
+      if (cleaned) return;
+      cleaned = true;
+      restoreTitle();
+      if (iframe.contentWindow) {
+        try { iframe.contentWindow.removeEventListener('afterprint', after); } catch (_) {}
+      }
+      if (iframe.parentNode) iframe.remove();
+    };
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(watchdog);
+      cleanupIframe();
+      hideOverlay();
+    };
+    const after = () => finish();
+    // 30s 兜底：覆盖"用户在系统框里点取消 / afterprint 不触发"等异常路径，
+    // 走完整收尾（清 iframe + 还原 title + 隐藏 overlay）。
+    const watchdog = setTimeout(finish, 30000);
+
+    iframe.onload = () => {
+      if (iframe.contentDocument) iframe.contentDocument.title = escapedTitle;
+      document.title = safeBaseName; // 主窗口 title 决定系统打印对话框默认文件名
+      iframe.contentWindow.addEventListener('afterprint', after);
+      iframe.contentWindow.print();
+    };
   }
 
   getCachedImageURL(dataUri) {
@@ -7630,6 +8204,38 @@ input[type="checkbox"]:checked::after { display: none !important; }
     });
   }
 
+  // 后端健康探测（dev 模式"僵尸界面"可见化修复）：启动时 + 每 30s 心跳 ping 一次。
+  // 背景：dev 模式下前端页面与 Rust 后端 / Node dev-server 生命周期完全解耦（tauri-api 延迟
+  // 求值 + 全降级是防白屏的刻意设计），后端挂掉时页面仍正常显示且无任何提示——用户无法区分
+  // 「应用正常」与「后端已死」。这里复用最轻的已有命令 get_cli_args 做心跳，不新增 IPC、
+  // 不改 invoke 透传语义（N21 硬约束不受影响）。失败 → 顶部红条；恢复成功 → 自动隐藏。
+  initBackendHealth() {
+    this._probeBackendHealth();
+    this._backendHealthTimer = setInterval(() => this._probeBackendHealth(), 30000);
+  }
+
+  async _probeBackendHealth() {
+    let down = false;
+    try {
+      if (!TauriApi.isAvailable()) throw new Error('not in tauri runtime');
+      await TauriApi.getCliArgs();
+    } catch (_) {
+      down = true;
+    }
+    this._setBackendBanner(down);
+  }
+
+  _setBackendBanner(down) {
+    const banner = document.getElementById('backend-banner');
+    if (!banner) return;
+    // 复用兜底报错条样式 .fatal-error-bar（fixed 底部红条），只切 hidden
+    banner.classList.toggle('hidden', !down);
+    if (down) {
+      const txt = document.getElementById('backend-banner-text');
+      if (txt) txt.textContent = this.t('backendDown');
+    }
+  }
+
   showToast(text, type = 'danger', opts = {}) {
     const container = document.getElementById('toast-container');
     if (!container) return;
@@ -7663,7 +8269,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
       if (text.code) {
         const codeEl = document.createElement('div');
         codeEl.className = 'toast-code';
-        codeEl.textContent = '错误码 ' + text.code;
+        codeEl.textContent = this.t('errorCodePrefix', { code: text.code });
         body.appendChild(codeEl);
       }
     } else {
@@ -7910,27 +8516,59 @@ input[type="checkbox"]:checked::after { display: none !important; }
   }
 
   async toggleTheme() {
-    if (this.settings.themeMode !== 'light' && this.settings.themeMode !== 'dark') {
-      this.settings.themeMode = this.isDark ? 'light' : 'dark';
+    // 复用启动 loading（logo + 进度条 + 文字）作全局遮罩。平滑策略：
+    //  1) 先把遮罩背景/文字固定为【切换前】主题色（inline style）——切换瞬间 var(--bg-primary)
+    //     跳变不会让遮罩"啪"地变色，且遮罩初始色与页面一致，出现时无缝；
+    //  2) 双 rAF：第一帧绘制遮罩，第二帧才改主题（单 rAF 回调在绘制前执行会与遮罩同帧）；
+    //  3) 完成后的隐藏用 opacity 淡出（合成器属性，不占主线程，mermaid 渲染期间也流畅，
+    //     不用 background-color 渐变——那是主线程 repaint，会被渲染阻塞导致跳帧卡顿）。
+    const overlay = document.getElementById('loading-overlay');
+    const cs = getComputedStyle(document.documentElement);
+    overlay.style.backgroundColor = cs.getPropertyValue('--bg-primary').trim() || '#f5f5f5';
+    const textEl = document.getElementById('loading-text');
+    if (textEl) textEl.style.color = cs.getPropertyValue('--text-secondary').trim();
+    overlay.classList.remove('hidden');
+    overlay.offsetHeight; // 强制重排，确保下一帧一定绘制遮罩
+    const showTime = Date.now();
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    try {
+      if (this.settings.themeMode !== 'light' && this.settings.themeMode !== 'dark') {
+        this.settings.themeMode = this.isDark ? 'light' : 'dark';
+        document.getElementById('set-theme-mode').value = this.settings.themeMode;
+      }
+      this.isDark = !this.isDark;
+      this.settings.themeMode = this.isDark ? 'dark' : 'light';
       document.getElementById('set-theme-mode').value = this.settings.themeMode;
-    }
-    this.isDark = !this.isDark;
-    this.settings.themeMode = this.isDark ? 'dark' : 'light';
-    document.getElementById('set-theme-mode').value = this.settings.themeMode;
-    this.saveSettings();
-    document.documentElement.setAttribute('data-theme', this.isDark ? 'dark' : 'light');
-    document.documentElement.setAttribute('data-color-scheme', this.settings.colorScheme || 'default');
-    this.cm.setOption('theme', this.isDark ? 'material-darker' : 'default');
-    this.updateThemeIcon();
+      this.saveSettings();
+      document.documentElement.setAttribute('data-theme', this.isDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-color-scheme', this.settings.colorScheme || 'default');
+      this.cm.setOption('theme', this.isDark ? 'material-darker' : 'default');
+      this.updateThemeIcon();
 
-    const highlightTheme = document.getElementById('highlight-theme');
-    if (highlightTheme) {
-      highlightTheme.href = this.isDark
-        ? 'lib/highlight.js/github-dark.min.css'
-        : 'lib/highlight.js/github.min.css';
-    }
+      const highlightTheme = document.getElementById('highlight-theme');
+      if (highlightTheme) {
+        highlightTheme.href = this.isDark
+          ? 'lib/highlight.js/github-dark.min.css'
+          : 'lib/highlight.js/github.min.css';
+      }
 
-    await this.rerenderMermaid();
+      await this.rerenderMermaid();
+    } finally {
+      // 最小显示时长：图表少/切换很快时遮罩也不一闪而过，保证用户能看清 loading 界面
+      const MIN_SHOW_MS = 300;
+      const elapsed = Date.now() - showTime;
+      if (elapsed < MIN_SHOW_MS) {
+        await new Promise((r) => setTimeout(r, MIN_SHOW_MS - elapsed));
+      }
+      // 清除固定色 → opacity 淡出（0.3s，合成器流畅）→ 隐藏。淡出时页面已是新主题，
+      // 旧色遮罩渐渐透明、新主题页面透出，自然交叉过渡
+      overlay.style.backgroundColor = '';
+      if (textEl) textEl.style.color = '';
+      overlay.style.opacity = '0';
+      await new Promise((r) => setTimeout(r, 320));
+      overlay.style.opacity = '';
+      overlay.classList.add('hidden');
+    }
     this.setStatus(this.t('themeSwitched', { theme: this.isDark ? this.t('themeDark') : this.t('themeLight') }));
   }
 
@@ -8231,10 +8869,10 @@ input[type="checkbox"]:checked::after { display: none !important; }
             clearTimeout(timer);
             timer = null;
             try {
-              await window.__TAURI__.core.invoke('open_devtools');
-              this.showToast('DevTools 已打开', 'success');
+await TauriApi.openDevtools();
+              this.showToast(this.t('devtoolsOpened'), 'success');
             } catch (e) {
-              this.showToast('DevTools 打开失败: ' + e, 'danger');
+              this.showToast(this.t('devtoolsOpenFailed', { err: e }), 'danger');
             }
           }
         });
@@ -8266,9 +8904,13 @@ input[type="checkbox"]:checked::after { display: none !important; }
     ['checking', 'available', 'latest'].forEach(s => {
       document.getElementById('update-state-' + s).classList.toggle('hidden', s !== state);
     });
-    const titles = { checking: '检查更新', available: '发现新版本', latest: '已是最新' };
+    const titles = {
+      checking: this.t('updateChecking'),
+      available: this.t('updateAvailable'),
+      latest: this.t('updateLatest'),
+    };
     const titleEl = document.getElementById('update-title');
-    if (titleEl) titleEl.textContent = titles[state] || '发现新版本';
+    if (titleEl) titleEl.textContent = titles[state] || this.t('updateAvailable');
     const btn = document.getElementById('update-action');
     const skipBtn = document.getElementById('update-skip');
     if (state === 'checking') {
@@ -8942,7 +9584,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
       case 'tab-close-all': this.closeAllTabs(); break;
       case 'tab-copy-path': this.copyTabPath(this._contextTabIndex); break;
 
-      // 文件树右键菜单动作
+// 文件树右键菜单动作
       case 'file-new-file': this.fileTreeNewFile(); break;
       case 'file-new-folder': this.fileTreeNewFolder(); break;
       case 'file-cut': this.fileTreeCut(); break;
@@ -8951,6 +9593,8 @@ input[type="checkbox"]:checked::after { display: none !important; }
       case 'file-rename': this.fileTreeRename(); break;
       case 'file-copy-path': this.fileTreeCopyPath(); break;
       case 'file-delete': this.fileTreeDelete(); break;
+      case 'folder-open-containing': this.openContainingFolder(this._folderCtxPath, this._folderCtxIsDir); break;
+      case 'folder-copy-path': this.copyPath(this._folderCtxPath); break;
     }
   }
 
@@ -9009,6 +9653,19 @@ input[type="checkbox"]:checked::after { display: none !important; }
     this.saveSession();
   }
 
+  async copyPath(path) {
+    if (!path) {
+      this.setStatus(this.t('notSaved'));
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(path);
+      this.setStatus(this.t('pathCopied'));
+    } catch {
+      this.setStatus(this.t('copyFailed'));
+    }
+  }
+
   async copyTabPath(index) {
     if (index < 0 || index >= this.tabs.length) return;
     const tab = this.tabs[index];
@@ -9016,12 +9673,48 @@ input[type="checkbox"]:checked::after { display: none !important; }
       this.setStatus(this.t('notSaved'));
       return;
     }
-    try {
-      await navigator.clipboard.writeText(tab.filePath);
-      this.setStatus(this.t('pathCopied'));
-    } catch {
-      this.setStatus(this.t('copyFailed'));
+    await this.copyPath(tab.filePath);
+  }
+
+  // 在系统文件管理器中「打开所在目录」：文件→打开父目录并选中文件，目录→打开并选中自身。
+  // 主路径 = Rust reveal_in_folder 命令（直接 spawn 系统文件管理器，不受 shell 插件 scope 限制，最可靠，
+  //   且能「选中」目标文件）；兜底 = shell.open(dir)（需 capability 放行本地路径，链接同理走此通道）。
+  // 注意：shell.open 对文件夹默认被 scope 拒绝，必须由 capability 显式允许本地路径，否则静默失败。
+  async openContainingFolder(path, isDir) {
+    if (!path) { console.error('[openFolder] path 为空'); this.setStatus(this.t('openFolderFailed')); return; }
+    // 去掉 Windows 长路径前缀 \\?\（explorer / shell 都不认，会导致静默失败）。
+    const stripLong = (p) => (p && p.startsWith('\\\\?\\')) ? p.slice(4) : p;
+    const normPath = stripLong(path);
+    // 目录本身，或文件取其父目录
+    const dir = stripLong(isDir ? path : path.replace(/[/\\][^/\\]*$/, ''));
+    if (!dir) { console.error('[openFolder] dir 为空, path=', path); this.setStatus(this.t('openFolderFailed')); return; }
+    console.log('[openFolder] 目标 dir=', dir, ' normPath=', normPath, ' isDir=', !!isDir, ' Tauri可用=', TauriApi.isAvailable());
+
+    // 1) 主路径：Rust 命令直接 spawn 文件管理器（能选中目标文件，最可靠）。
+    if (TauriApi.isAvailable()) {
+      try {
+        // 注意：Tauri v2 invoke 参数名 JS 侧必须 camelCase（Rust 侧 is_dir ↔ JS 侧 isDir）
+        await TauriApi.revealInFolder({ path: normPath, isDir: !!isDir });
+        console.log('[openFolder] reveal_in_folder 调用成功，已请求打开资源管理器');
+        return;
+      } catch (e) {
+        console.error('[openFolder] reveal_in_folder 失败:', e && e.message ? e.message : String(e));
+      }
+    } else {
+      console.error('[openFolder] TauriApi.isAvailable()=false，跳过 reveal_in_folder');
     }
+
+    // 2) 兜底：shell.open 打开所在目录（capability 已放行本地路径）。
+    let dirOpened = false;
+    if (TauriApi.shellOpen) {
+      try { dirOpened = await TauriApi.shellOpen(dir); } catch (e) { console.error('[openFolder] shell.open 异常:', e); dirOpened = false; }
+      console.log('[openFolder] shell.open 结果=', dirOpened);
+    } else {
+      console.error('[openFolder] shellOpen 不可用');
+    }
+    if (dirOpened) return;
+
+    this.setStatus(this.t('openFolderFailed'));
   }
 
   async batchSaveTabs(tabs) {
@@ -9102,6 +9795,22 @@ input[type="checkbox"]:checked::after { display: none !important; }
           const { getCurrentWindow } = window.__TAURI__.window;
           await getCurrentWindow().hide();
         }
+      } catch { /* 浏览器环境下降级 */ }
+    }
+  }
+
+  async hideToTray() {
+    // 快捷键「关闭到托盘」：仅把窗口隐藏到系统托盘，应用进程与文档保留在内存中，
+    // 因此不会丢失未保存内容；下次从托盘图标恢复窗口即可继续编辑。
+    try {
+      this.saveSession();
+      const w = TauriApi.currentWindow();
+      if (w) await w.hide();
+    } catch (error) {
+      console.error('hideToTray error:', error);
+      try {
+        const w = TauriApi.currentWindow();
+        if (w) await w.hide();
       } catch { /* 浏览器环境下降级 */ }
     }
   }
@@ -9217,6 +9926,16 @@ function updateLoadingProgress(percent, text) {
   if (textEl && text) textEl.textContent = text;
 }
 
+// 初始化阶段（window.editor 未创建）读取当前语言：settings 尚未加载，直接从持久化读
+function tInit(key) {
+  let lang = 'zh';
+  try {
+    const saved = JSON.parse(localStorage.getItem('tizumark-settings') || '{}');
+    if (saved && saved.language === 'en') lang = 'en';
+  } catch (_) {}
+  return I18N[lang][key] !== undefined ? I18N[lang][key] : I18N.zh[key] || key;
+}
+
 function initEula() {
   const eulaAccepted = localStorage.getItem('tizumark-eula-accepted');
   if (eulaAccepted === 'true') {
@@ -9271,15 +9990,28 @@ window.addEventListener('DOMContentLoaded', async () => {
   }, 20000);
 
   try {
-    updateLoadingProgress(5, '正在检查许可协议…');
+    updateLoadingProgress(5, tInit('progressCheckingEula'));
     const isFirstLaunch = await initEula();
 
-    updateLoadingProgress(15, '正在初始化编辑器…');
+    updateLoadingProgress(15, tInit('progressInitEditor'));
     window.editor = new MarkdownEditor();
     window.editor._loadingStart = Date.now();
 
-    updateLoadingProgress(60, '正在注册事件监听…');
-    await window.__TAURI__.event.listen('close-requested', async () => {
+updateLoadingProgress(60, tInit('progressRegisterEvents'));
+    // 代码块按需滚动：preview 出现/替换 .code-scroll 时自动跑后处理（rAF 去抖）。
+    // LiveReload 推新 JS 后已渲染的代码块不会重新触发 render，单靠 render 末尾调用
+    // 会漏掉；MutationObserver 兜底所有时机（含初次加载、async 替换、LiveReload 后）。
+    const pruneCodeScrolls = () => {
+      if (!window.editor || !window.editor.preview) return;
+      window.editor.preview.querySelectorAll('.code-scroll').forEach((el) => {
+        // 必须显式 'auto'：CSS 默认是 hidden（防 Windows always-show 滚动条轨道），
+        // 清空 inline 会让 CSS 接管 → 仍 hidden → 永远没滚动条
+        el.style.overflowY = el.scrollHeight > el.clientHeight + 1 ? 'auto' : 'hidden';
+      });
+    };
+    new MutationObserver(() => requestAnimationFrame(pruneCodeScrolls))
+      .observe(window.editor.preview, { childList: true, subtree: true });
+    await TauriApi.onEvent('close-requested', async () => {
       await window.editor.handleAppClose();
     });
 
@@ -9288,7 +10020,13 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (window.editor) window.editor._scheduleTreeRefresh();
     });
 
-    await window.__TAURI__.event.listen('file-open', async (event) => {
+    // 文件夹监听异常（Rust watch_folder 回调 panic，已由 catch_unwind 兜住监听不中断）：
+    // 弹窗提示用户手动「重新监听 / 继续使用」——不做自动重挂，避免失败风暴
+    await TauriApi.onEvent('folder-watch-error', (event) => {
+      if (window.editor) window.editor._handleFolderWatchError(event);
+    });
+
+    await TauriApi.onEvent('file-open', async (event) => {
       const args = event.payload;
       if (!args || args.length === 0) return;
 
@@ -9305,7 +10043,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       await window.editor.openPathsSmart(args);
     });
 
-    updateLoadingProgress(85, '正在加载文件…');
+    updateLoadingProgress(85, tInit('progressLoadingFile'));
     try {
       const args = await invoke('get_cli_args');
       const hadSession = await window.editor.restoreSession();
@@ -9343,7 +10081,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       console.warn('Failed to load session / cli args:', e);
     }
 
-    updateLoadingProgress(100, '准备就绪');
+    updateLoadingProgress(100, tInit('progressReady'));
     await window.editor.initFileWatcher();
     await new Promise(r => setTimeout(r, 300));
   } catch (e) {

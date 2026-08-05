@@ -509,6 +509,8 @@ struct DirEntryInfo {
     name: String,
     path: String,
     is_dir: bool,
+    mtime: u64,
+    size: u64,
 }
 
 #[tauri::command]
@@ -543,10 +545,19 @@ fn list_dir(path: String) -> Result<Vec<DirEntryInfo>, String> {
         if !is_dir && !["md", "markdown", "txt"].contains(&ext.as_str()) {
             continue;
         }
+        let mtime = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let size = meta.len();
         entries.push(DirEntryInfo {
             name,
             path: entry.path().to_string_lossy().to_string(),
             is_dir,
+            mtime,
+            size,
         });
     }
     entries.sort_by(|a, b| {
@@ -560,6 +571,44 @@ fn list_dir(path: String) -> Result<Vec<DirEntryInfo>, String> {
         a.name.to_lowercase().cmp(&b.name.to_lowercase())
     });
     Ok(entries)
+}
+
+// 在文件管理器中「打开所在目录」并选中目标。
+// 目录：直接打开该目录本身；文件：打开父目录并选中文件。
+// 跨平台：Windows explorer（目录直接打开 / 文件 /select），macOS open（目录直接打开 / 文件 -R），Linux xdg-open（目录直接打开 / 文件打开父目录）。
+// 关键：spawn 失败必须向外抛 Err（不能被 let _ = 吞掉），否则前端收到 Ok 却无反应。
+// 关键：去掉 Windows 长路径前缀 \\?\（dev 模式下 Tauri canonical 路径会带此前缀，explorer / shell 都不认 → 静默失败）。
+#[tauri::command]
+fn reveal_in_folder(path: String, is_dir: bool) -> Result<(), String> {
+    if path.is_empty() {
+        return Err("path is empty".to_string());
+    }
+    let path = path.strip_prefix(r"\\?\").unwrap_or(&path).to_string();
+    let spawn_res = if is_dir {
+        // 目录：直接打开该文件夹本身
+        #[cfg(target_os = "windows")]
+        { std::process::Command::new("explorer").arg(&path).spawn() }
+        #[cfg(target_os = "macos")]
+        { std::process::Command::new("open").arg(&path).spawn() }
+        #[cfg(target_os = "linux")]
+        { std::process::Command::new("xdg-open").arg(&path).spawn() }
+    } else {
+        // 文件：打开父目录并选中（Windows/macOS 选中文件，Linux 无选中概念）
+        #[cfg(target_os = "windows")]
+        { std::process::Command::new("explorer").args(["/select,", &path]).spawn() }
+        #[cfg(target_os = "macos")]
+        { std::process::Command::new("open").args(["-R", &path]).spawn() }
+        #[cfg(target_os = "linux")]
+        {
+            let parent = std::path::Path::new(&path)
+                .parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.clone());
+            std::process::Command::new("xdg-open").arg(parent).spawn()
+        }
+    };
+    spawn_res.map_err(|e| format!("无法启动文件管理器 ({}): {}", path, e))?;
+    Ok(())
 }
 
 #[derive(serde::Serialize)]
@@ -813,8 +862,27 @@ fn watch_folder(path: String, app: tauri::AppHandle) -> Result<(), String> {
     let app_handle = app.clone();
     let mut watcher = RecommendedWatcher::new(
         move |res: notify::Result<NotifyEvent>| {
-            if res.is_ok() {
-                let _ = app_handle.emit("folder-changed", ());
+            // 回调在 notify 内部线程执行。必须保持【无锁、无状态】：panic 被 catch_unwind
+            // 捕获后该线程继续存活、监听不中断；但捕获 ≠ 状态一致，任何带锁/中间态的逻辑
+            // 都不要放这里（否则 panic 后可能残留锁导致死锁）。
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                if res.is_ok() {
+                    let _ = app_handle.emit("folder-changed", ());
+                }
+            }));
+            if let Err(payload) = result {
+                // 通知前端：监听异常可见化（弹「重新监听 / 继续使用」），panic 详情随事件带上。
+                // 注意：catch_unwind 捕获的 panic 同样会先触发 panic hook，此处 emit 是给前端的
+                // 第二通道（若 watcher 线程自身死掉，emit 发不出去——前端只能靠用户感知树不刷新）。
+                let msg = payload
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "unknown panic".to_string());
+                let _ = app_handle.emit(
+                    "folder-watch-error",
+                    serde_json::json!({ "message": msg }),
+                );
             }
         },
         NotifyConfig::default(),
@@ -1755,7 +1823,8 @@ pub fn run() {
             generate_toc,
             search_in_files,
             read_bundled_file,
-            read_bundled_image_as_base64
+            read_bundled_image_as_base64,
+            reveal_in_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

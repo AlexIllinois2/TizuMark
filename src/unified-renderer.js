@@ -167,6 +167,25 @@ function countBacktickPrefix(s) {
   return count;
 }
 
+// 判断 content[i] 是否位于「块级起点」：行首，或 markdown 引用前缀（> / > > ...）之后。
+// 用于块级 $$...$$ 触发判定——引用块内的 $$ 前是 "> "，字符流上非行首，但语义上是块级起点。
+function isAtBlockStart(content, i) {
+  if (i === 0) return true;
+  if (content[i - 1] === '\n' || content[i - 1] === '\r') return true;
+  const lineStart = content.lastIndexOf('\n', i - 1) + 1;
+  let j = lineStart;
+  while (j < i) {
+    if (content[j] === ' ' || content[j] === '\t') { j++; continue; }
+    if (content[j] === '>') {
+      j++;
+      if (j < i && (content[j] === ' ' || content[j] === '\t')) j++;
+      continue;
+    }
+    return false; // 行首到 i 之间出现其他字符（如文字、列表标记），不算块级起点
+  }
+  return true;
+}
+
 // Guard math blocks: $$...$$ → <!--MATHBLOCK_N--> and $...$ → <!--MATHBLOCK_N-->
 function guardMathBlocks(content) {
   const placeholders = [];
@@ -255,9 +274,9 @@ function guardMathBlocks(content) {
     }
 
     if (content[i] === '$' && i + 1 < len && content[i + 1] === '$') {
-      // Display math: $$...$$ — 仅在行首（块级上下文）触发；行内 $$ 一律当字面量，避免跨段配对
-      const atLineStart = i === 0 || content[i - 1] === '\n' || content[i - 1] === '\r';
-      if (!atLineStart) {
+      // Display math: $$...$$ — 仅在块级起点（行首或引用前缀后）触发；行内 $$ 一律当字面量，避免跨段配对
+      const atBlockStart = isAtBlockStart(content, i);
+      if (!atBlockStart) {
         result += '$$';
         i += 2;
         continue;
@@ -267,6 +286,10 @@ function guardMathBlocks(content) {
       i += 2;
       let foundEnd = false;
       while (i + 1 < len) {
+        // 跨空行（\n\n）即停止配对并回退为字面量，避免块级 $$ 吞掉后续段落/列表/引用内容
+        if (content[i] === '\n' && (content[i + 1] === '\n' || content[i + 1] === '\r')) {
+          break;
+        }
         if (content[i] === '$' && content[i + 1] === '$') {
           i += 2;
           const mathBlock = content.substring(start, i);
@@ -294,16 +317,11 @@ function guardMathBlocks(content) {
         if (content[i] === '$' && (i === start + 1 || content[i - 1] !== ' ')) {
           const inner = content.substring(start + 1, i);
           // 不成对/跨行一律不当公式。
-          // | 在"同一行且行内还有其他 |"时保守地不当公式，避免把表格单元格分隔符吞进数学；
-          // > 与全角 ｜ 不再限制（它们在数学表达式中合法）。
+          // | 两侧紧邻空白（" | " 或行首/行尾空白+竖线）时视为表格列分隔符，保守拒绝；
+          // 紧邻非空白（如 P(A|B)、k|z）是条件概率/绝对值等合法数学符号，放行并保护占位。
           let reject = /[\n\r]/.test(inner);
-          if (!reject && inner.includes('|')) {
-            const lineStart = content.lastIndexOf('\n', start - 1) + 1;
-            const lineEnd = content.indexOf('\n', start);
-            const line = content.substring(lineStart, lineEnd === -1 ? len : lineEnd);
-            const before = line.substring(0, start - lineStart);
-            const after = line.substring(i + 1 - lineStart);
-            if (before.includes('|') || after.includes('|')) reject = true;
+          if (!reject && inner.includes('|') && /(?:^|\s)\|(?:\s|$)/.test(inner)) {
+            reject = true;
           }
           if (!reject) {
             i += 1;

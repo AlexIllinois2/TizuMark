@@ -64,6 +64,24 @@ test('相对路径（非 isBundled）成功：按 dir 补全绝对路径', async
   assert.match(preview.querySelector('img').getAttribute('src'), /BLOB:data:image\/png;base64/);
 });
 
+test('Windows \\\\?\\ 长路径前缀 filePath：去掉前缀再拼相对路径（避免 os error 123 混合分隔符）', async () => {
+  // read_bundled_file 在 dev 模式返回带 \\?\ 前缀的 canonical 路径（如
+  // \\?\D:\project\tizu-mark\src-tauri\target\debug\demo.md）
+  const preview = makePreview('<img src="assets/icon.png" alt="i">');
+  const { calls, deps } = makeDeps({
+    activeTab: { filePath: '\\\\?\\D:\\project\\tizu-mark\\src-tauri\\target\\debug\\demo.md' },
+  });
+  await processImages(preview, deps);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].cmd, 'fetch');
+  assert.equal(
+    calls[0].args.url,
+    'D:\\project\\tizu-mark\\src-tauri\\target\\debug/assets/icon.png',
+    '拼接 URL 不应含 \\\\?\\ 前缀（混合分隔符会触发 Path::canonicalize os error 123）',
+  );
+  assert.match(preview.querySelector('img').getAttribute('src'), /BLOB:data:image\/png;base64/);
+});
+
 test('相对路径（非 isBundled）本地失败：绝不回退 read_bundled_image_as_base64', async () => {
   const preview = makePreview('<img src="missing.png" alt="m">');
   const { calls, deps } = makeDeps({ activeTab: { filePath: 'D:/docs/note.md' }, fetchThrow: true });
@@ -95,6 +113,18 @@ test('缓存命中：imageCache 已有条目时零重复 IO', async () => {
   await processImages(preview, deps);
   assert.equal(calls.filter((c) => c.cmd === 'fetch').length, 0, '缓存命中不应再 invoke');
   assert.equal(preview.querySelector('img').getAttribute('src'), 'BLOB:data:image/png;base64,CACHED');
+});
+
+test('打包文档（isBundled 无 filePath）：相对图片走 read_bundled_image_as_base64，而非页面 fetch', async () => {
+  const preview = makePreview('<img src="assets/icon.png" alt="i">');
+  const { calls, deps } = makeDeps({ activeTab: { isBundled: true } });
+  await processImages(preview, deps);
+  const fetchCalls = calls.filter((c) => c.cmd === 'fetch');
+  const bundledCalls = calls.filter((c) => c.cmd === 'bundled');
+  assert.equal(fetchCalls.length, 0, '无 filePath 的打包文档不应做页面相对 fetch（会 404）');
+  assert.equal(bundledCalls.length, 1, '应直接走打包资源定位命令');
+  assert.equal(bundledCalls[0].args.filename, 'assets/icon.png', 'filename 用原始相对路径，由 Rust dev/prod 定位');
+  assert.match(preview.querySelector('img').getAttribute('src'), /BLOB:data:image\/png;base64/, '应写回可显示 data URI');
 });
 
 test('代际过期：IO 进行中代际变化，提前返回不写 DOM', async () => {

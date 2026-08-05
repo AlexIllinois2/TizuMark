@@ -108,7 +108,40 @@ try {
 // 心跳保活（防止中间层超时断开 SSE）
 setInterval(() => { for (const res of sseClients) { try { res.write(': ping\n\n'); } catch {} } }, 15000);
 
-const LIVERELOAD_SNIPPET = `<script>(function(){try{var es=new EventSource('${LIVERELOAD_PATH}');es.onmessage=function(){location.reload();};es.onerror=function(){};}catch(e){}})();</script>`;
+// LiveReload 客户端：原生 EventSource 在长会话里 SSE 断开后不会自动重连（旧实现把
+// es.onerror 静默吞掉），导致后续文件改动不再触发刷新、热加载"失灵"。这里主动接管重连：
+// onerror 时指数退避重建连接，重连成功（非首次 open）即视为一次更新并 location.reload()。
+const LIVERELOAD_SNIPPET = `<script>(function(){
+  try {
+    var path = '${LIVERELOAD_PATH}';
+    var hadOpen = false;       // 是否曾经成功连接过（区分首次打开与重连）
+    var es = null;
+    var failed = 0;            // 连续失败次数，用于指数退避
+    var reconnectTimer = null;
+
+    function connect() {
+      if (es) { try { es.close(); } catch (e) {} }
+      es = new EventSource(path);
+      es.onopen = function () {
+        if (hadOpen) { location.reload(); return; } // 重连成功 → 拉最新代码
+        hadOpen = true;
+        failed = 0; // 连接健康，复位退避计数
+      };
+      es.onmessage = function () { location.reload(); };
+      es.onerror = function () {
+        if (es) { try { es.close(); } catch (e) {} es = null; }
+        if (reconnectTimer) return;
+        failed++;
+        var delay = Math.min(30000, 1000 * Math.pow(2, failed - 1)); // 1s→2s→4s…封顶 30s
+        reconnectTimer = setTimeout(function () {
+          reconnectTimer = null;
+          connect();
+        }, delay);
+      };
+    }
+    connect();
+  } catch (e) {}
+})();</script>`;
 
 const server = http.createServer((req, res) => {
   let urlPath;

@@ -210,14 +210,13 @@ test('settings: resetSettings 恢复默认并保留自定义字体', async () =>
     ed.settings.customFonts = [{ id: 'cf1', name: 'A', fileName: 'a.ttf', hash: 'h' }];
     ed.settings.tabSize = 8; // 偏离默认
     ed.showConfirmDialog = async () => true;
-    ed.setStatus = () => {};
     ed.renderCustomFontSettings = () => {};
     await ed.resetSettings();
     assert.strictEqual(ed.settings.tabSize, 4, '应回到默认 tabSize');
     assert.strictEqual(ed.settings.customFonts.length, 1, '自定义字体应保留');
     assert.strictEqual(ed.settings.customFonts[0].id, 'cf1');
-    const stored = JSON.parse(w.localStorage.getItem('tizumark-settings'));
-    assert.strictEqual(stored.tabSize, 4);
+    assert.strictEqual(JSON.parse(w.localStorage.getItem('tizumark-settings')).tabSize, 4, '恢复默认立即落盘');
+    assert.strictEqual(ed.cm.getOption('tabSize'), 4, '恢复默认立即生效');
   } finally { cleanup(w); }
 });
 
@@ -252,5 +251,382 @@ test('settings: saveSettings→loadSettings 端到端一致（真往返）', asy
     const stored = JSON.parse(w.localStorage.getItem('tizumark-settings'));
     assert.strictEqual(stored.tabSize, 2);
     assert.strictEqual(stored.maxWidth, 720);
+  } finally { cleanup(w); }
+});
+
+// ====== 应用式语义（2026-08-04 定稿）：面板内改动只改内存与控件显示，
+// 点「应用」生效并落盘（面板保持打开）、点「保存」生效+落盘+关闭、取消/× 直接回滚 ======
+
+test('settings: 面板外 saveSettings 正常落盘', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.settings = ed.defaultSettings();
+    ed.settings.tabSize = 8;
+    ed.saveSettings();
+    const stored = JSON.parse(w.localStorage.getItem('tizumark-settings'));
+    assert.strictEqual(stored.tabSize, 8, '未打开面板时保存应立即写入');
+  } finally { cleanup(w); }
+});
+
+test('settings: 面板内修改不生效不落盘，点保存才生效并落盘', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    assert.strictEqual(w.localStorage.getItem('tizumark-settings'), null, '初始无持久化设置');
+    ed.showSettings();
+    assert.ok(!w.document.getElementById('settings-dialog').classList.contains('hidden'), '面板应打开');
+
+    const sel = w.document.getElementById('set-tab-size');
+    sel.value = '2';
+    sel.dispatchEvent(new w.Event('change'));
+    assert.strictEqual(ed.settings.tabSize, 2, '内存设置已更新');
+    assert.strictEqual(ed.cm.getOption('tabSize'), 4, '未点应用/保存前编辑器不生效');
+    assert.strictEqual(w.localStorage.getItem('tizumark-settings'), null, '未点保存不落盘');
+
+    w.document.getElementById('settings-save-btn').dispatchEvent(new w.Event('click'));
+    await delay(60); // rAF 让帧 + applySettings + 落盘 + 关闭
+    assert.strictEqual(ed.cm.getOption('tabSize'), 2, '保存后编辑器生效');
+    const stored = JSON.parse(w.localStorage.getItem('tizumark-settings'));
+    assert.strictEqual(stored.tabSize, 2, '保存后落盘');
+    assert.ok(w.document.getElementById('settings-dialog').classList.contains('hidden'), '保存后关闭面板');
+  } finally { cleanup(w); }
+});
+
+test('settings: 点「应用」生效并落盘，面板保持打开', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.showSettings();
+    const sel = w.document.getElementById('set-tab-size');
+    sel.value = '2';
+    sel.dispatchEvent(new w.Event('change'));
+    assert.strictEqual(ed.cm.getOption('tabSize'), 4, '应用前不生效');
+
+    w.document.getElementById('settings-apply-btn').dispatchEvent(new w.Event('click'));
+    await delay(50); // applySettings + 落盘
+    assert.strictEqual(ed.cm.getOption('tabSize'), 2, '应用后编辑器生效');
+    assert.strictEqual(JSON.parse(w.localStorage.getItem('tizumark-settings')).tabSize, 2, '应用后落盘');
+    assert.ok(!w.document.getElementById('settings-dialog').classList.contains('hidden'), '应用后面板保持打开');
+  } finally { cleanup(w); }
+});
+
+test('settings: 应用后继续修改再取消，回滚到最近一次应用的状态', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.showSettings();
+    const sel = w.document.getElementById('set-tab-size');
+    // 第一次改动并应用（生效 2）
+    sel.value = '2';
+    sel.dispatchEvent(new w.Event('change'));
+    w.document.getElementById('settings-apply-btn').dispatchEvent(new w.Event('click'));
+    await delay(50);
+    assert.strictEqual(ed.cm.getOption('tabSize'), 2, '应用后为 2');
+
+    // 第二次改动（8）不应用直接取消 → 应回滚到应用后的 2，而非打开面板时的 4
+    sel.value = '8';
+    sel.dispatchEvent(new w.Event('change'));
+    assert.strictEqual(ed.settings.tabSize, 8, '内存为 8');
+    w.document.getElementById('settings-cancel-btn').dispatchEvent(new w.Event('click'));
+    assert.strictEqual(ed.settings.tabSize, 2, '取消回滚到最近一次应用的值 2');
+    assert.strictEqual(ed.cm.getOption('tabSize'), 2, '编辑器仍为 2');
+    assert.strictEqual(JSON.parse(w.localStorage.getItem('tizumark-settings')).tabSize, 2, '持久层为 2');
+  } finally { cleanup(w); }
+});
+
+test('settings: 点取消恢复打开前的设置与控件显示，且不落盘', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.showSettings();
+    const sel = w.document.getElementById('set-tab-size');
+    sel.value = '2';
+    sel.dispatchEvent(new w.Event('change'));
+    assert.strictEqual(ed.settings.tabSize, 2, '改动已进内存');
+    assert.strictEqual(w.localStorage.getItem('tizumark-settings'), null);
+
+    w.document.getElementById('settings-cancel-btn').dispatchEvent(new w.Event('click'));
+    assert.strictEqual(ed.settings.tabSize, 4, '取消后内存恢复默认 4');
+    assert.strictEqual(ed.cm.getOption('tabSize'), 4, '编辑器从未被改动过（应用式）');
+    assert.strictEqual(w.document.getElementById('set-tab-size').value, '4', '取消后控件显示恢复');
+    assert.strictEqual(w.localStorage.getItem('tizumark-settings'), null, '取消全程不落盘');
+    assert.ok(w.document.getElementById('settings-dialog').classList.contains('hidden'), '取消后关闭面板');
+  } finally { cleanup(w); }
+});
+
+test('settings: 点 X 关闭等同取消，恢复打开前的设置', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.showSettings();
+    const sel = w.document.getElementById('set-tab-size');
+    sel.value = '2';
+    sel.dispatchEvent(new w.Event('change'));
+    assert.strictEqual(ed.settings.tabSize, 2);
+
+    w.document.getElementById('settings-close-x').dispatchEvent(new w.Event('click'));
+    assert.strictEqual(ed.settings.tabSize, 4, 'X 关闭后内存恢复默认 4');
+    assert.strictEqual(w.localStorage.getItem('tizumark-settings'), null, 'X 关闭不落盘');
+    assert.ok(w.document.getElementById('settings-dialog').classList.contains('hidden'));
+  } finally { cleanup(w); }
+});
+
+test('settings: 点击遮罩层不关闭设置框（只能取消或 × 关闭）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.showSettings();
+    const overlay = w.document.getElementById('settings-dialog');
+    overlay.dispatchEvent(new w.Event('click'));
+    assert.ok(!overlay.classList.contains('hidden'), '点击遮罩不应关闭设置框');
+  } finally { cleanup(w); }
+});
+
+test('settings: 面板内恢复默认立即生效并落盘，取消回滚到恢复默认后的状态', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    // 预置默认设置，再把内存 tabSize 调成 8，模拟"打开面板前用户设置过 8"
+    ed.settings = ed.defaultSettings();
+    ed.settings.tabSize = 8;
+    ed.saveSettings();
+    ed.showSettings();
+
+    // 面板内点「恢复默认」→ 立即生效并落盘（等同自动应用一次）
+    ed.showConfirmDialog = async () => true;
+    ed.renderCustomFontSettings = () => {};
+    await ed.resetSettings();
+    assert.strictEqual(ed.settings.tabSize, 4, '恢复默认后内存为 4');
+    assert.strictEqual(ed.cm.getOption('tabSize'), 4, '恢复默认立即生效');
+    assert.strictEqual(JSON.parse(w.localStorage.getItem('tizumark-settings')).tabSize, 4, '恢复默认立即落盘');
+
+    // 此时点取消 → 回滚到最近一次应用/保存后的状态（恢复默认后的 4），而非打开面板前的 8
+    w.document.getElementById('settings-cancel-btn').dispatchEvent(new w.Event('click'));
+    assert.strictEqual(ed.settings.tabSize, 4, '取消后回到恢复默认后的 4');
+    assert.strictEqual(JSON.parse(w.localStorage.getItem('tizumark-settings')).tabSize, 4, '持久层仍为 4');
+  } finally { cleanup(w); }
+});
+
+// ====== 应用/保存的 loading toast（2026-08-04）：仅应用/保存触发重渲染时显示 ======
+
+test('settings: 点「应用」重渲染期间显示 loading toast，完成后隐藏', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.showSettings();
+    const loadingToast = () => w.document.querySelector('#toast-container .settings-loading-toast');
+    assert.ok(!loadingToast(), '初始无 loading toast');
+    const origApply = ed.applySettings.bind(ed);
+    ed.applySettings = async () => {
+      await new Promise(r => setTimeout(r, 100)); // 模拟真实重渲染耗时（mermaid 分批渲染）
+      await origApply();
+    };
+    const sel = w.document.getElementById('set-theme-mode');
+    sel.value = 'dark';
+    sel.dispatchEvent(new w.Event('change')); // 应用式：change 只改内存，不触发重渲染
+    assert.ok(!loadingToast(), 'change 不触发重渲染');
+
+    w.document.getElementById('settings-apply-btn').dispatchEvent(new w.Event('click'));
+    await delay(30); // 应用按钮先等 rAF 让帧（与保存按钮一致），之后 applyPendingSettings 开始
+    assert.ok(loadingToast(), '应用时显示 loading toast');
+    await delay(150); // 等 100ms 模拟耗时结束
+    assert.ok(!loadingToast(), '完成后隐藏');
+  } finally { cleanup(w); }
+});
+
+test('settings: 点应用按钮进入 loading 态，应用落盘后恢复，面板保持打开', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.showSettings();
+    const applyBtn = w.document.getElementById('settings-apply-btn');
+    const sel = w.document.getElementById('set-tab-size');
+    sel.value = '2';
+    sel.dispatchEvent(new w.Event('change'));
+
+    applyBtn.dispatchEvent(new w.Event('click'));
+    assert.ok(applyBtn.disabled, '应用中按钮应禁用');
+    assert.ok(applyBtn.classList.contains('is-loading'), '应用中显示按钮 loading');
+    await delay(60); // rAF 让帧 + applySettings + 落盘
+
+    assert.ok(!applyBtn.disabled, '应用完成后按钮恢复可用');
+    assert.ok(!applyBtn.classList.contains('is-loading'), '应用完成后移除按钮 loading');
+    assert.strictEqual(applyBtn.textContent, ed.t('apply'), '应用完成后按钮文案复原');
+    const stored = JSON.parse(w.localStorage.getItem('tizumark-settings'));
+    assert.strictEqual(stored.tabSize, 2, '应用已落盘');
+    assert.ok(!w.document.getElementById('settings-dialog').classList.contains('hidden'), '应用后面板保持打开');
+  } finally { cleanup(w); }
+});
+
+test('settings: 点「保存」重渲染期间显示 loading toast，完成后关闭', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.showSettings();
+    const loadingToast = () => w.document.querySelector('#toast-container .settings-loading-toast');
+    const origApply = ed.applySettings.bind(ed);
+    ed.applySettings = async () => {
+      await new Promise(r => setTimeout(r, 100)); // 模拟重渲染耗时
+      await origApply();
+    };
+    const sel = w.document.getElementById('set-code-wrap');
+    sel.checked = true;
+    sel.dispatchEvent(new w.Event('change'));
+    assert.ok(!loadingToast(), 'change 不触发重渲染');
+
+    w.document.getElementById('settings-save-btn').dispatchEvent(new w.Event('click'));
+    await delay(30); // 保存按钮先等 rAF 让帧，之后 applyPendingSettings 开始
+    assert.ok(loadingToast(), '保存时显示 loading toast');
+    await delay(180); // 100ms 模拟耗时 + 关闭
+    assert.ok(!loadingToast(), '完成后隐藏');
+    assert.ok(w.document.getElementById('settings-dialog').classList.contains('hidden'), '保存后关闭');
+  } finally { cleanup(w); }
+});
+
+test('settings: 点保存按钮进入 loading 态，应用落盘后恢复并关闭', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.showSettings();
+    const saveBtn = w.document.getElementById('settings-save-btn');
+    const sel = w.document.getElementById('set-tab-size');
+    sel.value = '2';
+    sel.dispatchEvent(new w.Event('change'));
+
+    saveBtn.dispatchEvent(new w.Event('click'));
+    assert.ok(saveBtn.disabled, '保存中按钮应禁用');
+    assert.ok(saveBtn.classList.contains('is-loading'), '保存中显示按钮 loading');
+    await delay(60); // rAF 让帧 + applySettings + 落盘 + 关面板
+
+    assert.ok(!saveBtn.disabled, '保存完成后按钮恢复可用');
+    assert.ok(!saveBtn.classList.contains('is-loading'), '保存完成后移除按钮 loading');
+    assert.strictEqual(saveBtn.textContent, ed.t('save'), '保存完成后按钮文案复原');
+    const stored = JSON.parse(w.localStorage.getItem('tizumark-settings'));
+    assert.strictEqual(stored.tabSize, 2, '保存已落盘');
+    assert.ok(w.document.getElementById('settings-dialog').classList.contains('hidden'), '保存后关闭面板');
+  } finally { cleanup(w); }
+});
+
+// ====== 取消恢复：自定义字体/提示文案等独立渲染控件（2026-08-04） ======
+
+test('settings: 自定义字体选择后取消，下拉框恢复原值', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.settings.customFonts = [
+      { id: 'cfA', name: 'Font A', fileName: 'a.ttf', hash: 'h1' },
+      { id: 'cfB', name: 'Font B', fileName: 'b.ttf', hash: 'h2' },
+    ];
+    ed.settings.editorFont = 'cfA';
+    ed.renderCustomFontSettings(); // 渲染选择器（初始选中 cfA）
+    const sel = w.document.getElementById('set-editor-font');
+    assert.strictEqual(sel.value, 'cfA', '初始选择 cfA');
+
+    ed.showSettings();
+    sel.value = 'cfB';
+    sel.dispatchEvent(new w.Event('change'));
+    assert.strictEqual(ed.settings.editorFont, 'cfB', '面板内改为 cfB');
+    assert.strictEqual(sel.value, 'cfB', '下拉框显示 cfB');
+
+    w.document.getElementById('settings-cancel-btn').dispatchEvent(new w.Event('click'));
+    assert.strictEqual(ed.settings.editorFont, 'cfA', '取消后内存恢复 cfA');
+    assert.strictEqual(sel.value, 'cfA', '取消后下拉框恢复 cfA');
+  } finally { cleanup(w); }
+});
+
+test('settings: 图片路径模式切换后取消，提示文案恢复', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.showSettings();
+    const hint = w.document.getElementById('setting-image-asset-path-hint-text');
+    const radio = w.document.querySelector('#settings-image-asset-path-mode input[value="absolute"]');
+    assert.ok(radio, 'absolute 单选应存在');
+    const initialText = hint.textContent;
+    assert.ok(initialText.length > 0, '初始提示文案非空');
+
+    radio.checked = true;
+    radio.dispatchEvent(new w.Event('change'));
+    assert.strictEqual(ed.settings.imageAssetPathMode, 'absolute', '面板内改为 absolute');
+    assert.notStrictEqual(hint.textContent, initialText, '提示文案已切换');
+
+    w.document.getElementById('settings-cancel-btn').dispatchEvent(new w.Event('click'));
+    assert.strictEqual(ed.settings.imageAssetPathMode, 'relative', '取消后模式恢复 relative');
+    assert.strictEqual(hint.textContent, initialText, '取消后提示文案恢复');
+  } finally { cleanup(w); }
+});
+
+// ====== 应用式：滑块/主题等重量级设置不实时生效（2026-08-04） ======
+
+test('settings: 字号滑块拖动只更新数值，应用后才改编辑器字号', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.showSettings();
+    const slider = w.document.getElementById('set-font-size');
+    slider.value = '18';
+    slider.dispatchEvent(new w.Event('input'));
+    assert.strictEqual(w.document.getElementById('font-size-label').textContent, '18px', 'label 实时更新');
+    assert.strictEqual(ed.cm.getWrapperElement().style.fontSize, '14px', '编辑器字号未变（初始 14）');
+    slider.dispatchEvent(new w.Event('change'));
+    assert.strictEqual(ed.settings.fontSize, 18, '内存已更新');
+    assert.strictEqual(ed.cm.getWrapperElement().style.fontSize, '14px', '应用前编辑器仍 14');
+
+    w.document.getElementById('settings-apply-btn').dispatchEvent(new w.Event('click'));
+    await delay(50);
+    assert.strictEqual(ed.cm.getWrapperElement().style.fontSize, '18px', '应用后编辑器字号 18');
+    assert.strictEqual(JSON.parse(w.localStorage.getItem('tizumark-settings')).fontSize, 18, '应用后落盘');
+  } finally { cleanup(w); }
+});
+
+test('settings: 主题/配色 change 不触发重渲染，应用后才生效', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.showSettings();
+    let themeApplyCount = 0;
+    const orig = ed.applyThemeMode.bind(ed);
+    ed.applyThemeMode = async () => { themeApplyCount++; await orig(); };
+
+    const sel = w.document.getElementById('set-theme-mode');
+    sel.value = 'dark';
+    sel.dispatchEvent(new w.Event('change'));
+    sel.value = 'light';
+    sel.dispatchEvent(new w.Event('change'));
+    assert.strictEqual(themeApplyCount, 0, '连续切换 change 不触发重渲染');
+    assert.strictEqual(ed.settings.themeMode, 'light', '内存为最后值');
+    assert.strictEqual(w.document.documentElement.getAttribute('data-theme'), 'light', '界面主题未变（初始 light）');
+
+    w.document.getElementById('settings-apply-btn').dispatchEvent(new w.Event('click'));
+    await delay(50);
+    assert.strictEqual(themeApplyCount, 1, '应用只重渲染一次');
+    assert.strictEqual(w.document.documentElement.getAttribute('data-theme'), 'light', 'light 仍是 light（dark 被覆盖）');
+  } finally { cleanup(w); }
+});
+
+// ====== en 模式设置对话框 i18n 完整性（2026-08-04 回归） ======
+
+test('settings: 切换英文后设置对话框无残留中文（除字体预览样例）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed.settings.language = 'en';
+    ed.applyLanguage();
+    ed.showSettings();
+
+    const dlg = w.document.getElementById('settings-dialog');
+    assert.ok(dlg, '设置对话框存在');
+    // 标题与 section 标题
+    assert.strictEqual(w.document.getElementById('settings-title').textContent, 'Settings');
+    const sections = [...dlg.querySelectorAll('.settings-section h3')].map(h => h.textContent);
+    assert.deepStrictEqual(sections, ['Basic', 'Editor', 'Preview', 'Behavior', 'Custom Fonts']);
+    // 语言 / 主题 / 关闭行为 / 视图 / Tab / 最大宽度 options
+    const lang = w.document.getElementById('set-language');
+    assert.deepStrictEqual([...lang.options].map(o => o.text), ['Chinese', 'English']);
+    const theme = w.document.getElementById('set-theme-mode');
+    assert.deepStrictEqual([...theme.options].map(o => o.text), ['Light', 'Dark', 'Follow System']);
+    const close = w.document.getElementById('set-close-action');
+    assert.deepStrictEqual([...close.options].map(o => o.text), ['Ask every time', 'Quit app', 'Minimize to tray']);
+    const view = w.document.getElementById('set-default-view');
+    assert.deepStrictEqual([...view.options].map(o => o.text), ['Preview', 'Edit']);
+    const tab = w.document.getElementById('set-tab-size');
+    assert.deepStrictEqual([...tab.options].map(o => o.text), ['2 spaces', '4 spaces', '8 spaces']);
+    const mw = w.document.getElementById('set-max-width');
+    assert.strictEqual(mw.options[0].text, 'Unlimited');
+    // 遍历文本节点：除 font-preview-sample 外不得含中文
+    const leftovers = [];
+    const walker = w.document.createTreeWalker(dlg, w.NodeFilter.SHOW_TEXT, null);
+    let node;
+    while ((node = walker.nextNode())) {
+      const t = node.textContent.trim();
+      if (!/[\u4e00-\u9fff]/.test(t)) continue;
+      if (node.parentElement.closest('#font-preview-sample')) continue; // 字体预览样例刻意中文
+      leftovers.push(t.slice(0, 40));
+    }
+    assert.deepStrictEqual(leftovers, [], '设置对话框不应有残留中文，实际: ' + leftovers.join(' | '));
   } finally { cleanup(w); }
 });

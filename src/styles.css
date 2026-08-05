@@ -1750,8 +1750,18 @@ body.is-resizing .side-btn {
 }
 
 .code-scroll {
-  max-height: 500px;
-  overflow-y: auto;
+  max-height: 300px;
+  /* 默认 hidden：Windows WebView2 always-show 滚动条会让短代码块也显示空轨道。
+     只有内容真的超出 max-height 时，由 render 后处理改为 auto（见 preview-controller.js） */
+  overflow-y: hidden;
+}
+
+/* 代码块 hljs 默认主题里 .hljs 元素带 background:#ffffff，pre 内会形成"内白外灰"
+   双层。统一让 .hljs 透明，背景完全由 pre 的 var(--code-bg) 提供，软件与导出 PDF 一致。 */
+.preview-content pre code.hljs,
+.preview-content pre .hljs {
+  background: transparent !important;
+  padding: 12px 16px !important;
 }
 
 /* 代码块行号 & 自动换行 */
@@ -1911,12 +1921,16 @@ body.is-resizing .side-btn {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(0, 0, 0, 0.85);
+  /* 亮色模式：浅灰背景（暗色由下方 [data-theme="dark"] 覆盖为深色） */
+  background: rgba(243, 244, 246, 0.94);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: zoom-out;
   backdrop-filter: blur(4px);
+}
+[data-theme="dark"] .image-lightbox {
+  background: rgba(0, 0, 0, 0.85);
 }
 .image-lightbox img {
   max-width: 90vw;
@@ -1933,9 +1947,11 @@ body.is-resizing .side-btn {
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
-  color: rgba(255,255,255,0.9);
+  /* 亮色：深字浅底（暗色由下方 [data-theme="dark"] 覆盖） */
+  color: rgba(51, 55, 64, 0.92);
   font-size: 15px;
-  background: rgba(0,0,0,0.55);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.14);
   padding: 10px 22px;
   border-radius: 20px;
   z-index: 10000;
@@ -1944,6 +1960,11 @@ body.is-resizing .side-btn {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+[data-theme="dark"] .lightbox-hint {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: none;
 }
 .lightbox-hint-close {
   cursor: pointer;
@@ -2592,6 +2613,70 @@ body.is-resizing .side-btn {
   color: var(--text-primary);
 }
 
+.folder-sort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.folder-sort-key {
+  font-size: 11px;
+  padding: 3px 22px 3px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 12px;
+  color: var(--text-primary);
+  max-width: 100px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.folder-sort-key:hover {
+  border-color: var(--accent-color, #4a90d9);
+}
+
+.folder-sort-key:focus {
+  outline: none;
+  border-color: var(--accent-color, #4a90d9);
+  box-shadow: 0 0 0 2px var(--accent-soft, rgba(74, 144, 217, 0.18));
+}
+
+.folder-sort-order {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.folder-sort-order svg {
+  width: 14px;
+  height: 14px;
+}
+
+.folder-sort-order:hover {
+  background-color: var(--bg-hover, rgba(128, 128, 128, 0.08));
+  color: var(--text-primary);
+  border-color: var(--accent-color, #4a90d9);
+}
+
 .folder-tree {
   flex: 1;
   overflow: auto;
@@ -2692,8 +2777,39 @@ body.is-resizing .side-btn {
 
 .tree-label {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tree-meta {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 1px;
+  margin-left: 8px;
+  padding-right: 2px;
+  font-size: 10px;
+  line-height: 1.25;
+  color: var(--text-tertiary, #9aa0a6);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.tree-meta .tree-size {
+  color: var(--text-quaternary, #b0b4b8);
+}
+
+.tree-meta .tree-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.tree-row:hover .tree-meta,
+.tree-row.active .tree-meta {
+  color: var(--text-secondary);
 }
 
 .tree-children.hidden {
@@ -2972,6 +3088,27 @@ body.is-resizing .side-btn {
   border-color: var(--accent-color);
 }
 
+/* 确认框内的醒目警示块（导出 PDF 的耗时/损坏提示等）
+   默认 hidden，需调用方在 showConfirmDialog({ warning: '...' }) 显式打开。
+   用 --color-danger + --alert-caution-rgb 主题变量，深色/护眼主题跟随。 */
+.dialog-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 14px 0;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--color-danger);
+  background: rgba(var(--alert-caution-rgb), 0.10);
+  border: 1px solid rgba(var(--alert-caution-rgb), 0.35);
+  border-left: 4px solid var(--color-danger);
+  border-radius: 6px;
+}
+.dialog-warning.hidden { display: none; }
+.dialog-warning-icon { flex: none; font-size: 16px; line-height: 1.4; }
+
 .save-dialog {
   max-width: 380px;
 }
@@ -3015,6 +3152,12 @@ body.is-resizing .side-btn {
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;
+}
+
+/* 按钮 loading 态（保存按钮复用；#btn-add-font.is-loading 仅作用于导入字体按钮） */
+.dialog-btn.is-loading {
+  pointer-events: none;
+  opacity: 0.9;
 }
 
 /* 关闭窗口确认对话框 */
@@ -3439,6 +3582,25 @@ body.is-resizing .side-btn {
   max-width: 460px;
 }
 
+/* 设置面板重渲染的 loading toast：主题/配色/字体/代码块选项变更触发全量重渲染
+   （mermaid 图表多时较慢）时，在页面顶部 toast 位置显示持续提示，完成后消失 */
+.toast.settings-loading-toast {
+  align-items: center;
+  background: rgba(28, 30, 38, 0.92);
+  color: #fff;
+  backdrop-filter: blur(2px);
+}
+
+.settings-loading-toast-spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.32);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: pane-spin 0.7s linear infinite;
+}
+
 .settings-content {
   padding: 0;
 }
@@ -3830,6 +3992,10 @@ body.is-resizing .side-btn {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* 淡出用 opacity（合成器属性，不占主线程，mermaid 渲染期间也流畅）。
+     主题切换时背景色由 JS 固定为切换前主题色（inline style），不做 background 渐变——
+     background-color 动画是主线程 repaint，会被 mermaid 渲染阻塞导致跳帧卡顿 */
+  transition: opacity 0.3s ease;
 }
 
 /* 外部文件变更提示条（位于菜单栏以下，作为正常布局的一行，不覆盖标题栏/工具栏/窗口按钮） */
@@ -3899,6 +4065,23 @@ body.is-resizing .side-btn {
 .ecb-reload:hover,
 .ecb-reload-all:hover {
   background: rgba(74, 144, 217, 0.08);
+}
+.fatal-error-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100000;
+  background: #b00020;
+  color: #fff;
+  font: 12px/1.5 system-ui, -apple-system, sans-serif;
+  padding: 8px 14px;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.25);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.fatal-error-bar.hidden {
+  display: none;
 }
 .loading-overlay.hidden {
   display: none;

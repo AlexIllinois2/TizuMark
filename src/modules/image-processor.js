@@ -54,7 +54,12 @@ async function processImages(preview, deps) {
   if (gen !== getRenderGeneration()) return;
 
   const filePath = activeTab ? activeTab.filePath : null;
-  const dir = filePath ? filePath.replace(/[/\\][^/\\]*$/, '') : '';
+  // Windows 长路径前缀（\\?\）清理：Rust resolve/canonicalize 返回的路径（如 read_bundled_file
+  // 的 path 字段）带 \\?\ 前缀。若直接 dir + '/' + rawSrc 会拼出 \\?\D:\...\dir/file 的
+  // 混合分隔符路径——Path::canonicalize 对 \\?\ 前缀路径要求全反斜杠，混入 '/' 即报
+  // os error 123 语法不正确。去掉前缀后普通路径允许混合分隔符，读取恢复正常。
+  const rawDir = filePath ? filePath.replace(/[/\\][^/\\]*$/, '') : '';
+  const dir = rawDir.startsWith('\\\\?\\') ? rawDir.slice(4) : rawDir;
 
   // 按「绝对路径」缓存 base64 data URI：innerHTML 每次重渲染会把 img.src 重置为原始路径，
   // 无缓存时每次打字都要 invoke 跨 IPC 读磁盘。命中缓存后零磁盘 IO（实测省 ~100ms）。
@@ -130,7 +135,21 @@ async function processImages(preview, deps) {
       }
       return;
     }
-    // 打包文档（使用说明 / demo）：相对资源由 _openBundledFile 记录真实资源路径，按其目录读取图片
+    // 打包文档（使用说明 / demo，activeTab.isBundled=true）：相对资源由 _openBundledFile
+    // 记录真实资源路径。优先走打包资源定位命令 read_bundled_image_as_base64（按 dev 项目根 /
+    // prod 资源目录解析），避免页面相对 fetch（404 噪音且图片出不来）。
+    if (activeTab && activeTab.isBundled) {
+      try {
+        const base64 = await tauri.readBundledImageAsBase64({ filename: rawSrc });
+        // 代际检查 #6b（打包回退校验）
+        if (gen !== getRenderGeneration()) return;
+        const dataUri = `data:${mimeOf(rawSrc)};base64,${base64}`;
+        imageCache.set(rawSrc, dataUri);
+        img.src = getCachedImageURL(dataUri);
+        return;
+      } catch (e2) { /* 落到下面的兜底 fetch */ }
+    }
+    // 最后兜底：尝试页面相对 fetch（通常 404，仅作最后努力）
     try {
       const resp = await fetch(rawSrc);
       if (!resp.ok) { fail(img); return; }
