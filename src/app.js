@@ -8187,7 +8187,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
     this.pendingBytesRid = null;
     try {
 
-      const channel = new Channel();
+      const channel = new TauriApi.Channel();
       let totalSize = 0;
       let downloadedSize = 0;
       channel.onmessage = (eventData) => {
