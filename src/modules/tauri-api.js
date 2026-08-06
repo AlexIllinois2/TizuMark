@@ -2,7 +2,7 @@
  * tauri-api.js —— 统一 IPC 边界（ADR-1 / N11 / N21 / N29）
  *
  * 设计要点（任何偏离都会破坏方案硬约束，勿擅自改动）：
- *  - COMMANDS 是 20 个自定义命令的【唯一真源】；方法由其生成。契约测试反解析
+ *  - COMMANDS 是 26 个自定义命令的【唯一真源】；方法由其生成。契约测试反解析
  *    src-tauri/src/lib.rs 的 generate_handler! 块校验集合一致（C17）。
  *  - 延迟求值：调用时才读取 window.__TAURI__.core.invoke（根治 app.js:1 白屏单点，N4）。
  *  - 语义空操作（硬约束 N21）：resolve 原样返回，reject 原样抛出；
@@ -18,7 +18,7 @@
   // 自定义命令（唯一真源）；方法由其生成。契约测试反解析 lib.rs 的 generate_handler! 校验集合一致。
   const COMMANDS = [
     'read_file', 'write_file', 'write_binary_file', 'file_meta', 'is_directory',
-    'list_dir', 'ensure_dir', 'app_data_dir', 'read_bundled_file',
+    'list_dir', 'search_files', 'ensure_dir', 'app_data_dir', 'read_bundled_file',
     'read_bundled_image_as_base64', 'fetch_image_as_base64', 'save_image_to_assets',
     'watch_folder', 'stop_watch', 'search_in_files', 'generate_toc',
     'get_cli_args', 'quit_app', 'open_devtools', 'set_window_behavior',

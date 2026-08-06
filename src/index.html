@@ -698,7 +698,7 @@
       </div>
       <div class="dialog-content">
         <p id="prompt-dialog-message"></p>
-        <input id="prompt-dialog-input" type="text" autocomplete="off" spellcheck="false" />
+        <input id="prompt-dialog-input" class="prompt-dialog-input" type="text" autocomplete="off" spellcheck="false" />
       </div>
       <div class="dialog-footer">
         <button id="prompt-dialog-cancel" class="dialog-btn">取消</button>
@@ -871,10 +871,11 @@
     </div>
   </div>
 
-  <!-- 文件搜索对话框 (VSCode 风格 Ctrl+P，合并自 PR #36) -->
-  <div id="file-search-dialog" class="dialog-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="file-search-title">
-    <div class="dialog file-search-dialog">
-      <div class="dialog-header">
+  <!-- 文件搜索对话框 (VSCode 风格 Ctrl+P，合并自 PR #36)
+       与跨文件搜索(Ctrl+H)保持一致：浮动非模态面板 + 标题栏拖动 + 仅靠 X 按钮/输入框 ESC 关闭。 -->
+  <div id="file-search-dialog" class="dialog-overlay file-search-overlay hidden" role="dialog" aria-modal="false" aria-labelledby="file-search-title">
+    <div class="dialog file-search-dialog" id="fs-panel">
+      <div class="dialog-header fs-drag-handle" id="fs-drag-handle">
         <h2 id="file-search-title">文件搜索</h2>
         <button class="dialog-close" id="file-search-close" aria-label="关闭">&times;</button>
       </div>

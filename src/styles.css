@@ -3022,6 +3022,58 @@ body.is-resizing .side-btn {
 .file-search-input:focus {
   border-color: var(--accent-color, #4a90d9);
 }
+
+/* 通用输入对话框（文件树新建/重命名/重命名，合并自 PR #36）：
+   与软件 .form-field 风格统一；同时用 id 与 class 双选择器，保证 HTML 用哪种都命中。 */
+.prompt-dialog {
+  max-width: 400px;   /* 简单输入框无需过宽，避免文字稀松 */
+}
+.prompt-dialog .dialog-header {
+  padding: 16px 22px;
+}
+.prompt-dialog .dialog-footer {
+  padding: 14px 22px;
+}
+.prompt-dialog .dialog-content {
+  padding: 20px 22px;
+}
+/* 提示语（指令文字）与输入框之间的间距，解决"文字贴着框" */
+.prompt-dialog .dialog-content p {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary, #888);
+}
+.prompt-dialog-input,
+#prompt-dialog-input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  border: 1px solid var(--border-color, #d0d0d0);
+  border-radius: 6px;
+  background: var(--bg-primary, #fff);
+  color: var(--text-primary, #222);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.prompt-dialog-input::placeholder,
+#prompt-dialog-input::placeholder {
+  color: var(--text-secondary, #999);
+  opacity: .8;
+}
+.prompt-dialog-input:hover,
+#prompt-dialog-input:hover {
+  border-color: var(--text-secondary, #aaa);
+}
+.prompt-dialog-input:focus,
+#prompt-dialog-input:focus {
+  outline: none;
+  border-color: var(--accent-color, #2050d0);
+  box-shadow: 0 0 0 3px var(--accent-soft, rgba(32, 80, 208, 0.15));
+}
 .file-search-list {
   margin-top: 8px;
   max-height: 360px;
@@ -3056,6 +3108,33 @@ body.is-resizing .side-btn {
 .file-search-item:hover {
   background: var(--accent-soft, #e8f0fb);
 }
+/* 扫描中 / 无结果 占位（Ctrl+P 修复：扫描期间给出明确反馈，避免像卡死） */
+.file-search-empty {
+  padding: 18px 10px;
+  text-align: center;
+  color: var(--text-secondary, #888);
+  font-size: 13px;
+}
+/* 文件搜索(Ctrl+P)：与跨文件搜索(Ctrl+H)一致的「浮动非模态面板」样式。
+   透明遮罩 + pointer-events:none（点击穿透到下方，不触发关闭）；面板 position:absolute
+   由 JS 设 left/top 定位并支持拖动；box-shadow 由 --shadow-lg 提供，跟随主题。 */
+.file-search-overlay {
+  background: transparent;
+  pointer-events: none;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 0;
+}
+.file-search-overlay .dialog {
+  position: absolute;
+  pointer-events: auto;
+  width: 520px;
+  max-width: 92vw;
+  margin: 0;
+  box-shadow: var(--shadow-lg);
+}
+.fs-drag-handle { cursor: move; user-select: none; }
+.fs-drag-handle .dialog-close { cursor: pointer; }
 
 /* 关闭窗口确认对话框 */
 .close-confirm-dialog {

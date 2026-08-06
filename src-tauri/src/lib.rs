@@ -756,6 +756,98 @@ fn app_data_dir(app: tauri::AppHandle) -> Result<String, String> {
         .map(|p| p.to_string_lossy().to_string())
 }
 
+// 递归遍历目录，收集指定扩展名的文件清单，供前端 Ctrl+P 快速打开。
+// 不跳过任何子目录（含 node_modules/.git/dist/src-tauri 等），保证"文件多也能搜"；
+// 仅按扩展名过滤（默认 .md/.markdown/.txt）并按 max_results 截断，避免病态目录树失控。
+#[derive(serde::Serialize)]
+struct SearchFileEntry {
+    name: String,
+    path: String,
+    relative_path: String,
+}
+
+#[tauri::command]
+fn search_files(
+    path: String,
+    extensions: Option<Vec<String>>,
+    max_results: Option<usize>,
+) -> Vec<SearchFileEntry> {
+    let exts: Vec<String> = extensions
+        .unwrap_or_else(|| vec!["md".to_string(), "markdown".to_string(), "txt".to_string()])
+        .into_iter()
+        .map(|e| e.to_lowercase())
+        .collect();
+    let max = max_results.unwrap_or(50000).max(1);
+    let root = std::path::Path::new(&path);
+    let mut results: Vec<SearchFileEntry> = Vec::new();
+    let mut dir_count: usize = 0;
+    if root.is_dir() {
+        search_files_walk(root, root, &exts, &mut results, &mut dir_count, 0, 40, 60000, max);
+    }
+    results
+}
+
+#[allow(clippy::too_many_arguments)]
+fn search_files_walk(
+    dir: &std::path::Path,
+    root: &std::path::Path,
+    exts: &[String],
+    results: &mut Vec<SearchFileEntry>,
+    dir_count: &mut usize,
+    depth: usize,
+    max_depth: usize,
+    max_dirs: usize,
+    max_results: usize,
+) {
+    if depth > max_depth || *dir_count > max_dirs || results.len() >= max_results {
+        return;
+    }
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return, // 权限不足等目录：跳过，继续其他分支
+    };
+    let mut sub_dirs: Vec<std::path::PathBuf> = Vec::new();
+    for entry in entries.flatten() {
+        if results.len() >= max_results {
+            break;
+        }
+        let p = entry.path();
+        let file_type = match entry.file_type() {
+            Ok(ft) => ft,
+            Err(_) => continue,
+        };
+        if file_type.is_dir() {
+            sub_dirs.push(p);
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        let lower = name.to_lowercase();
+        let matched = lower
+            .rfind('.')
+            .map(|i| exts.iter().any(|e| &lower[i + 1..] == e.as_str()))
+            .unwrap_or(false);
+        if matched {
+            let full = p.to_string_lossy().to_string();
+            let relative = p
+                .strip_prefix(root)
+                .map(|r| r.to_string_lossy().to_string())
+                .unwrap_or_else(|_| name.clone());
+            results.push(SearchFileEntry {
+                name,
+                path: full,
+                relative_path: relative,
+            });
+        }
+    }
+    for d in sub_dirs {
+        if results.len() >= max_results {
+            break;
+        }
+        *dir_count += 1;
+        search_files_walk(&d, root, exts, results, dir_count, depth + 1, max_depth, max_dirs, max_results);
+    }
+}
+
 #[tauri::command]
 fn generate_toc(content: String) -> String {
     let mut items: Vec<(usize, String, String)> = Vec::new();
@@ -894,6 +986,7 @@ pub fn run() {
             file_meta,
             is_directory,
             list_dir,
+            search_files,
             write_binary_file,
             ensure_dir,
             watch_folder,

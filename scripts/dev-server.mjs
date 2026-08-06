@@ -110,7 +110,9 @@ setInterval(() => { for (const res of sseClients) { try { res.write(': ping\n\n'
 
 // LiveReload 客户端：原生 EventSource 在长会话里 SSE 断开后不会自动重连（旧实现把
 // es.onerror 静默吞掉），导致后续文件改动不再触发刷新、热加载"失灵"。这里主动接管重连：
-// onerror 时指数退避重建连接，重连成功（非首次 open）即视为一次更新并 location.reload()。
+// onerror 时指数退避重建连接；重连仅重建连接、不再自动 location.reload()——否则 SSE 瞬断
+// 重连会反复整页刷新（输入触发预览重渲染、主线程繁忙饿死心跳时尤其明显）。只有服务端主动
+// 推送 data: reload（真实文件改动）时才刷新。
 const LIVERELOAD_SNIPPET = `<script>(function(){
   try {
     var path = '${LIVERELOAD_PATH}';
@@ -123,7 +125,6 @@ const LIVERELOAD_SNIPPET = `<script>(function(){
       if (es) { try { es.close(); } catch (e) {} }
       es = new EventSource(path);
       es.onopen = function () {
-        if (hadOpen) { location.reload(); return; } // 重连成功 → 拉最新代码
         hadOpen = true;
         failed = 0; // 连接健康，复位退避计数
       };

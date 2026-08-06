@@ -7,6 +7,13 @@ let __fs_allFiles = [];
 let __fs_filteredFiles = [];
 let __fs_selectedIndex = -1;
 let __fs_workspaceFolder = null;
+// 扫描代次令牌：避免旧扫描（被用户新操作打断/取消）回写陈旧结果覆盖新列表。
+let __fs_scanToken = 0;
+// Ctrl+P 检索范围：按文件名搜全部「笔记类」文件。不跳过任何子目录（含 node_modules/.git/dist
+// 等），递归交给 Rust 端一次性原生遍历（search_files 命令），避免逐目录 IPC 串行卡死。
+// 扩展名限制保留（仅 .md/.markdown/.txt），maxResults 兜底防止病态目录树失控。
+const FS_EXTENSIONS = ['md', 'markdown', 'txt'];
+const FS_MAX_RESULTS = 50000;
 
 const FILE_ICON = '<svg class="fs-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><polyline points="14 3 14 8 19 8"/></svg>';
 
@@ -19,22 +26,14 @@ function initFileSearch() {
   const closeBtn = document.getElementById('file-search-close');
   if (closeBtn) closeBtn.addEventListener('click', fsCloseDialog);
 
-  __fs_dialog.addEventListener('click', (e) => {
-    if (e.target === __fs_dialog) fsCloseDialog();
-  });
+  // 注意：文件搜索与跨文件搜索(Ctrl+H)保持一致的关闭逻辑——只靠 X 按钮与输入框 ESC 关闭，
+  // 不响应遮罩点击（遮罩已是 pointer-events:none 的透明层，点击穿透到下方，与 Ctrl+H 一致）。
 
   // 阻止所有键盘事件冒泡到编辑器
   __fs_dialog.addEventListener('keydown', (e) => { e.stopPropagation(); });
 
   __fs_inputEl.addEventListener('input', () => {
-    const q = __fs_inputEl.value.trim().toLowerCase();
-    if (!q) {
-      __fs_filteredFiles = __fs_allFiles.slice(0, 50);
-    } else {
-      __fs_filteredFiles = __fs_allFiles.filter(f => f.name.toLowerCase().includes(q));
-    }
-    __fs_selectedIndex = -1;
-    fsRenderList();
+    fsApplyFilter();
   });
 
   __fs_inputEl.addEventListener('keydown', (e) => {
@@ -58,6 +57,58 @@ function initFileSearch() {
       return;
     }
   });
+
+  // 拖动：与跨文件搜索(Ctrl+H)一致，从标题栏拖动浮动面板到其他位置。
+  initFsDrag();
+
+  // 实时性：对话框已打开时，若应用窗口重新获得焦点（例如在别处/文件树新建了文件后切回），
+  // 重新扫描工作区，让新建文件即时出现在列表里。
+  const onFsRefocus = () => { fsRescan(); };
+  window.addEventListener('focus', onFsRefocus);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) onFsRefocus(); });
+}
+
+// 标题栏拖动浮动面板（与跨文件搜索 Ctrl+H 的 cs-drag-handle 行为一致）。
+function initFsDrag() {
+  const panel = document.getElementById('fs-panel');
+  const handle = document.getElementById('fs-drag-handle');
+  if (!panel || !handle) return;
+  handle.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.dialog-close')) return; // 关闭按钮不触发拖动
+    e.preventDefault();
+    const startX = e.clientX, startY = e.clientY;
+    const startLeft = panel.offsetLeft, startTop = panel.offsetTop;
+    const onMove = (ev) => {
+      let nl = startLeft + (ev.clientX - startX);
+      let nt = startTop + (ev.clientY - startY);
+      nl = Math.max(0, Math.min(nl, (window.innerWidth || 1200) - 80));
+      nt = Math.max(0, Math.min(nt, (window.innerHeight || 800) - 40));
+      panel.style.left = nl + 'px';
+      panel.style.top = nt + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+    };
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function isFsOpen() {
+  return !!__fs_dialog && !__fs_dialog.classList.contains('hidden');
+}
+
+let __fs_rescanTimer = null;
+// 窗口重新聚焦时去抖重扫，让新建/改名后的文件出现在列表中（不监听全时段，仅在对话框打开时生效）。
+function fsRescan() {
+  if (!isFsOpen() || !__fs_workspaceFolder) return;
+  if (__fs_rescanTimer) clearTimeout(__fs_rescanTimer);
+  __fs_rescanTimer = setTimeout(() => {
+    if (isFsOpen()) fsScanWorkspace(__fs_workspaceFolder);
+  }, 300);
 }
 
 function fsScrollToSelected() {
@@ -65,8 +116,31 @@ function fsScrollToSelected() {
   if (items[__fs_selectedIndex]) items[__fs_selectedIndex].scrollIntoView({ block: 'nearest' });
 }
 
+// 依据当前输入框内容过滤并渲染。扫描完成或用户实时输入都走这里，
+// 保证「扫描期间输入的文字」在扫描结束后不会被丢弃（旧实现会覆盖成未过滤的前 50 项）。
+function fsApplyFilter() {
+  const q = (__fs_inputEl ? __fs_inputEl.value : '').trim().toLowerCase();
+  if (!q) {
+    __fs_filteredFiles = __fs_allFiles.slice(0, 50);
+  } else {
+    __fs_filteredFiles = __fs_allFiles.filter(f =>
+      f.name.toLowerCase().includes(q) ||
+      (f.relativePath || '').toLowerCase().includes(q)
+    );
+  }
+  __fs_selectedIndex = -1;
+  fsRenderList();
+}
+
 function fsRenderList() {
   if (!__fs_listEl) return;
+  if (!__fs_filteredFiles.length) {
+    const msg = (__fs_inputEl && __fs_inputEl.value.trim())
+      ? '未找到匹配的文件'
+      : '当前工作区没有 .md / .markdown / .txt 文件';
+    __fs_listEl.innerHTML = `<div class="file-search-empty">${msg}</div>`;
+    return;
+  }
   __fs_listEl.innerHTML = __fs_filteredFiles.map((f, i) => {
     const cls = i === __fs_selectedIndex ? 'file-search-item selected' : 'file-search-item';
     return `<div class="${cls}" data-index="${i}">
@@ -103,42 +177,86 @@ function fsCloseDialog() {
   if (window.editor && window.editor.cm) window.editor.cm.focus();
 }
 
-async function fsScanDir(dirPath, result, rootDir) {
-  if (typeof TauriApi === 'undefined') return;
+// 旧实现：前端逐目录递归 + 每目录一次 listDir IPC，node_modules 等巨型目录会卡死。
+// 现改为一次 search_files 命令（Rust 端原生遍历，不跳过任何子目录，按扩展名 + 上限过滤）。
+async function fsScanWorkspace(dir) {
+  const token = ++__fs_scanToken;     // 新扫描代次：打断任何进行中的旧扫描
+  __fs_allFiles = [];
+  __fs_filteredFiles = [];
+  if (__fs_listEl) __fs_listEl.innerHTML = '<div class="file-search-empty">正在扫描文件…</div>';
+
+  // 命令缺失（极旧构建）时回退到前端递归扫描，保证不整体失效。
+  if (typeof TauriApi === 'undefined' || typeof TauriApi.searchFiles !== 'function') {
+    const mdFiles = [];
+    await fsScanDirLegacy(dir, mdFiles, dir, 0, token);
+    if (token !== __fs_scanToken) return;
+    mdFiles.sort((a, b) => a.name.localeCompare(b.name));
+    __fs_allFiles = mdFiles;
+    fsApplyFilter();
+    return;
+  }
+
+  try {
+    const entries = await TauriApi.searchFiles({
+      path: dir,
+      extensions: FS_EXTENSIONS,
+      maxResults: FS_MAX_RESULTS,
+    });
+    if (token !== __fs_scanToken) return; // 已被更新的扫描取代，丢弃本次结果
+    __fs_allFiles = (entries || [])
+      .map(e => ({ name: e.name, path: e.path, relativePath: e.relativePath || e.path }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch (e) {
+    if (token !== __fs_scanToken) return;
+    __fs_allFiles = [];
+  }
+  // 关键：依据用户当前已输入的文字过滤，而不是覆盖成未过滤的前 50 项
+  fsApplyFilter();
+}
+
+// 仅作命令缺失时的降级扫描：前端逐目录递归，不跳过任何子目录（与 Rust 端语义一致），
+// 但加深度/结果数上限防止病态树跑不死。因只在极旧构建触发，性能非首要。
+async function fsScanDirLegacy(dirPath, result, rootDir, depth, token) {
+  if (depth > 25 || result.length >= FS_MAX_RESULTS) return;
   try {
     const entries = await TauriApi.listDir({ path: dirPath });
+    if (token !== __fs_scanToken) return;
     for (const entry of entries) {
-      if (!entry.is_dir) {
-        const ext = entry.name.split('.').pop().toLowerCase();
-        if (['md', 'markdown', 'txt'].includes(ext)) {
-          const relativePath = entry.path.startsWith(rootDir)
-            ? entry.path.slice(rootDir.length).replace(/^[/\\]/, '')
-            : entry.name;
-          result.push({ name: entry.name, path: entry.path, relativePath });
-        }
+      if (entry.is_dir) continue;
+      const ext = entry.name.split('.').pop().toLowerCase();
+      if (FS_EXTENSIONS.includes(ext)) {
+        const relativePath = entry.path.startsWith(rootDir)
+          ? entry.path.slice(rootDir.length).replace(/^[/\\]/, '')
+          : entry.name;
+        result.push({ name: entry.name, path: entry.path, relativePath });
       }
     }
     for (const entry of entries) {
-      if (entry.is_dir) await fsScanDir(entry.path, result, rootDir);
+      if (entry.is_dir) {
+        await fsScanDirLegacy(entry.path, result, rootDir, depth + 1, token);
+        if (token !== __fs_scanToken) return;
+      }
     }
   } catch (e) {}
-}
-
-async function fsScanWorkspace(dir) {
-  __fs_allFiles = [];
-  const mdFiles = [];
-  await fsScanDir(dir, mdFiles, dir);
-  mdFiles.sort((a, b) => a.name.localeCompare(b.name));
-  __fs_allFiles = mdFiles;
-  __fs_filteredFiles = __fs_allFiles.slice(0, 50);
-  __fs_selectedIndex = -1;
-  fsRenderList();
 }
 
 function openFileSearchDialog() {
   if (!__fs_dialog) initFileSearch();
   if (!__fs_dialog) return;
   __fs_dialog.classList.remove('hidden');
+  // 浮动面板定位：首次显示在顶部居中（VS Code 命令面板风格）；已拖动过则保持上次位置并夹取在视口内。
+  const panel = document.getElementById('fs-panel');
+  if (panel) {
+    const w = panel.offsetWidth || 520;
+    const vw = window.innerWidth || 1200;
+    const vh = window.innerHeight || 800;
+    let left = panel.style.left ? parseInt(panel.style.left, 10) : Math.max(12, Math.round((vw - w) / 2));
+    let top = panel.style.top ? parseInt(panel.style.top, 10) : Math.max(12, Math.round(vh * 0.12));
+    left = Math.max(0, Math.min(left, vw - 80));
+    top = Math.max(0, Math.min(top, vh - 40));
+    panel.style.left = left + 'px';
+    panel.style.top = top + 'px';
+  }
   if (__fs_inputEl) { __fs_inputEl.value = ''; __fs_inputEl.focus(); }
 
   const ws = window.editor && window.editor.workspaceFolder;
