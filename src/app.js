@@ -1647,7 +1647,7 @@ class MarkdownEditor {
       themeMode: 'light',
       colorScheme: 'default',
       fontScheme: 'system-sans',
-      defaultView: 'edit',
+      defaultView: 'preview',
       previewPaneWidth: 360,
       scrollSync: true,
       language: 'zh',
