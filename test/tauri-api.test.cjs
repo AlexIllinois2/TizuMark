@@ -46,7 +46,7 @@ test('generate_handler! 解析失败必须显式抛错（N27）', () => {
   assert.throws(() => parseHandlerCommands('generate_handler![unclosed'), /未闭合/);
 });
 
-test('24 个自定义命令方法由 COMMANDS 生成并原样透传（C5/N29）', async () => {
+test('25 个自定义命令方法由 COMMANDS 生成并原样透传（C5/N29）', async () => {
   const calls = [];
   global.window = {
     __TAURI__: { core: { invoke: async (cmd, args) => { calls.push({ cmd, args }); return 'R:' + cmd; } } },

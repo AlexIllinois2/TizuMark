@@ -232,12 +232,12 @@ function assert(name, cond, detail) {
       const ht = norm(h.textContent);
       return ht.includes(key) || key.includes(ht.slice(0, 10));
     });
-    // 期望：预览把该标题居中（与 app 的 top 公式一致：offsetInContent - 半视口 + 半标题高）
+    // 期望：预览把该标题顶部对齐（与 app 的 top 公式一致：offsetInContent，余量 0）
     let expectedPv = null, headingOffset = null;
     if (headingEl) {
       const hRect = headingEl.getBoundingClientRect();
       headingOffset = hRect.top - pvRect.top + pv.scrollTop; // 标题在预览内容中的真实偏移
-      expectedPv = headingOffset - pv.clientHeight / 2 + headingEl.offsetHeight / 2;
+      expectedPv = headingOffset;
     }
     const actualPv = pv.scrollTop;
     const actualEd = ed.cm.getScrollInfo().top;
@@ -259,12 +259,12 @@ function assert(name, cond, detail) {
   });
 
   console.log(`  点击大纲第 ${t.k} 项「${t.itemText}」，共 ${t.outlineCount} 项 (data-line=${t.line})`);
-  console.log(`  预览 scrollTop=${t.actualPv|0}, 标题居中期望 scrollTop=${t.expectedPv != null ? t.expectedPv|0 : 'n/a'}`);
+  console.log(`  预览 scrollTop=${t.actualPv|0}, 标题顶部期望 scrollTop=${t.expectedPv != null ? t.expectedPv|0 : 'n/a'}`);
   console.log(`  编辑器 top=${t.actualEd|0}, 标题行像素 ${t.hLineTop != null ? t.hLineTop|0 : 'n/a'}, 光标行=${t.cursorLine}`);
   console.log(`  [诊断] 预览#id存在=${t.targetExists}`);
 
   bump(assert('点击大纲项后预览发生滚动', t.actualPv > 5, `scrollTop=${t.actualPv|0}`));
-  bump(assert('预览滚到对应标题居中位置（±30px）',
+  bump(assert('预览滚到对应标题顶部位置（±30px）',
     t.expectedPv != null && Math.abs(t.actualPv - t.expectedPv) <= 30,
     `预览scrollTop=${t.actualPv|0}, 期望≈${t.expectedPv != null ? t.expectedPv|0 : 'n/a'}`));
   bump(assert('编辑器滚动到标题行可见（不在顶部卡死）',

@@ -43,3 +43,14 @@ test('app.js: 注册 MutationObserver 监听 preview 子树，自动跑 .code-sc
     'observer 应监听 preview 的 childList + subtree（捕获任意位置新增的 .code-scroll）',
   );
 });
+
+test('styles.css: 关闭「代码块滚动条」时 .preview-content.code-no-scroll .code-scroll 撑开高度不滚动', () => {
+  const block = css.match(/\.preview-content\.code-no-scroll\s+\.code-scroll\s*\{[^}]*\}/);
+  assert.ok(block, '应存在 .preview-content.code-no-scroll .code-scroll 规则');
+  assert.ok(/max-height:\s*none\s*!important/.test(block[0]), '应 max-height: none 撑开高度随内容');
+  assert.ok(/overflow:\s*visible\s*!important/.test(block[0]), '应 overflow: visible 不出现滚动条');
+});
+
+test('preview-controller.js: 设置 codeScroll=false 时跳过 .code-scroll 溢出后处理（改由 CSS 撑开）', () => {
+  assert.match(pcSrc, /codeScroll\s*===\s*false/, '后处理循环应在 settings.codeScroll === false 时跳过，不写 inline overflowY');
+});

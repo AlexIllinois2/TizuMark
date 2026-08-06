@@ -150,7 +150,7 @@ test('D1 手动录制成功后标记 custom', async () => {
   assert.strictEqual(s.shortcutScheme, 'custom');
 });
 
-test('D2 resetShortcuts 联动方案回默认并持久化', async () => {
+test('D2 resetShortcuts 联动方案回默认（仅面板预览，不持久化 scheme）', async () => {
   localStorage.removeItem('tizumark-shortcut-scheme');
   const s = {
     shortcuts: null,
@@ -166,7 +166,8 @@ test('D2 resetShortcuts 联动方案回默认并持久化', async () => {
   resetShortcuts.call(s);
   assert.strictEqual(Object.keys(s.shortcuts).length, DEFAULT_COUNT);
   assert.strictEqual(s.shortcutScheme, 'default');
-  assert.strictEqual(localStorage.getItem('tizumark-shortcut-scheme'), 'default');
+  // reset 仅面板内预览重置，不持久化方案名（需点确认按钮才正式生效）
+  assert.strictEqual(localStorage.getItem('tizumark-shortcut-scheme'), null);
 });
 
 // ============================================================

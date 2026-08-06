@@ -14,11 +14,14 @@ const PREVIEW_WINDOW_LINES = 1200;  // 窗口源码行数上限
 const PREVIEW_WINDOW_LEAD = 200;    // 焦点行前预留行数（让焦点不至于贴顶）
 
 async function dialogOpen(options = {}) {
-  return await invoke('plugin:dialog|open', { options });
+  // 注意：tauriApi.dialogOpen 内部已包一层 { options }（Tauri dialog 插件约定
+  // 底层的 IPC 命令 'plugin:dialog|open' 收 { options }），这里必须透传，
+  // 不能再包一层——否则双重嵌套会让 Rust 侧解析不到参数。
+  return await TauriApi.dialogOpen(options);
 }
 
 async function dialogSave(options = {}) {
-  return await invoke('plugin:dialog|save', { options });
+  return await TauriApi.dialogSave(options);
 }
 
 class Tab {
@@ -198,6 +201,8 @@ const I18N = {
     lineNumbers: '显示行号',
     codeLineNumbers: '代码块行号',
     codeBlockWrap: '代码块自动换行',
+    codeScroll: '代码块滚动条',
+    codeScrollHint: '勾选后，较长的代码块会显示纵向滚动条（默认行为）；不勾选时，代码块高度自动撑开、与内容等高，不再出现滚动条。',
     langZh: '中文',
     langEn: 'English',
     previewFontSize: '正文字号',
@@ -267,7 +272,7 @@ const I18N = {
     thirdParty: '第三方组件',
     copyright: '版权声明',
     aboutTitle: '关于 TizuMark',
-    versionInfo: 'TizuMark v1.1.0',
+    versionInfo: 'TizuMark v1.2.0',
     versionDesc: '轻量级跨平台 Markdown 编辑器',
     buildInfo: '基于 Tauri v2.5 + Rust 构建',
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
@@ -379,6 +384,7 @@ printTip1: '可在「更多设置」中「取消勾选"页眉和页脚"」，去
     updateSkip: '稍后再说',
     csDirPlaceholder: '目录路径',
     largeFileNotice: '⚠ 文档过大（约 {lines} 行 / {size} MB），预览仅显示当前位置附近内容，滚动编辑区可逐步查看全文。',
+    dontRemind: '不再提醒',
     shortcutOccupied: '快捷键 "{key}" 已被「{name}」占用',
     progressCheckingEula: '正在检查许可协议…',
     progressInitEditor: '正在初始化编辑器…',
@@ -620,6 +626,8 @@ printTip1: '可在「更多设置」中「取消勾选"页眉和页脚"」，去
     lineNumbers: 'Line Numbers',
     codeLineNumbers: 'Code line numbers',
     codeBlockWrap: 'Wrap code blocks',
+    codeScroll: 'Code block scrollbar',
+    codeScrollHint: 'When enabled, long code blocks show a vertical scrollbar (default). When disabled, the code block grows to fit its content height and no scrollbar appears.',
     langZh: 'Chinese',
     langEn: 'English',
     previewFontSize: 'Preview Font Size',
@@ -689,7 +697,7 @@ printTip1: '可在「更多设置」中「取消勾选"页眉和页脚"」，去
     thirdParty: 'Third-Party Components',
     copyright: 'Copyright Notice',
     aboutTitle: 'About TizuMark',
-    versionInfo: 'TizuMark v1.1.0',
+    versionInfo: 'TizuMark v1.2.0',
     versionDesc: 'Lightweight cross-platform Markdown editor',
     buildInfo: 'Built with Tauri v2.5 + Rust',
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
@@ -802,6 +810,7 @@ printTip1: 'Go to "More settings" and uncheck "Headers and footers" to remove da
     updateSkip: 'Later',
     csDirPlaceholder: 'Folder path',
     largeFileNotice: '⚠ Large document ({lines} lines / {size} MB): preview shows only the area near the current position; scroll the editor to view the full content gradually.',
+    dontRemind: "Don't remind",
     shortcutOccupied: 'Shortcut "{key}" is already used by "{name}"',
     progressCheckingEula: 'Checking license agreement…',
     progressInitEditor: 'Initializing editor…',
@@ -955,6 +964,10 @@ class MarkdownEditor {
     this._previewChildrenCount = 0;
     this._editorPercent = null;
     this.isDark = false;
+    this.viewMode = 'preview';
+    // 会话级「不再提醒」标志：仅本次应用运行期间有效，关闭应用后新会话自然复位为 false。
+    // 注意：不在 switchTab / openFile 等处重置，否则会丢失用户在本次会话内的选择。
+    this._largeFileNoticeSessionSuppressed = false;
 
     this.settings = this.loadSettings();
     this.viewMode = this.settings.defaultView || 'edit';
@@ -1062,6 +1075,8 @@ class MarkdownEditor {
   }
 
   showLargeFileNotice(key, totalLines, totalChars) {
+    // 会话级「不再提醒」：本次应用运行期间一旦点过，整轮生命周期内都不再弹（不含跨会话）。
+    if (this._largeFileNoticeSessionSuppressed) return;
     // 纯预览模式使用虚拟滚动，可拖到任意位置查看全文，无需提示横幅
     if (this.viewMode === 'preview') { this.hideLargeFileNotice(); return; }
     if (this._largeFileNoticeDismissed && this._largeFileNoticeKey === key) return;
@@ -1203,6 +1218,7 @@ class MarkdownEditor {
     setRowLabel('set-soft-breaks', t('softBreaks'));
     setRowLabel('set-code-line-numbers', t('codeLineNumbers'));
     setRowLabel('set-code-wrap', t('codeBlockWrap'));
+    setRowLabel('set-code-scroll', t('codeScroll'));
     setRowLabel('set-close-action', t('closeAction'));
     setRowLabel('set-show-tray-icon', t('showTrayIcon'));
     setRowLabel('settings-image-store-mode', t('imageSettingLabel'));
@@ -1215,6 +1231,8 @@ class MarkdownEditor {
     if (softBreaksHint) softBreaksHint.textContent = t('softBreaksHint');
     const tabSizeHint = document.querySelector('#setting-tab-size-hint .hint-text');
     if (tabSizeHint) tabSizeHint.textContent = t('tabSizeHint');
+    const codeScrollHint = document.querySelector('#setting-code-scroll-hint .hint-text');
+    if (codeScrollHint) codeScrollHint.textContent = t('codeScrollHint');
     const trayHint = document.querySelector('#setting-show-tray-icon-hint .hint-text');
     if (trayHint) trayHint.textContent = t('showTrayIconHint');
     setText('setting-image-store-assets', t('imageSettingAssets'));
@@ -1287,6 +1305,7 @@ class MarkdownEditor {
     this.updateFolderSortOrderButton();
     this.updateFolderMenuLabel();
     setTitle('large-file-banner-close', t('closeNotice'));
+    setTitle('large-file-banner-dont-remind', t('dontRemind'));
     // fmt-icon-btn 系列（加粗/斜体/删除线/链接/图片/水平线/高亮/上标/下标）
     const fmtActionTitleKeys = {
       'insert-bold': 'bold',
@@ -1638,6 +1657,7 @@ class MarkdownEditor {
       outlineWidth: 240,
       codeLineNumbers: false,
       codeWrap: false,
+      codeScroll: true,
       softBreaks: true,
       showTrayIcon: true,
       closeAction: 'ask',
@@ -1708,6 +1728,19 @@ class MarkdownEditor {
     try { localStorage.setItem('tizumark-settings', JSON.stringify(this.settings)); } catch {}
   }
 
+  // 只把 customFonts 字段写回 localStorage（不落盘面板内其他未应用设置）。
+  // 需求（2026-08-06）：添加字体后字体列表立即保存，但编辑器/预览字体选择
+  // 与是否应用仍由「应用/保存」决定。
+  _persistCustomFontsOnly() {
+    try {
+      const raw = localStorage.getItem('tizumark-settings');
+      const stored = raw ? this._validConfigObject(JSON.parse(raw)) : {};
+      if (!stored) return;
+      stored.customFonts = this.settings.customFonts;
+      localStorage.setItem('tizumark-settings', JSON.stringify(stored));
+    } catch {}
+  }
+
   // 把 this.settings 同步到设置面板各控件（initSettings 与「取消/X 恢复」共用）
   syncSettingsControls() {
     const s = this.settings;
@@ -1727,6 +1760,7 @@ class MarkdownEditor {
     document.getElementById('set-scroll-sync').checked = s.scrollSync;
     document.getElementById('set-code-line-numbers').checked = s.codeLineNumbers;
     document.getElementById('set-code-wrap').checked = s.codeWrap;
+    document.getElementById('set-code-scroll').checked = s.codeScroll;
     document.getElementById('set-language').value = s.language || 'zh';
     const modeRadio = document.querySelector(`#settings-image-store-mode input[value="${s.imageInsertMode || 'assets'}"]`);
     if (modeRadio) modeRadio.checked = true;
@@ -1865,6 +1899,9 @@ class MarkdownEditor {
     });
     document.getElementById('set-code-wrap').addEventListener('change', (e) => {
       this.settings.codeWrap = e.target.checked;
+    });
+    document.getElementById('set-code-scroll').addEventListener('change', (e) => {
+      this.settings.codeScroll = e.target.checked;
     });
     document.getElementById('set-language').addEventListener('change', (e) => {
       this.settings.language = e.target.value;
@@ -2092,19 +2129,24 @@ class MarkdownEditor {
         this.cm.scrollTo(0, Math.max(0, targetTop));
       }
       // 预览区跳转（仅当该标题已渲染在预览中时）
-      const target = this.preview.querySelector(`#${CSS.escape(id)}`);
-      if (target) {
-        const previewHeight = this.preview.clientHeight;
-        const targetRect = target.getBoundingClientRect();
-        const previewRect = this.preview.getBoundingClientRect();
-        const top = targetRect.top - previewRect.top + this.preview.scrollTop
-                  - (previewHeight / 2) + (targetRect.height / 2);
-        this.preview.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
-      } else if (this.previewWindow) {
-        // 大文档窗口模式：目标标题尚未渲染在预览中，以该行为焦点重渲染预览窗口，使其落点
-        this._previewScrollDriven = false;
-        this._previewFocusLine = line;
-        this.updatePreview();
+      // 守卫：纯符号标题（如 `# ===`）headingToId 会产出空串，querySelector('#') 抛
+      // SyntaxError（历史 bug），跳过预览跳转仅保留编辑区跳转
+      if (id) {
+        const target = this.preview.querySelector(`#${CSS.escape(id)}`);
+        if (target) {
+          const previewHeight = this.preview.clientHeight;
+          const targetRect = target.getBoundingClientRect();
+          const previewRect = this.preview.getBoundingClientRect();
+          // 顶部对齐：标题行与预览视口顶部对齐（余量 0），与编辑区跳转（顶部 -80px）一致，
+          // 符合用户预期「点大纲即定位到标题顶部」，且不依赖居中逻辑、不影响滚动同步。
+          const top = targetRect.top - previewRect.top + this.preview.scrollTop;
+          this.preview.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+        } else if (this.previewWindow) {
+          // 大文档窗口模式：目标标题尚未渲染在预览中，以该行为焦点重渲染预览窗口，使其落点
+          this._previewScrollDriven = false;
+          if (Number.isFinite(line)) this._previewFocusLine = line;
+          this.updatePreview();
+        }
       }
       // 安全网：120ms 后恢复滚动同步（此时两个面板均已停在标题位置，无在途滚动事件）。
       // 直接还原为可用状态，避免把上一轮滚动同步残留的 false 标志固化下来。
@@ -2188,6 +2230,7 @@ class MarkdownEditor {
     }
     this.preview.classList.toggle('code-line-numbers', s.codeLineNumbers);
     this.preview.classList.toggle('code-wrap', s.codeWrap);
+    this.preview.classList.toggle('code-no-scroll', s.codeScroll === false);
     if (this._hljsCache) this._hljsCache.clear();
     await this.applyThemeMode();
     this.applyFontScheme();
@@ -2217,15 +2260,15 @@ class MarkdownEditor {
       setLoading(0, paths.length);
       // 先让 spinner 绘制出来，再做大字体解码等阻塞主线程的工作，避免看起来卡死
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-      const appDir = await invoke('app_data_dir');
+      const appDir = await TauriApi.appDataDir();
       const fontsDir = appDir.replace(/[\\\/]$/, '') + '/tizu-mark/fonts';
-      await invoke('ensure_dir', { path: fontsDir });
+      await TauriApi.ensureDir({ path: fontsDir });
       for (let i = 0; i < paths.length; i++) {
         const p = paths[i];
         const name = p.split(/[\\\/]/).pop();
         setLoading(i + 1, paths.length);
         try {
-          const b64 = await invoke('fetch_image_as_base64', { url: p });
+          const b64 = await TauriApi.fetchImageAsBase64({ url: p });
           const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
           let hash = '';
           if (crypto && crypto.subtle && crypto.subtle.digest) {
@@ -2242,7 +2285,7 @@ class MarkdownEditor {
           const ext = (p.split('.').pop() || 'ttf').toLowerCase();
           const id = 'cf' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
           const fileName = id + '.' + ext;
-          await invoke('write_binary_file', { path: fontsDir + '/' + fileName, contents: Array.from(bytes) });
+          await TauriApi.writeBinaryFile({ path: fontsDir + '/' + fileName, contents: Array.from(bytes) });
           this.settings.customFonts.push({ id, name, fileName, hash });
           success.push(name);
           imported.push(id);
@@ -2250,14 +2293,19 @@ class MarkdownEditor {
           failed.push({ name, reason: String(err && err.message ? err.message : err) });
         }
       }
-      if (imported.length) {
-        const last = imported[imported.length - 1];
-        this.settings.editorFont = last;
-        this.settings.previewFont = last;
+      // 需求（2026-08-06）：添加字体只入列表并立即保存字体列表本身，
+      // 不自动切换编辑器/预览字体选择项，也不立即应用到软件；
+      // 用户手动选择字体后点「应用/保存」才生效并落盘。
+      if (success.length) {
+        // 仅持久化 customFonts 字段（不落盘面板内其他未应用设置）
+        this._persistCustomFontsOnly();
+        // 同步快照：取消面板不丢已添加的字体列表
+        if (this._settingsSnapshot) {
+          this._settingsSnapshot.customFonts = JSON.parse(JSON.stringify(this.settings.customFonts || []));
+        }
       }
-      // 应用式：字体列表在面板内即时更新，落盘随「应用/保存」
+      // 注册 @font-face 资源（供下拉框/预览按需选择时可用），不改变任何选择项
       await this.registerCustomFonts();
-      this.applyCustomFonts();
       this.renderCustomFontSettings();
       if (success.length) {
         this.showToast(this.t('importSuccess', { n: success.length }), 'success');
@@ -2579,22 +2627,22 @@ class MarkdownEditor {
       nextTab: { key: 'Ctrl+Tab', label: '下一个标签页' },
       prevTab: { key: 'Ctrl+Shift+Tab', label: '上一个标签页' },
       bold: { key: 'Ctrl+B', label: '加粗' },
-      toggleSidebar: { key: 'Ctrl+B', label: '显示/隐藏侧边栏' },
+      toggleSidebar: { key: '', label: '显示/隐藏侧边栏' },
       italic: { key: 'Ctrl+I', label: '斜体' },
       insertLink: { key: 'Ctrl+K', label: '插入链接' },
       exportPDF: { key: 'Ctrl+P', label: '导出 PDF' },
       fileSearch: { key: '', label: '文件搜索' },
       globalSearch: { key: '', label: '全局搜索' },
-      inlineCode: { key: 'Ctrl+`', label: '行内代码' },
-      strikethrough: { key: 'Ctrl+Shift+S', label: '删除线' },
-      codeBlock: { key: 'Ctrl+Shift+C', label: '代码块' },
+      inlineCode: { key: 'Ctrl+Shift+`', label: '行内代码' },
+      strikethrough: { key: 'Ctrl+Shift+5', label: '删除线' },
+      codeBlock: { key: 'Ctrl+Shift+K', label: '代码块' },
       blockquote: { key: 'Ctrl+Shift+Q', label: '引用块' },
       toggleView: { key: '', label: '切换视图' },
       toggleTheme: { key: 'Ctrl+Shift+T', label: '切换主题' },
       saveAs: { key: '', label: '另存为' },
       crossSearch: { key: 'Ctrl+H', label: '跨文件搜索' },
       insertTable: { key: '', label: '插入表格' },
-      insertImage: { key: '', label: '插入图片' },
+      insertImage: { key: 'Ctrl+Shift+I', label: '插入图片' },
       insertUl: { key: '', label: '无序列表' },
       insertOl: { key: '', label: '有序列表' },
       insertTask: { key: '', label: '任务列表' },
@@ -2602,13 +2650,13 @@ class MarkdownEditor {
       highlight: { key: '', label: '高亮标记' },
       insertSuperscript: { key: '', label: '上标' },
       insertSubscript: { key: '', label: '下标' },
-      insertH1: { key: '', label: '标题1' },
-      insertH2: { key: '', label: '标题2' },
-      insertH3: { key: '', label: '标题3' },
-      insertH4: { key: '', label: '标题4' },
-      insertH5: { key: '', label: '标题5' },
-      insertH6: { key: '', label: '标题6' },
-      insertMathBlock: { key: '', label: '数学公式' },
+      insertH1: { key: 'Ctrl+1', label: '标题1' },
+      insertH2: { key: 'Ctrl+2', label: '标题2' },
+      insertH3: { key: 'Ctrl+3', label: '标题3' },
+      insertH4: { key: 'Ctrl+4', label: '标题4' },
+      insertH5: { key: 'Ctrl+5', label: '标题5' },
+      insertH6: { key: 'Ctrl+6', label: '标题6' },
+      insertMathBlock: { key: 'Ctrl+Shift+M', label: '数学公式' },
       insertMermaid: { key: '', label: 'Mermaid 图表' },
       insertToc: { key: '', label: '目录' },
       insertCalloutNote: { key: '', label: 'Note 提示' },
@@ -2711,18 +2759,47 @@ class MarkdownEditor {
     this.renderShortcutsList();
   }
 
+  // 归一化单条快捷键：兼容旧版字符串格式、补齐缺失字段、损坏 key 回落默认，
+  // 自愈 localStorage 中残留的旧/损坏数据，确保加粗等键位不会因数据格式变更而丢失。
+  _normalizeShortcutEntry(raw, def) {
+    const dKey = def && def.key ? def.key : '';
+    const dLabel = def && def.label ? def.label : '';
+    if (raw == null) return { key: dKey, label: dLabel };
+    // 旧版曾把 bold 等存成字符串（"Ctrl+B"）而非 {key,label} 对象
+    if (typeof raw === 'string') {
+      const k = raw.trim();
+      return { key: k, label: dLabel };
+    }
+    if (typeof raw === 'object') {
+      let key = (typeof raw.key === 'string') ? raw.key.trim() : '';
+      if (key === '') key = dKey; // 旧数据 key 缺失/损坏 → 回落默认键（自愈）
+      const label = (typeof raw.label === 'string' && raw.label.trim()) ? raw.label.trim() : dLabel;
+      return { key, label };
+    }
+    return { key: dKey, label: dLabel };
+  }
+
+  // 以 defaults 为基准逐项归一化 saved：未知项丢弃、缺失项落默认、字符串/损坏项自愈。
+  _normalizeShortcuts(saved, defaults) {
+    const out = {};
+    for (const [aid, def] of Object.entries(defaults)) {
+      out[aid] = this._normalizeShortcutEntry(saved ? saved[aid] : undefined, def);
+    }
+    return out;
+  }
+
   loadShortcuts() {
     const defaults = this.getDefaultShortcuts();
     try {
-      const saved = this._validConfigObject(JSON.parse(localStorage.getItem('tizumark-shortcuts')));
-      const merged = { ...defaults, ...saved };
-      // 迁移：Ctrl+Shift+F 被中文输入法拦截，迁移到 Ctrl+H（不受输入法拦截）。
-      // 此前中间版本用过 Ctrl+Shift+L，也一并迁移到 Ctrl+H。
+      const parsed = JSON.parse(localStorage.getItem('tizumark-shortcuts'));
+      const saved = this._validConfigObject(parsed);
+      const merged = this._normalizeShortcuts(saved, defaults);
+      // 迁移：crossSearch 受输入法/保留键拦截的键位，统一迁到 Ctrl+H（不受输入法拦截）。
+      // 此前中间版本用过 Ctrl+Shift+F / Ctrl+Shift+L，也一并迁移到 Ctrl+H。
       if (merged.crossSearch && (merged.crossSearch.key === 'Ctrl+Shift+F' || merged.crossSearch.key === 'Ctrl+Shift+L')) {
         merged.crossSearch = { ...merged.crossSearch, key: 'Ctrl+H' };
       }
-      // 迁移：findReplace / previewFind 不再作为独立快捷键项（与 find 是同一功能），
-      // 若用户有保存的键位则清理。
+      // 迁移：findReplace / previewFind 不再作为独立快捷键项（与 find 是同一功能），清理残留。
       if (merged.findReplace) delete merged.findReplace;
       if (merged.previewFind) delete merged.previewFind;
       return merged;
@@ -2771,7 +2848,6 @@ class MarkdownEditor {
     // 必须点「确认」按钮才正式生效；未确认关闭面板后，重开仍读 localStorage 旧值。
     this.shortcuts = this.getDefaultShortcuts();
     this.shortcutScheme = 'default';
-    this.saveShortcutScheme('default');
     this.renderShortcutsList();
     this.setStatus(this.t('shortcutsReset'));
   }
@@ -3141,12 +3217,21 @@ class MarkdownEditor {
     }
     this.cm.setOption('extraKeys', extraKeys);
 
-    // Build global shortcut lookup for document-level handling
+    // Build global shortcut lookup for document-level handling.
+    // 全局动作（保存/查找等）在任何焦点下都派发；编辑器动作（加粗/标题等）包一层
+    // 「编辑器聚焦才执行」的守卫，这样无论 CodeMirror 自身的 extraKeys 派发是否生效
+    // （焦点/事件到达问题），都能通过全局捕获通道稳定触发，且不会在非编辑场景误触。
+    // 命中即 stopPropagation（见 document keydown 监听），事件不再冒泡到 CM，不会重复执行。
     this.globalShortcutLookup = {};
-    for (const [action, fn] of Object.entries(globalMap)) {
+    const registerGlobal = (action, fn, editorOnly) => {
       const key = s[action]?.key;
-      if (key) this.globalShortcutLookup[key] = fn;
-    }
+      if (!key) return;
+      this.globalShortcutLookup[key] = editorOnly
+        ? () => { if (this.cm && this.cm.hasFocus()) fn(); }
+        : fn;
+    };
+    for (const [action, fn] of Object.entries(globalMap)) registerGlobal(action, fn, false);
+    for (const [action, fn] of Object.entries(editorMap)) registerGlobal(action, fn, true);
 
     this.updateShortcutHints();
   }
@@ -4047,6 +4132,11 @@ class MarkdownEditor {
     document.getElementById('large-file-banner-close').addEventListener('click', () => {
       this.hideLargeFileNotice();
       this._largeFileNoticeDismissed = true;
+    });
+    // 「不再提醒」：本次应用运行期间彻底屏蔽大文档横幅（会话级，重启后复位）。
+    document.getElementById('large-file-banner-dont-remind').addEventListener('click', () => {
+      this._largeFileNoticeSessionSuppressed = true;
+      this.hideLargeFileNotice();
     });
     document.getElementById('about-close').addEventListener('click', () => this.hideAbout());
     document.getElementById('about-dialog').addEventListener('click', (e) => {

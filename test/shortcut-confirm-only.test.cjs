@@ -34,7 +34,7 @@ function extractMethod(s, name) {
 
 const methods = ['getDefaultShortcuts', 'loadShortcuts', 'loadShortcutScheme',
   'handleShortcutRecording', 'findDuplicateShortcut', 'clearShortcut', 'resetShortcuts',
-  'showShortcutsDialog', 'saveShortcuts'];
+  'showShortcutsDialog', 'saveShortcuts', '_normalizeShortcuts', '_normalizeShortcutEntry'];
 let methodSrc = methods.map(n => extractMethod(src, n)).join(',\n');
 // 包成对象字面量（方法简写），并附 _validConfigObject stub
 const factory = new Function('window', 'document', 'localStorage',
@@ -71,9 +71,9 @@ ok(inst.shortcutScheme === 'custom', '基线：scheme = custom');
 // ---- A. 录制单键：应仅改内存草稿，不落盘不应用 ----
 const savedBefore = localStorage.getItem('tizumark-shortcuts');
 inst.recordingAction = 'closeToTray';
-const ev = { key: 'K', ctrlKey: true, shiftKey: true, altKey: false, metaKey: false, preventDefault() {}, stopPropagation() {} };
+const ev = { key: 'K', ctrlKey: true, shiftKey: false, altKey: true, metaKey: false, preventDefault() {}, stopPropagation() {} };
 inst.handleShortcutRecording(ev);
-ok(inst.shortcuts.closeToTray.key === 'Ctrl+Shift+K', 'A: 录制后内存草稿 closeToTray = Ctrl+Shift+K');
+ok(inst.shortcuts.closeToTray.key === 'Ctrl+Alt+K', 'A: 录制后内存草稿 closeToTray = Ctrl+Alt+K');
 ok(inst.shortcutScheme === 'custom', 'A: 内存 scheme 标记 custom(预览)');
 ok(inst._applyCount === 0, 'A: 录制未调用 applyShortcuts(未生效)');
 ok(inst._toastCount === 0, 'A: 成功录制未弹占用提示');
