@@ -690,6 +690,23 @@
     </div>
   </div>
 
+  <!-- 通用输入对话框（文件树新建/重命名用，合并自 PR #36） -->
+  <div id="prompt-dialog" class="dialog-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="prompt-dialog-title">
+    <div class="dialog prompt-dialog">
+      <div class="dialog-header">
+        <h2 id="prompt-dialog-title">输入</h2>
+      </div>
+      <div class="dialog-content">
+        <p id="prompt-dialog-message"></p>
+        <input id="prompt-dialog-input" type="text" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="dialog-footer">
+        <button id="prompt-dialog-cancel" class="dialog-btn">取消</button>
+        <button id="prompt-dialog-confirm" class="dialog-btn dialog-btn-primary">确认</button>
+      </div>
+    </div>
+  </div>
+
   <div id="confirm-dialog" class="dialog-overlay hidden" role="dialog" aria-modal="true">
     <div class="dialog confirm-dialog">
       <div class="dialog-header">
@@ -850,6 +867,20 @@
       </div>
       <div class="dialog-footer">
         <button id="cs-run" class="dialog-btn dialog-btn-primary">搜索</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 文件搜索对话框 (VSCode 风格 Ctrl+P，合并自 PR #36) -->
+  <div id="file-search-dialog" class="dialog-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="file-search-title">
+    <div class="dialog file-search-dialog">
+      <div class="dialog-header">
+        <h2 id="file-search-title">文件搜索</h2>
+        <button class="dialog-close" id="file-search-close" aria-label="关闭">&times;</button>
+      </div>
+      <div class="dialog-content">
+        <input type="text" id="file-search-input" class="file-search-input" placeholder="输入文件名筛选..." />
+        <div id="file-search-list" class="file-search-list"></div>
       </div>
     </div>
   </div>
@@ -1161,6 +1192,23 @@
     <div class="context-menu-item" data-action="tab-copy-path"><span>复制文件路径</span></div>
   </div>
 
+  <!-- 文件树右键菜单：action 用 file- 前缀避免与编辑器菜单的 cut/copy/paste 冲突（合并自 PR #36） -->
+  <div id="context-menu-file-tree" class="context-menu hidden">
+    <div class="context-menu-item" data-action="file-new-file"><span>新建文件</span><span class="shortcut">Ctrl+Alt+N</span></div>
+    <div class="context-menu-item" data-action="file-new-folder"><span>新建文件夹</span><span class="shortcut">Ctrl+Shift+N</span></div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" data-action="file-cut"><span>剪切</span><span class="shortcut">Ctrl+X</span></div>
+    <div class="context-menu-item" data-action="file-copy"><span>复制</span><span class="shortcut">Ctrl+C</span></div>
+    <div class="context-menu-item" data-action="file-paste"><span>粘贴</span><span class="shortcut">Ctrl+V</span></div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" data-action="file-rename"><span>重命名</span><span class="shortcut">F2</span></div>
+    <div class="context-menu-item" data-action="file-copy-path"><span>复制路径</span></div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" data-action="folder-open-containing"><span id="folder-open-label">打开所在目录</span></div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" data-action="file-delete" style="color:var(--color-danger)"><span>删除</span><span class="shortcut">Delete</span></div>
+  </div>
+
   <!-- 文件目录右键菜单 -->
   <div id="context-menu-folder" class="context-menu hidden">
     <div class="context-menu-item" data-action="folder-open-containing"><span id="folder-open-label">打开所在目录</span></div>
@@ -1188,6 +1236,7 @@
 <script src="modules/find-replace.js"></script>
 <script src="modules/preview-window.js"></script>
 <script src="modules/tauri-api.js"></script>
+<script src="modules/file-search.js"></script>
 <script src="modules/image-processor.js"></script>
 <script src="controllers/preview-controller.js"></script>
 <script src="app.js"></script>

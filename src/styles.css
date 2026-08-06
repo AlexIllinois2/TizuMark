@@ -2793,6 +2793,15 @@ body.is-resizing .side-btn {
   color: var(--accent-text);
 }
 
+/* 文件树右键菜单禁用项（合并自 PR #36）：无 hover 高亮，灰显 */
+.context-menu-item.disabled,
+.context-menu-item.disabled:hover {
+  color: var(--text-tertiary, #999);
+  background-color: transparent;
+  cursor: default;
+  opacity: 0.55;
+}
+
 .context-menu-item:hover .shortcut {
   color: rgba(255, 255, 255, 0.75);
 }
@@ -2992,6 +3001,60 @@ body.is-resizing .side-btn {
 .dialog-btn.is-loading {
   pointer-events: none;
   opacity: 0.9;
+}
+
+/* 文件搜索对话框 (VSCode 风格 Ctrl+P，合并自 PR #36) */
+.file-search-dialog {
+  width: 520px;
+  max-width: 90vw;
+}
+.file-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid var(--border-color, #d0d0d0);
+  border-radius: 6px;
+  background: var(--input-bg, #fff);
+  color: var(--text-color, #222);
+  outline: none;
+}
+.file-search-input:focus {
+  border-color: var(--accent-color, #4a90d9);
+}
+.file-search-list {
+  margin-top: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.file-search-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-color, #222);
+}
+.file-search-item .fs-icon {
+  flex: 0 0 auto;
+  color: var(--text-secondary, #888);
+}
+.file-search-item span:nth-child(2) {
+  flex: 0 0 auto;
+  font-weight: 500;
+}
+.file-search-item .fs-path {
+  flex: 1 1 auto;
+  color: var(--text-secondary, #888);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-search-item.selected,
+.file-search-item:hover {
+  background: var(--accent-soft, #e8f0fb);
 }
 
 /* 关闭窗口确认对话框 */

@@ -252,7 +252,7 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: '本软件基于 GPL v3 开源协议发布。',
     noUnauthorized: '欢迎自由使用、修改和分发，衍生作品须延续 GPL v3 协议。',
-    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要', closeToTray: '关闭到托盘' },
+    shortcutLabel: { newFile: '新建文件', openFile: '打开文件', saveFile: '保存文件', closeTab: '关闭标签页', find: '查找替换', crossSearch: '跨文件搜索', nextTab: '下一个标签页', prevTab: '上一个标签页', bold: '加粗', italic: '斜体', insertLink: '插入链接', exportPDF: '导出 PDF', inlineCode: '行内代码', strikethrough: '删除线', codeBlock: '代码块', blockquote: '引用块', toggleView: '切换视图', toggleSidebar: '切换侧边栏', toggleTheme: '切换主题', saveAs: '另存为', insertTable: '插入表格', insertImage: '插入图片', insertUl: '无序列表', insertOl: '有序列表', insertTask: '任务列表', insertHr: '水平线', highlight: '高亮标记', insertSuperscript: '上标', insertSubscript: '下标', insertH1: '标题1', insertH2: '标题2', insertH3: '标题3', insertH4: '标题4', insertH5: '标题5', insertH6: '标题6', insertMathBlock: '数学公式', insertMermaid: 'Mermaid 图表', insertToc: '目录', insertCalloutNote: 'Note 提示', insertCalloutTip: 'Tip 建议', insertCalloutWarning: 'Warning 警告', insertCalloutCaution: 'Caution 注意',     insertCalloutImportant: 'Important 重要', moveLineUp: '上移行/选区', moveLineDown: '下移行/选区', fileSearch: '文件搜索', closeToTray: '关闭到托盘' },
     shortcutGroup: { file: '文件', search: '查找与搜索', tabView: '标签页与视图', format: '文本格式', insert: '插入', heading: '标题', callout: '提示块' },
     shortcutScheme: '快捷键方案',
     shortcutList: '快捷键',
@@ -463,6 +463,28 @@ const I18N = {
     switchWorkspaceTitle: '切换工作区',
     switchWorkspaceMsg: '当前已打开工作区，是否切换到 {path}？',
     sidebar: '侧边栏',
+    // 文件树右键操作（合并自 PR #36）
+    fileNewFile: '新建文件',
+    newFileNamePrompt: '文件名称（含扩展名，如 note.md）',
+    fileNewFolder: '新建文件夹',
+    newFolderNamePrompt: '文件夹名称',
+    fileCreateFailed: '创建失败',
+    nameExists: '已存在同名文件或文件夹',
+    nameEmpty: '名称不能为空',
+    nameInvalid: '名称包含非法字符（/ \\ : * ? " < > |）',
+    fileRename: '重命名',
+    renamePrompt: '新名称',
+    fileRenameFailed: '重命名失败',
+    fileDelete: '删除',
+    confirmDeleteFolder: '确定要删除文件夹「{name}」及其所有内容吗？此操作不可撤销。',
+    confirmDeleteFile: '确定要删除文件「{name}」吗？',
+    fileDeleteFailed: '删除失败',
+    fileCutDone: '已剪切到剪贴板',
+    fileCopyDone: '已复制到剪贴板',
+    clipboardEmpty: '剪贴板为空',
+    pasteIntoSelf: '不能将目录粘贴到自身或其子目录内',
+    filePasteDone: '已粘贴',
+    fileCopyPath: '复制路径',
   },
   en: {
     file: 'File',
@@ -653,7 +675,7 @@ const I18N = {
     copyrightLine: 'Copyright (c) 2024-2026 TizuMark',
     proprietary: 'This software is released under the GPL v3 open-source license.',
     noUnauthorized: 'Free to use, modify, and distribute. Derivative works must remain under GPL v3.',
-    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important', closeToTray: 'Hide to tray' },
+    shortcutLabel: { newFile: 'New File', openFile: 'Open File', saveFile: 'Save File', closeTab: 'Close Tab', find: 'Find & Replace', crossSearch: 'Cross-file Search', nextTab: 'Next Tab', prevTab: 'Previous Tab', bold: 'Bold', italic: 'Italic', insertLink: 'Insert Link', exportPDF: 'Export PDF', inlineCode: 'Inline Code', strikethrough: 'Strikethrough', codeBlock: 'Code Block', blockquote: 'Blockquote', toggleView: 'Toggle View', toggleSidebar: 'Toggle Sidebar', toggleTheme: 'Toggle Theme', saveAs: 'Save As', insertTable: 'Insert Table', insertImage: 'Insert Image', insertUl: 'Unordered List', insertOl: 'Ordered List', insertTask: 'Task List', insertHr: 'Horizontal Rule', highlight: 'Highlight', insertSuperscript: 'Superscript', insertSubscript: 'Subscript', insertH1: 'Heading 1', insertH2: 'Heading 2', insertH3: 'Heading 3', insertH4: 'Heading 4', insertH5: 'Heading 5', insertH6: 'Heading 6', insertMathBlock: 'Math Block', insertMermaid: 'Mermaid Diagram', insertToc: 'Table of Contents', insertCalloutNote: 'Callout Note', insertCalloutTip: 'Callout Tip', insertCalloutWarning: 'Callout Warning', insertCalloutCaution: 'Callout Caution',     insertCalloutImportant: 'Callout Important', moveLineUp: 'Move Line/Selection Up', moveLineDown: 'Move Line/Selection Down', fileSearch: 'File Search', closeToTray: 'Hide to tray' },
     shortcutGroup: { file: 'File', search: 'Find & Search', tabView: 'Tabs & View', format: 'Text Format', insert: 'Insert', heading: 'Headings', callout: 'Callouts' },
     shortcutScheme: 'Shortcut Scheme',
     shortcutList: 'Shortcuts',
@@ -865,6 +887,28 @@ const I18N = {
     switchWorkspaceTitle: 'Switch Workspace',
     switchWorkspaceMsg: 'A workspace is already open. Switch to {path}?',
     sidebar: 'Sidebar',
+    // 文件树右键操作（合并自 PR #36）
+    fileNewFile: 'New File',
+    newFileNamePrompt: 'File name (with extension, e.g. note.md)',
+    fileNewFolder: 'New Folder',
+    newFolderNamePrompt: 'Folder name',
+    fileCreateFailed: 'Create failed',
+    nameExists: 'A file or folder with this name already exists',
+    nameEmpty: 'Name cannot be empty',
+    nameInvalid: 'Name contains invalid characters (/ \\ : * ? " < > |)',
+    fileRename: 'Rename',
+    renamePrompt: 'New name',
+    fileRenameFailed: 'Rename failed',
+    fileDelete: 'Delete',
+    confirmDeleteFolder: 'Delete folder "{name}" and all its contents? This cannot be undone.',
+    confirmDeleteFile: 'Delete file "{name}"?',
+    fileDeleteFailed: 'Delete failed',
+    fileCutDone: 'Cut to clipboard',
+    fileCopyDone: 'Copied to clipboard',
+    clipboardEmpty: 'Clipboard is empty',
+    pasteIntoSelf: 'Cannot paste a folder into itself or its subdirectory',
+    filePasteDone: 'Pasted',
+    fileCopyPath: 'Copy Path',
   }
 };
 
@@ -880,6 +924,10 @@ class MarkdownEditor {
     this.cm = null;
     this.workspaceFolder = null;
     this.expandedFolders = new Set();
+    // 文件树右键菜单状态（合并自 PR #36）：_fileTreeCtx 为当前右键/点击目标 {path, isDir, nodeEl}；
+    // _fileClipboard 为剪切/复制状态 {op:'cut'|'copy', path, isDir}，粘贴时据此调用 move/copy
+    this._fileTreeCtx = null;
+    this._fileClipboard = null;
     this.debounceTimer = null;
     this._imageURLCache = new Map(); // dataUri → Blob URL（LRU，上限 _imageURLCacheMax，超限 revoke）
     this._imageURLCacheMax = 64;
@@ -929,6 +977,8 @@ class MarkdownEditor {
     this.initEventListeners();
     this.initResizer();
     this.initFindReplace();
+    this.applyPreviewPaneWidth();
+    this.initFileSearchModule();
     this.initScrollTopBtn();
     this.initExternalLinks();
     this.initDragDrop();
@@ -1588,6 +1638,8 @@ class MarkdownEditor {
       previewFont: '',
       fileSortKey: 'name',
       fileSortOrder: 'asc',
+      // 预览区分屏宽度（合并自 PR #36）：拖拽 resizer 后持久化，下次启动按此还原。
+      previewPaneWidth: 360,
     };
   }
 
@@ -2547,12 +2599,13 @@ class MarkdownEditor {
       bold: { key: 'Ctrl+B', label: '加粗' },
       italic: { key: 'Ctrl+I', label: '斜体' },
       insertLink: { key: 'Ctrl+K', label: '插入链接' },
-      exportPDF: { key: 'Ctrl+P', label: '导出 PDF' },
+      exportPDF: { key: 'Ctrl+Shift+P', label: '导出 PDF' },
       inlineCode: { key: 'Ctrl+Shift+`', label: '行内代码' },
       strikethrough: { key: 'Ctrl+Shift+5', label: '删除线' },
       codeBlock: { key: 'Ctrl+Shift+K', label: '代码块' },
       blockquote: { key: 'Ctrl+Shift+Q', label: '引用块' },
       toggleView: { key: '', label: '切换视图' },
+      toggleSidebar: { key: '', label: '切换侧边栏' },
       toggleTheme: { key: 'Ctrl+Shift+T', label: '切换主题' },
       saveAs: { key: '', label: '另存为' },
       crossSearch: { key: 'Ctrl+H', label: '跨文件搜索' },
@@ -2580,6 +2633,11 @@ class MarkdownEditor {
       insertCalloutCaution: { key: '', label: 'Caution 注意' },
       insertCalloutImportant: { key: '', label: 'Important 重要' },
       closeToTray: { key: '', label: '关闭到托盘' },
+      // 文件树/编辑器增强（合并自 PR #36）：文件搜索为 VS Code 风格 Ctrl+P，
+      // 原 Ctrl+P 的「导出 PDF」迁到 Ctrl+Shift+P（见 loadShortcuts 迁移逻辑）。
+      fileSearch: { key: 'Ctrl+P', label: '文件搜索' },
+      moveLineUp: { key: 'Alt+Up', label: '上移行/选区' },
+      moveLineDown: { key: 'Alt+Down', label: '下移行/选区' },
     };
   }
 
@@ -2591,14 +2649,17 @@ class MarkdownEditor {
         newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', saveAs:'Ctrl+Shift+S',
         closeTab:'Ctrl+W', find:'Ctrl+F', crossSearch:'Ctrl+H',
         nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
-        bold:'Ctrl+B', italic:'Ctrl+I', inlineCode:'Ctrl+`', insertLink:'Ctrl+K',
-        insertMathBlock:'Ctrl+Shift+M', toggleTheme:'Ctrl+Shift+T', exportPDF:'Ctrl+P',
+        bold:'', italic:'Ctrl+I', inlineCode:'Ctrl+`', insertLink:'Ctrl+K',
+        insertMathBlock:'Ctrl+Shift+M', toggleTheme:'Ctrl+Shift+T', fileSearch:'Ctrl+P',
+        // VS Code 特色绑定（合并自 PR #36）：Ctrl+B 切换侧边栏（与 bold 冲突，bold 留空可自定义）；
+        // Ctrl+P 为文件搜索（VS Code Quick Open），原「导出 PDF」迁到 Ctrl+Shift+P（见 default 方案）。
+        toggleSidebar:'Ctrl+B',
       },
       typora: {
         newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', closeTab:'Ctrl+W',
         find:'Ctrl+F', crossSearch:'Ctrl+H',
         nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
-        bold:'Ctrl+B', italic:'Ctrl+I', insertLink:'Ctrl+K', exportPDF:'Ctrl+P',
+        bold:'Ctrl+B', italic:'Ctrl+I', insertLink:'Ctrl+K', exportPDF:'Ctrl+P', fileSearch:'',
         inlineCode:'Ctrl+Shift+`', strikethrough:'Ctrl+Shift+5', codeBlock:'Ctrl+Shift+K',
         blockquote:'Ctrl+Shift+Q', toggleTheme:'Ctrl+Shift+T',
         insertImage:'Ctrl+Shift+I', insertMathBlock:'Ctrl+Shift+M',
@@ -2609,7 +2670,7 @@ class MarkdownEditor {
         newFile:'Ctrl+N', openFile:'Ctrl+O', saveFile:'Ctrl+S', saveAs:'Ctrl+Shift+S',
         closeTab:'Ctrl+W', find:'Ctrl+F', crossSearch:'Ctrl+H',
         nextTab:'Ctrl+Tab', prevTab:'Ctrl+Shift+Tab',
-        exportPDF:'Ctrl+P', toggleTheme:'Ctrl+Shift+T',
+        exportPDF:'Ctrl+P', toggleTheme:'Ctrl+Shift+T', fileSearch:'',
       },
     };
   }
@@ -2712,6 +2773,11 @@ class MarkdownEditor {
       // 迁移：findReplace / previewFind 不再作为独立快捷键项（与 find 是同一功能），清理残留。
       if (merged.findReplace) delete merged.findReplace;
       if (merged.previewFind) delete merged.previewFind;
+      // 迁移：fileSearch 现占用 Ctrl+P（VS Code Quick Open 风格），若用户旧配置仍把
+      // exportPDF 绑在 Ctrl+P（旧默认），将 exportPDF 迁到 Ctrl+Shift+P，避免二者冲突。
+      if (merged.fileSearch && merged.fileSearch.key === 'Ctrl+P' && merged.exportPDF && merged.exportPDF.key === 'Ctrl+P') {
+        merged.exportPDF = { ...merged.exportPDF, key: 'Ctrl+Shift+P' };
+      }
       return merged;
     } catch {
       return defaults;
@@ -2835,9 +2901,9 @@ class MarkdownEditor {
     // 按功能分组展示，便于在长列表中查找
     const groups = [
       { key: 'file', ids: ['newFile', 'openFile', 'saveFile', 'saveAs', 'closeTab', 'exportPDF', 'closeToTray'] },
-      { key: 'search', ids: ['find', 'crossSearch'] },
-      { key: 'tabView', ids: ['nextTab', 'prevTab', 'toggleView', 'toggleTheme'] },
-      { key: 'format', ids: ['bold', 'italic', 'strikethrough', 'inlineCode', 'highlight', 'insertSuperscript', 'insertSubscript'] },
+      { key: 'search', ids: ['find', 'crossSearch', 'fileSearch'] },
+      { key: 'tabView', ids: ['nextTab', 'prevTab', 'toggleView', 'toggleSidebar', 'toggleTheme'] },
+      { key: 'format', ids: ['bold', 'italic', 'strikethrough', 'inlineCode', 'highlight', 'insertSuperscript', 'insertSubscript', 'moveLineUp', 'moveLineDown'] },
       { key: 'insert', ids: ['insertLink', 'insertImage', 'insertTable', 'insertUl', 'insertOl', 'insertTask', 'insertHr', 'codeBlock', 'blockquote', 'insertMathBlock', 'insertMermaid', 'insertToc'] },
       { key: 'heading', ids: ['insertH1', 'insertH2', 'insertH3', 'insertH4', 'insertH5', 'insertH6'] },
       { key: 'callout', ids: ['insertCalloutNote', 'insertCalloutTip', 'insertCalloutWarning', 'insertCalloutCaution', 'insertCalloutImportant'] },
@@ -3031,9 +3097,14 @@ class MarkdownEditor {
       'Shift-Tab': (cm) => cm.indentSelection('subtract'),
     });
 
+    // 把 DOM 键名规范化为 CodeMirror 5 的 keyName（CM5 用 'Up'/'Down' 而非 'ArrowUp'，
+    // 用 'Esc' 而非 'Escape'）。否则录 Alt+ArrowUp 注册成 'Alt-ArrowUp'，而 CM 查找
+    // 'Alt-Up'，handler 永不触发（合并自 PR #36 的行移动功能配套修正）。
+    const KEY_ALIAS = { ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Escape: 'Esc', ' ': 'Space' };
     const toCmKey = (k) => {
       const parts = k.split('+');
-      const key = parts.pop();
+      let key = parts.pop();
+      key = KEY_ALIAS[key] || key;
       const order = { Shift: 0, Ctrl: 1, Alt: 2, Cmd: 3, Meta: 3 };
       parts.sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99));
       return parts.concat([key]).join('-');
@@ -3071,6 +3142,9 @@ class MarkdownEditor {
       insertCalloutWarning: () => this.executeMenuAction('insert-callout-warning'),
       insertCalloutCaution: () => this.executeMenuAction('insert-callout-caution'),
       insertCalloutImportant: () => this.executeMenuAction('insert-callout-important'),
+      // 行/选区上下移动（合并自 PR #36）：CM5 核心无 moveLineUp/Down 命令，自实现 _moveLine。
+      moveLineUp: () => this._moveLine(-1),
+      moveLineDown: () => this._moveLine(1),
     };
 
     // Global actions (work anywhere via document keydown handler)
@@ -3082,9 +3156,11 @@ class MarkdownEditor {
       exportPDF: () => this.exportPDF(),
       saveAs: () => this.saveAsFile(),
       toggleView: () => this.toggleViewMode(),
+      toggleSidebar: () => this.toggleSidebar(),
       toggleTheme: () => this.toggleTheme(),
       find: () => this.toggleFindPanel(),
       crossSearch: () => this.openCrossSearchDialog(),
+      fileSearch: () => this.openFileSearchDialog(),
       nextTab: () => {
         const next = (this.activeTabIndex + 1) % this.tabs.length;
         this.switchTab(next);
@@ -3137,6 +3213,55 @@ class MarkdownEditor {
 
   get activeTab() {
     return this.tabs[this.activeTabIndex];
+  }
+
+  // 上下移动当前行/选中行块（CM5 核心无 moveLineUp/Down 命令，自实现，合并自 PR #36）。
+  // dir=-1：与上一行交换块（上移）；dir=+1：与下一行交换块（下移）。
+  // 无选区移当前单行；有选区移选中范围内所有行；块到达文档边界时 no-op。
+  // 选区/光标的 ch 与方向跟随整体平移，保持原有选择语义。
+  _moveLine(dir) {
+    const cm = this.cm;
+    if (!cm) return;
+    const sel = cm.listSelections()[0];
+    if (!sel) return;
+    const fromLine = Math.min(sel.anchor.line, sel.head.line);
+    const toLine = Math.max(sel.anchor.line, sel.head.line);
+    const last = cm.lastLine();
+    if (dir < 0 && fromLine === 0) return;        // 已在第一行
+    if (dir > 0 && toLine === last) return;       // 已在最后一行
+    cm.operation(() => {
+      // 取出待移动块（fromLine..toLine）的文本
+      const block = [];
+      for (let i = fromLine; i <= toLine; i++) block.push(cm.getLine(i));
+      const blockText = block.join('\n');
+      if (dir < 0) {
+        // 上移：与上一行交换。替换为 block + '\n' + 上一行 → 块整体上移一行，原上一行落到块尾
+        const aboveText = cm.getLine(fromLine - 1);
+        cm.replaceRange(
+          blockText + '\n' + aboveText,
+          { line: fromLine - 1, ch: 0 },
+          { line: toLine, ch: cm.getLine(toLine).length }
+        );
+        // 块新位置 fromLine-1..toLine-1：选区整体上移一行
+        cm.setSelection(
+          { line: sel.anchor.line - 1, ch: sel.anchor.ch },
+          { line: sel.head.line - 1, ch: sel.head.ch }
+        );
+      } else {
+        // 下移：与下一行交换。替换为 下一行 + '\n' + block → 块整体下移一行，原下一行升到块首
+        const belowText = cm.getLine(toLine + 1);
+        cm.replaceRange(
+          belowText + '\n' + blockText,
+          { line: fromLine, ch: 0 },
+          { line: toLine + 1, ch: cm.getLine(toLine + 1).length }
+        );
+        // 块新位置 fromLine+1..toLine+1：选区整体下移一行
+        cm.setSelection(
+          { line: sel.anchor.line + 1, ch: sel.anchor.ch },
+          { line: sel.head.line + 1, ch: sel.head.ch }
+        );
+      }
+    });
   }
 
   initEditor() {
@@ -4030,6 +4155,34 @@ class MarkdownEditor {
     document.addEventListener('keydown', (e) => {
       if (this.handleShortcutRecording(e)) return;
 
+      // 文件树右键菜单快捷键（合并自 PR #36）：_fileTreeCtx 存在时，F2/Delete/Ctrl+X/C/V 对其生效。
+      // 编辑器聚焦时 Ctrl+X/C/V 让 CodeMirror 处理；F2/Delete 始终对文件树生效（编辑器不占用）。
+      if (this._fileTreeCtx) {
+        const inEditor = e.target.closest('.CodeMirror');
+        const inInput = e.target.closest('input, textarea, select');
+        if (!inInput) {
+          const ctrl = e.ctrlKey || e.metaKey;
+          if (e.key === 'F2') { e.preventDefault(); this.fileTreeRename(); return; }
+          if (e.key === 'Delete') { e.preventDefault(); this.fileTreeDelete(); return; }
+          if (ctrl && !e.shiftKey && !e.altKey && !inEditor) {
+            const k = e.key.toLowerCase();
+            if (k === 'x') { e.preventDefault(); this.fileTreeCut(); return; }
+            if (k === 'c') { e.preventDefault(); this.fileTreeCopy(); return; }
+            if (k === 'v') { e.preventDefault(); this.fileTreePaste(); return; }
+          }
+          if (ctrl && e.altKey && !e.shiftKey && e.key.toLowerCase() === 'n') {
+            e.preventDefault();
+            if (this._fileTreeCtx.isDir) this.fileTreeNewFile();
+            return;
+          }
+          if (ctrl && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'n') {
+            e.preventDefault();
+            if (this._fileTreeCtx.isDir) this.fileTreeNewFolder();
+            return;
+          }
+        }
+      }
+
       if (/^F(1[0-2]|[1-9])$/.test(e.key)) {
         e.preventDefault();
         return;
@@ -4131,6 +4284,11 @@ class MarkdownEditor {
       if (!isResizing) return;
       isResizing = false;
       document.body.classList.remove('is-resizing');
+      // 保存预览区宽度到设置（合并自 PR #36）
+      const pw = previewPane.getBoundingClientRect().width;
+      this.settings.previewPaneWidth = Math.round(pw);
+      this.saveSettings();
+      document.documentElement.style.setProperty('--preview-pane-width', Math.round(pw) + 'px');
     };
 
     resizer.addEventListener('mousedown', (e) => {
@@ -4143,6 +4301,41 @@ class MarkdownEditor {
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+  }
+
+  // 应用已保存的预览区宽度（合并自 PR #36）：分屏模式下按 settings.previewPaneWidth 还原布局。
+  // 纯预览/编辑器折叠/预览折叠由 CSS 类控制，禁止用用户分屏宽度覆盖，否则占不满且留空白。
+  applyPreviewPaneWidth() {
+    const container = document.querySelector('.editor-container');
+    if (!container) return;
+    if (container.classList.contains('preview-mode')
+        || container.classList.contains('editor-collapsed')
+        || container.classList.contains('preview-collapsed')) return;
+    const pw = this.settings.previewPaneWidth;
+    if (!pw) return;
+    const editorPane = document.getElementById('editor-pane');
+    const previewPane = document.getElementById('preview-pane');
+    if (!editorPane || !previewPane) return;
+    const outlineSidebar = document.getElementById('outline-sidebar');
+    const resizer = document.getElementById('resizer');
+    const outlineWidth = outlineSidebar && outlineSidebar.classList.contains('hidden') ? 0 : (outlineSidebar ? outlineSidebar.offsetWidth : 0);
+    const resizerWidth = resizer ? resizer.offsetWidth : 6;
+    const totalContentWidth = container.offsetWidth - outlineWidth - resizerWidth;
+    if (totalContentWidth <= 0) return;
+    const editorWidth = totalContentWidth - pw;
+    const editorRatio = (editorWidth / totalContentWidth);
+    if (editorRatio > 0.1 && editorRatio < 0.9) {
+      editorPane.style.flex = editorRatio.toFixed(4) + ' 0 0px';
+      previewPane.style.flex = (1 - editorRatio).toFixed(4) + ' 0 0px';
+      this._editorPercent = editorRatio * 100;
+    } else {
+      // 比例超出范围时，直接用预设宽度设置预览区
+      previewPane.style.flex = '0 0 auto';
+      previewPane.style.width = pw + 'px';
+      editorPane.style.flex = '1 1 0px';
+      this._editorPercent = ((totalContentWidth - pw) / totalContentWidth) * 100;
+    }
+    document.documentElement.style.setProperty('--preview-pane-width', pw + 'px');
   }
 
   initFindReplace() {
@@ -4718,6 +4911,16 @@ class MarkdownEditor {
     if (this.cm && this.cm.somethingSelected()) q.value = this.cm.getSelection();
     q.focus();
     q.select();
+  }
+
+  // 文件搜索（VS Code 风格 Ctrl+P，合并自 PR #36）：委托给 modules/file-search.js 的全局函数。
+  // 该模块负责扫描工作区、渲染列表与键盘导航；此处仅做初始化与入口转发，保持 IPC 收敛在模块内。
+  openFileSearchDialog() {
+    if (typeof openFileSearchDialog === 'function') openFileSearchDialog();
+  }
+
+  initFileSearchModule() {
+    if (typeof initFileSearch === 'function') initFileSearch();
   }
 
   initCrossSearch() {
@@ -6055,6 +6258,274 @@ class MarkdownEditor {
     span.textContent = this.t(this._folderCtxIsDir ? 'openFolder' : 'openContainingFolder');
   }
 
+  // ====== 文件树右键菜单：状态更新 + 辅助方法 + 操作（合并自 PR #36）======
+  // 注意：IPC 全部走 TauriApi（ADR-1 唯一边界），不直接 invoke。
+
+  // 根据当前右键目标和剪贴板状态更新菜单项禁用状态
+  updateFileTreeMenuState() {
+    const menu = document.getElementById('context-menu-file-tree');
+    if (!menu) return;
+    const ctx = this._fileTreeCtx;
+    const isDir = ctx ? ctx.isDir : false;
+    const setDisabled = (action, disabled) => {
+      const item = menu.querySelector(`[data-action="${action}"]`);
+      if (item) item.classList.toggle('disabled', disabled);
+    };
+    setDisabled('file-new-file', !isDir);
+    setDisabled('file-new-folder', !isDir);
+    setDisabled('file-paste', !isDir || !this._fileClipboard);
+    if (!ctx) {
+      ['file-cut', 'file-copy', 'file-rename', 'file-copy-path', 'file-delete'].forEach(a => setDisabled(a, true));
+    }
+  }
+
+  // 通用输入对话框：返回用户输入的字符串（trim），取消返回 null
+  showPromptDialog({ title, message = '', value = '', placeholder = '', selectBase = false }) {
+    return new Promise((resolve) => {
+      const dialog = document.getElementById('prompt-dialog');
+      const titleEl = document.getElementById('prompt-dialog-title');
+      const msgEl = document.getElementById('prompt-dialog-message');
+      const input = document.getElementById('prompt-dialog-input');
+      const confirmBtn = document.getElementById('prompt-dialog-confirm');
+      const cancelBtn = document.getElementById('prompt-dialog-cancel');
+      if (!dialog || !input) { resolve(null); return; }
+      titleEl.textContent = title || '';
+      msgEl.textContent = message;
+      msgEl.style.display = message ? '' : 'none';
+      input.value = value;
+      input.placeholder = placeholder;
+      dialog.classList.remove('hidden');
+      input.focus();
+      if (selectBase && value) {
+        const dot = value.lastIndexOf('.');
+        if (dot > 0) input.setSelectionRange(0, dot);
+        else input.select();
+      } else {
+        input.select();
+      }
+      const cleanup = () => {
+        dialog.classList.add('hidden');
+        input.removeEventListener('keydown', onKey);
+        confirmBtn.removeEventListener('click', onConfirm);
+        cancelBtn.removeEventListener('click', onCancel);
+        dialog.removeEventListener('click', onOverlay);
+      };
+      const onConfirm = () => { const v = input.value.trim(); cleanup(); resolve(v || null); };
+      const onCancel = () => { cleanup(); resolve(null); };
+      const onKey = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+        else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+      };
+      const onOverlay = (e) => { if (e.target === dialog) onCancel(); };
+      input.addEventListener('keydown', onKey);
+      confirmBtn.addEventListener('click', onConfirm);
+      cancelBtn.addEventListener('click', onCancel);
+      dialog.addEventListener('click', onOverlay);
+    });
+  }
+
+  validateFileName(name) {
+    if (!name || !name.trim()) return this.t('nameEmpty');
+    if (/[\/\\:*?"<>|]/.test(name)) return this.t('nameInvalid');
+    return null;
+  }
+
+  joinPath(parent, name) {
+    if (!parent) return name;
+    return parent.replace(/[\/\\]+$/, '') + '/' + name;
+  }
+
+  parentPath(path) {
+    const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    return idx > 0 ? path.substring(0, idx) : '';
+  }
+
+  baseName(path) {
+    const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    return idx >= 0 ? path.substring(idx + 1) : path;
+  }
+
+  async pathExists(path) {
+    try {
+      const parent = this.parentPath(path);
+      const name = this.baseName(path);
+      if (!parent) return false;
+      const entries = await TauriApi.listDir({ path: parent });
+      return entries.some(e => e.name === name);
+    } catch { return false; }
+  }
+
+  async fileTreeNewFile() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx || !ctx.isDir) return;
+    const name = await this.showPromptDialog({
+      title: this.t('fileNewFile'),
+      message: this.t('newFileNamePrompt'),
+      placeholder: 'note.md'
+    });
+    if (name === null) return;
+    const err = this.validateFileName(name);
+    if (err) { this.showToast(err, 'danger'); return; }
+    const newPath = this.joinPath(ctx.path, name);
+    if (await this.pathExists(newPath)) { this.showToast(this.t('nameExists'), 'danger'); return; }
+    try {
+      await TauriApi.writeFile({ path: newPath, content: '' });
+      this.expandedFolders.add(ctx.path);
+      this.renderFolderTree();
+      this.setStatus(this.t('fileNewFile') + ': ' + name);
+    } catch (e) {
+      this.showToast(this.t('fileCreateFailed') + ': ' + e, 'danger');
+    }
+  }
+
+  async fileTreeNewFolder() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx || !ctx.isDir) return;
+    const name = await this.showPromptDialog({
+      title: this.t('fileNewFolder'),
+      message: this.t('newFolderNamePrompt'),
+      placeholder: 'new-folder'
+    });
+    if (name === null) return;
+    const err = this.validateFileName(name);
+    if (err) { this.showToast(err, 'danger'); return; }
+    const newPath = this.joinPath(ctx.path, name);
+    if (await this.pathExists(newPath)) { this.showToast(this.t('nameExists'), 'danger'); return; }
+    try {
+      await TauriApi.ensureDir({ path: newPath });
+      this.expandedFolders.add(ctx.path);
+      this.renderFolderTree();
+      this.setStatus(this.t('fileNewFolder') + ': ' + name);
+    } catch (e) {
+      this.showToast(this.t('fileCreateFailed') + ': ' + e, 'danger');
+    }
+  }
+
+  async fileTreeRename() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx) return;
+    const oldName = this.baseName(ctx.path);
+    const newName = await this.showPromptDialog({
+      title: this.t('fileRename'),
+      message: this.t('renamePrompt'),
+      value: oldName,
+      selectBase: true
+    });
+    if (newName === null) return;
+    const err = this.validateFileName(newName);
+    if (err) { this.showToast(err, 'danger'); return; }
+    if (newName === oldName) return;
+    const parent = this.parentPath(ctx.path);
+    const newPath = this.joinPath(parent, newName);
+    if (await this.pathExists(newPath)) { this.showToast(this.t('nameExists'), 'danger'); return; }
+    try {
+      await TauriApi.renamePath({ from: ctx.path, to: newPath });
+      const tab = this.tabs.find(t => t.filePath === ctx.path);
+      if (tab) {
+        tab.filePath = newPath;
+        tab.name = newName;
+        this.updateTabBar();
+        this.saveSession();
+      }
+      this.renderFolderTree();
+      this.setStatus(this.t('fileRename') + ': ' + oldName + ' → ' + newName);
+    } catch (e) {
+      this.showToast(this.t('fileRenameFailed') + ': ' + e, 'danger');
+    }
+  }
+
+  async fileTreeDelete() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx) return;
+    const name = this.baseName(ctx.path);
+    const msg = ctx.isDir
+      ? this.t('confirmDeleteFolder', { name })
+      : this.t('confirmDeleteFile', { name });
+    const ok = await this.showConfirmDialog(this.t('fileDelete'), msg);
+    if (!ok) return;
+    try {
+      await TauriApi.removePath({ path: ctx.path });
+      const tabIdx = this.tabs.findIndex(t => t.filePath === ctx.path);
+      if (tabIdx >= 0) await this.closeTab(tabIdx);
+      this.renderFolderTree();
+      this.setStatus(this.t('fileDelete') + ': ' + name);
+    } catch (e) {
+      this.showToast(this.t('fileDeleteFailed') + ': ' + e, 'danger');
+    }
+  }
+
+  fileTreeCut() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx) return;
+    this._fileClipboard = { op: 'cut', path: ctx.path, isDir: ctx.isDir };
+    this.setStatus(this.t('fileCutDone') + ': ' + this.baseName(ctx.path));
+  }
+
+  fileTreeCopy() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx) return;
+    this._fileClipboard = { op: 'copy', path: ctx.path, isDir: ctx.isDir };
+    this.setStatus(this.t('fileCopyDone') + ': ' + this.baseName(ctx.path));
+  }
+
+  async fileTreePaste() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx || !ctx.isDir || !this._fileClipboard) {
+      this.showToast(this.t('clipboardEmpty'), 'danger');
+      return;
+    }
+    const clip = this._fileClipboard;
+    // 安全检查：禁止把目录复制/移动到自身或自身子目录内，否则递归复制直到路径超长
+    const normClip = clip.path.replace(/[\/\\]+$/, '');
+    const normCtx = ctx.path.replace(/[\/\\]+$/, '');
+    if (normClip === normCtx
+        || normCtx.startsWith(normClip + '/')
+        || normCtx.startsWith(normClip + '\\')) {
+      this.showToast(this.t('pasteIntoSelf'), 'danger');
+      return;
+    }
+    const srcName = this.baseName(clip.path);
+    let dstPath = this.joinPath(ctx.path, srcName);
+    // 同名冲突时加 (n) 后缀
+    if (await this.pathExists(dstPath)) {
+      const dot = srcName.lastIndexOf('.');
+      const base = dot > 0 ? srcName.substring(0, dot) : srcName;
+      const ext = dot > 0 ? srcName.substring(dot) : '';
+      let i = 1;
+      while (await this.pathExists(this.joinPath(ctx.path, `${base} (${i})${ext}`))) i++;
+      dstPath = this.joinPath(ctx.path, `${base} (${i})${ext}`);
+    }
+    try {
+      if (clip.op === 'cut') {
+        await TauriApi.movePath({ from: clip.path, to: dstPath });
+        const tab = this.tabs.find(t => t.filePath === clip.path);
+        if (tab) {
+          tab.filePath = dstPath;
+          this.updateTabBar();
+          this.saveSession();
+        }
+        this._fileClipboard = null;
+      } else {
+        await TauriApi.copyPath({ from: clip.path, to: dstPath });
+      }
+      this.expandedFolders.add(ctx.path);
+      this.renderFolderTree();
+      this.setStatus(this.t('filePasteDone') + ': ' + this.baseName(dstPath));
+    } catch (e) {
+      this.showToast(this.t('filePasteDone') + ': ' + e, 'danger');
+    }
+  }
+
+  fileTreeCopyPath() {
+    const ctx = this._fileTreeCtx;
+    if (!ctx) return;
+    navigator.clipboard.writeText(ctx.path).then(() => {
+      this.setStatus(this.t('fileCopyPath') + ': ' + ctx.path);
+    }).catch(() => {
+      this.showToast(this.t('fileCopyPath') + ' ' + this.t('failed'), 'danger');
+    });
+  }
+
   async renderFolderTree() {
     const treeEl = document.getElementById('folder-tree');
     if (!treeEl) return;
@@ -6095,11 +6566,15 @@ class MarkdownEditor {
       node.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        // 文件树右键目标上下文（合并自 PR #36）：驱动 file-* 菜单 + F2/Delete/Ctrl+X/C/V 快捷键
+        this._fileTreeCtx = { path: entry.path, isDir: entry.is_dir, nodeEl: node };
+        // 同时设置「打开所在目录」所需状态
         this._folderCtxPath = entry.path;
         this._folderCtxIsDir = entry.is_dir;
         this.updateFolderMenuLabel();
         this.hideAllContextMenus();
-        this.showContextMenu('context-menu-folder', e.clientX, e.clientY);
+        this.updateFileTreeMenuState();
+        this.showContextMenu('context-menu-file-tree', e.clientX, e.clientY);
       });
 
       const row = document.createElement('div');
@@ -6127,6 +6602,8 @@ class MarkdownEditor {
           await this.renderFolderLevel(entry.path, childContainer, depth + 1);
         }
         row.addEventListener('click', async () => {
+          // 左键点击也更新文件树选中目标，让 F2/Delete/Ctrl+C 等快捷键作用于当前点击项
+          this._fileTreeCtx = { path: entry.path, isDir: true, nodeEl: node };
           const isOpen = !childContainer.classList.contains('hidden');
           if (isOpen) {
             childContainer.classList.add('hidden');
@@ -6150,6 +6627,8 @@ class MarkdownEditor {
         icon.innerHTML = FILE;
         node.appendChild(row);
         row.addEventListener('click', () => {
+          // 左键点击也更新文件树选中目标，让 F2/Delete/Ctrl+C 等快捷键作用于当前点击项
+          this._fileTreeCtx = { path: entry.path, isDir: false, nodeEl: node };
           this.openFilePath(entry.path);
         });
       }
@@ -8726,6 +9205,16 @@ input[type="checkbox"]:checked::after { display: none !important; }
 
       case 'folder-open-containing': this.openContainingFolder(this._folderCtxPath, this._folderCtxIsDir); break;
       case 'folder-copy-path': this.copyPath(this._folderCtxPath); break;
+
+      // 文件树右键菜单动作（合并自 PR #36）
+      case 'file-new-file': this.fileTreeNewFile(); break;
+      case 'file-new-folder': this.fileTreeNewFolder(); break;
+      case 'file-cut': this.fileTreeCut(); break;
+      case 'file-copy': this.fileTreeCopy(); break;
+      case 'file-paste': this.fileTreePaste(); break;
+      case 'file-rename': this.fileTreeRename(); break;
+      case 'file-copy-path': this.fileTreeCopyPath(); break;
+      case 'file-delete': this.fileTreeDelete(); break;
     }
   }
 

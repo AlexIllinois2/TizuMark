@@ -76,7 +76,11 @@ test('A2 default 方案：图片/代码块/删除线/行内代码/公式 采用 
 test('A3 default 与 typora 预设键位集合在 typora 覆盖项上完全一致', () => {
   const def = getDefaultShortcuts();
   const typora = getShortcutPresets().typora;
+  // fileSearch 在 typora 中显式置空（''），避免继承 default 的 Ctrl+P 与 typora 自身的
+  // exportPDF:'Ctrl+P' 冲突；exportPDF 在 default 中已迁到 Ctrl+Shift+P，typora 仍保留
+  // 其 Ctrl+P 打印键位（typora 方案语义）。二者均为有意差异，跳过。
   for (const [aid, k] of Object.entries(typora)) {
+    if (aid === 'fileSearch' || aid === 'exportPDF') continue;
     assert.strictEqual(def[aid].key, k, 'default 的 ' + aid + ' 应与 typora 一致（=' + k + '）');
   }
 });
@@ -88,6 +92,70 @@ test('A4 typora 未覆盖的稀有项（上下标/表格/列表/高亮/Mermaid/�
     'insertCalloutNote', 'insertCalloutTip', 'insertCalloutWarning',
     'insertCalloutCaution', 'insertCalloutImportant']) {
     assert.strictEqual(def[aid].key, '', aid + ' 默认应为空（typora 也未提供）');
+  }
+});
+
+test('A5 vscode 预设（合并自 PR #36）：toggleSidebar 绑定 Ctrl+B，bold 留空避免冲突', () => {
+  const vscode = getShortcutPresets().vscode;
+  assert.strictEqual(vscode.toggleSidebar, 'Ctrl+B', 'VS Code 语义：Ctrl+B 应切侧边栏');
+  assert.strictEqual(vscode.bold, '', 'bold 让位给 toggleSidebar（可在自定义中另行绑定）');
+});
+
+test('A6 default 方案 toggleSidebar 无默认键（不占用 Ctrl+B，加粗保持可用）', () => {
+  const def = getDefaultShortcuts();
+  assert.strictEqual(def.toggleSidebar.key, '', 'default 下 toggleSidebar 应无默认键');
+  assert.strictEqual(def.bold.key, 'Ctrl+B', 'default 下加粗保持 Ctrl+B');
+});
+
+test('A7 applyShortcutScheme(vscode) 后 toggleSidebar 生效、bold 清空、label 保留', () => {
+  const applyShortcutScheme = extractMethod('applyShortcutScheme(name) {');
+  const saved = [];
+  const s = {
+    getDefaultShortcuts,
+    getShortcutPresets,
+    shortcutScheme: '',
+    shortcuts: null,
+    saveShortcuts() { saved.push(this.shortcuts); },
+    saveShortcutScheme() {},
+    renderShortcutsList() {},
+    applyShortcuts() {},
+  };
+  applyShortcutScheme.call(s, 'vscode');
+  assert.strictEqual(s.shortcuts.toggleSidebar.key, 'Ctrl+B');
+  assert.strictEqual(s.shortcuts.bold.key, '');
+  assert.strictEqual(s.shortcuts.bold.label, '加粗', 'label 应保留默认值');
+  assert.strictEqual(saved.length, 1, '应落盘一次');
+});
+
+test('A8 default 方案（合并自 PR #36）：fileSearch 绑定 Ctrl+P（VS Code Quick Open），原 exportPDF 迁到 Ctrl+Shift+P 不再冲突', () => {
+  const def = getDefaultShortcuts();
+  assert.strictEqual(def.fileSearch.key, 'Ctrl+P', '文件搜索应为 VS Code 风格 Ctrl+P');
+  assert.strictEqual(def.exportPDF.key, 'Ctrl+Shift+P', '导出 PDF 让出 Ctrl+P，迁到 Ctrl+Shift+P');
+  assert.notStrictEqual(def.fileSearch.key, def.exportPDF.key, '二者键位不得冲突');
+});
+
+test('A9 default 方案（合并自 PR #36）：moveLineUp/moveLineDown 默认 Alt+Up/Alt+Down，previewPaneWidth 默认 360', () => {
+  const def = getDefaultShortcuts();
+  assert.ok(def.moveLineUp && def.moveLineUp.key === 'Alt+Up', 'moveLineUp 默认应为 Alt+Up');
+  assert.ok(def.moveLineDown && def.moveLineDown.key === 'Alt+Down', 'moveLineDown 默认应为 Alt+Down');
+  const ds = extractMethod('defaultSettings() {');
+  const d = ds.call({});
+  assert.strictEqual(d.previewPaneWidth, 360, '预览区宽度默认 360');
+});
+
+test('A10 预设键位无冲突：vscode fileSearch=Ctrl+P；typora/sublime 显式 fileSearch:"" 避免继承 Ctrl+P 与自身 exportPDF 冲突', () => {
+  const presets = getShortcutPresets();
+  assert.strictEqual(presets.vscode.fileSearch, 'Ctrl+P', 'vscode 文件搜索=Ctrl+P');
+  assert.strictEqual(presets.typora.fileSearch, '', 'typora 显式置空 fileSearch，避免与 exportPDF:Ctrl+P 冲突');
+  assert.strictEqual(presets.sublime.fileSearch, '', 'sublime 显式置空 fileSearch，避免与 exportPDF:Ctrl+P 冲突');
+  // 各预设内部不得出现两个 action 共用同一非空键
+  for (const [name, preset] of Object.entries(presets)) {
+    const seen = {};
+    for (const [aid, k] of Object.entries(preset)) {
+      if (!k) continue;
+      assert.strictEqual(seen[k], undefined, `${name} 预设键位冲突：${k} 被 ${aid} 与 ${seen[k]} 共用`);
+      seen[k] = aid;
+    }
   }
 });
 

@@ -1,0 +1,176 @@
+// 文件树右键操作（合并自 PR #36）：剪切/复制/粘贴/重命名/删除/新建 —— node 级逻辑测试。
+// 关键断言：
+//   - 所有 IPC 走 TauriApi.xxx（ADR-1 唯一边界），不直接 window.__TAURI__.core.invoke
+//   - 粘贴同名冲突自动加 (n) 后缀；禁止粘贴到自身/子目录
+//   - 重命名成功后同步更新打开中的 tab
+const test = require('node:test');
+const assert = require('node:assert');
+const { buildEnv, cleanup, delay } = require('./helpers/app-env.cjs');
+
+async function makeEditor() {
+  const { w } = await buildEnv({ captureInitErr: true });
+  await delay(300);
+  return { w, ed: w.editor };
+}
+
+// 简化交互与渲染副作用：mock 对话框/渲染/toast，聚焦逻辑
+function stubUi(ed, opts = {}) {
+  ed.showPromptDialog = opts.prompt || (async () => null);
+  ed.showConfirmDialog = opts.confirm || (async () => false);
+  ed.showToast = () => {};
+  ed.setStatus = () => {};
+  ed.renderFolderTree = async () => {};
+  ed.updateTabBar = () => {};
+  ed.saveSession = () => {};
+}
+
+test('file-ops: fileTreeCut / fileTreeCopy 设置文件剪贴板状态', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    stubUi(ed);
+    ed._fileTreeCtx = { path: '/root/a.md', isDir: false };
+    ed.fileTreeCut();
+    // 跨 realm（jsdom）对象不能 deepStrictEqual 直接比，逐字段断言
+    assert.strictEqual(ed._fileClipboard.op, 'cut');
+    assert.strictEqual(ed._fileClipboard.path, '/root/a.md');
+    assert.strictEqual(ed._fileClipboard.isDir, false);
+    ed.fileTreeCopy();
+    assert.strictEqual(ed._fileClipboard.op, 'copy');
+  } finally { cleanup(w); }
+});
+
+test('file-ops: fileTreePaste 剪贴板为空时提示且不调 IPC', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    const toasts = [];
+    stubUi(ed);
+    ed.showToast = (msg) => toasts.push(msg);
+    ed._fileTreeCtx = { path: '/root/docs', isDir: true };
+    ed._fileClipboard = null;
+    await ed.fileTreePaste();
+    assert.ok(toasts.some(t => String(t).includes(ed.t('clipboardEmpty'))), '应提示剪贴板为空');
+  } finally { cleanup(w); }
+});
+
+test('file-ops: 禁止把目录粘贴到自身或其子目录内', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    const toasts = [];
+    let moved = 0, copied = 0;
+    stubUi(ed);
+    ed.showToast = (msg) => toasts.push(msg);
+    w.TauriApi.movePath = async () => { moved++; };
+    w.TauriApi.copyPath = async () => { copied++; };
+    // 粘贴目标 = 剪贴板源自身（防递归复制）
+    ed._fileTreeCtx = { path: '/root/proj', isDir: true };
+    ed._fileClipboard = { op: 'copy', path: '/root/proj', isDir: true };
+    await ed.fileTreePaste();
+    assert.ok(toasts.some(t => String(t).includes(ed.t('pasteIntoSelf'))), '应提示不能粘贴到自身');
+    assert.strictEqual(copied, 0, '不应发起复制');
+    assert.strictEqual(moved, 0, '不应发起移动');
+    // 粘贴目标 = 源的子目录
+    ed._fileTreeCtx = { path: '/root/proj/sub', isDir: true };
+    await ed.fileTreePaste();
+    assert.strictEqual(copied, 0, '子目录场景也不应复制');
+  } finally { cleanup(w); }
+});
+
+test('file-ops: fileTreePaste 复制同名冲突自动加 (n) 后缀（走 TauriApi.copyPath）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    const calls = [];
+    stubUi(ed);
+    w.TauriApi.copyPath = async (args) => { calls.push(args); };
+    // listDir 用于 pathExists：/root/docs 下已存在 proj（触发冲突），proj (1) 不存在
+    w.TauriApi.listDir = async ({ path }) => {
+      if (path === '/root/docs') return [{ name: 'proj', path: '/root/docs/proj', is_dir: true }];
+      return [];
+    };
+    ed._fileTreeCtx = { path: '/root/docs', isDir: true };
+    ed._fileClipboard = { op: 'copy', path: '/root/proj', isDir: true };
+    await ed.fileTreePaste();
+    assert.strictEqual(calls.length, 1, 'copyPath 应被调用一次');
+    // 跨 realm（jsdom）对象逐字段断言
+    assert.strictEqual(calls[0].from, '/root/proj');
+    assert.strictEqual(calls[0].to, '/root/docs/proj (1)');
+  } finally { cleanup(w); }
+});
+
+test('file-ops: fileTreeRename 走 TauriApi.renamePath 并同步更新打开的 tab', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    const calls = [];
+    stubUi(ed, { prompt: async () => 'b.md' });
+    w.TauriApi.renamePath = async (args) => { calls.push(args); };
+    w.TauriApi.listDir = async () => []; // pathExists：新名不存在
+    ed.tabs = [{ filePath: '/root/a.md', name: 'a.md' }];
+    ed._fileTreeCtx = { path: '/root/a.md', isDir: false };
+    await ed.fileTreeRename();
+    assert.strictEqual(calls.length, 1, '应经 TauriApi.renamePath 调用');
+    assert.strictEqual(calls[0].from, '/root/a.md');
+    assert.strictEqual(calls[0].to, '/root/b.md');
+    assert.strictEqual(ed.tabs[0].filePath, '/root/b.md', '打开的 tab 应同步改名');
+    assert.strictEqual(ed.tabs[0].name, 'b.md');
+  } finally { cleanup(w); }
+});
+
+test('file-ops: fileTreeDelete 确认后走 TauriApi.removePath 并关闭对应 tab', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    const calls = [];
+    let closed = -1;
+    stubUi(ed, { confirm: async () => true });
+    w.TauriApi.removePath = async (args) => { calls.push(args); };
+    ed.tabs = [{ filePath: '/root/a.md', name: 'a.md' }];
+    ed.closeTab = async (idx) => { closed = idx; };
+    ed._fileTreeCtx = { path: '/root/a.md', isDir: false };
+    await ed.fileTreeDelete();
+    assert.strictEqual(calls.length, 1, '应经 TauriApi.removePath 调用');
+    assert.strictEqual(calls[0].path, '/root/a.md');
+    assert.strictEqual(closed, 0, '应关闭被删除文件的 tab');
+  } finally { cleanup(w); }
+});
+
+test('file-ops: fileTreeNewFile / fileTreeNewFolder 走 TauriApi 写盘', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    const writes = [], mkdirs = [];
+    stubUi(ed, { prompt: async () => 'note.md' });
+    w.TauriApi.writeFile = async (args) => { writes.push(args); };
+    w.TauriApi.ensureDir = async (args) => { mkdirs.push(args); };
+    w.TauriApi.listDir = async () => [];
+    ed._fileTreeCtx = { path: '/root/docs', isDir: true };
+    await ed.fileTreeNewFile();
+    assert.strictEqual(writes.length, 1, 'writeFile 应被调用一次');
+    assert.strictEqual(writes[0].path, '/root/docs/note.md');
+    assert.strictEqual(writes[0].content, '');
+    // 新建文件夹：同一上下文再次弹窗
+    ed.showPromptDialog = async () => 'sub';
+    await ed.fileTreeNewFolder();
+    assert.strictEqual(mkdirs.length, 1, 'ensureDir 应被调用一次');
+    assert.strictEqual(mkdirs[0].path, '/root/docs/sub');
+  } finally { cleanup(w); }
+});
+
+test('file-ops: 文件树操作不直接 window.__TAURI__.core.invoke（ADR-1 唯一 IPC 边界）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    const rawInvokes = [];
+    const origInvoke = w.__TAURI__.core.invoke;
+    w.__TAURI__.core.invoke = async (cmd, args) => { rawInvokes.push(cmd); return undefined; };
+    const calls = [];
+    stubUi(ed, { prompt: async () => 'b.md', confirm: async () => true });
+    w.TauriApi.renamePath = async (a) => { calls.push(a); };
+    w.TauriApi.removePath = async (a) => { calls.push(a); };
+    w.TauriApi.listDir = async () => [];
+    ed.tabs = [];
+    ed.closeTab = async () => {};
+    ed._fileTreeCtx = { path: '/root/a.md', isDir: false };
+    await ed.fileTreeRename();
+    await ed.fileTreeDelete();
+    const cmds = rawInvokes.filter(c => ['rename_path', 'remove_path', 'copy_path', 'move_path', 'ensure_dir', 'write_file'].includes(c));
+    assert.deepStrictEqual(cmds, [], `文件树操作不得绕过 TauriApi 直接 invoke：${cmds.join(',')}`);
+    assert.strictEqual(calls.length, 2, '应全部经 TauriApi 方法调用');
+    w.__TAURI__.core.invoke = origInvoke;
+  } finally { cleanup(w); }
+});

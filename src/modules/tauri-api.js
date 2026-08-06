@@ -23,6 +23,8 @@
     'watch_folder', 'stop_watch', 'search_in_files', 'generate_toc',
     'get_cli_args', 'quit_app', 'open_devtools', 'set_window_behavior',
     'reveal_in_folder',
+    // 文件树右键操作（合并自 PR #36）：重命名 / 删除 / 复制 / 移动
+    'rename_path', 'remove_path', 'copy_path', 'move_path',
   ];
 
   // 延迟求值：调用时才读取 invoke（根治白屏单点）
