@@ -1,7 +1,7 @@
 // 大纲抽取单元测试：锁定 extractHeadings / buildOutlineTree / renderOutlineHtml 行为。
 const test = require('node:test');
 const assert = require('node:assert');
-const { extractHeadings, buildOutlineTree, renderOutlineHtml } = require('../src/modules/outline.js');
+const { extractHeadings, buildOutlineTree, renderOutlineHtml, computeBreadcrumbPath, renderBreadcrumbHtml } = require('../src/modules/outline.js');
 
 // 复刻 app.js 的 headingToId（纯函数），注入给 extractHeadings
 function headingToId(text) {
@@ -33,10 +33,28 @@ test('提取 # ~ ###### 各级标题与行号', async () => {
   assert.strictEqual(hs[3].line, 7);
 });
 
-test('标题文本去除 markdown 标记', async () => {
+test('标题文本去除 markdown 标记（显示用完整清理）', async () => {
   const hs = extractHeadings('# **加粗** `代码` [链接](u)', opts);
-  // 旧实现仅去除 # * ` ~ [ ] ，保留 ( ) ，故 [链接](u) -> 链接(u)
-  assert.strictEqual(hs[0].text, '加粗 代码 链接(u)');
+  // 完整清理：链接括号 (u) / 反引号 / 强调标记均剥离，显示更干净
+  assert.strictEqual(hs[0].text, '加粗 代码 链接');
+  // id 仍由轻量清理文本生成，保持与改动前一致（不影响锚点跳转）
+  assert.strictEqual(hs[0].id, '加粗-代码-链接u');
+});
+
+test('标题完整清理：图片/链接/代码/强调/尾随# 均剥离（仅影响显示）', async () => {
+  const md = [
+    '# ![图](a.png) 图示',
+    '## ~~删除~~ 普通 *斜体* 与 **粗体**',
+    '### 结尾 #',
+    '#### 行内 `code()` 与 <http://x>',
+  ].join('\n');
+  const hs = extractHeadings(md, opts);
+  assert.strictEqual(hs[0].text, '图示');
+  assert.strictEqual(hs[1].text, '删除 普通 斜体 与 粗体');
+  assert.strictEqual(hs[2].text, '结尾');
+  assert.strictEqual(hs[3].text, '行内 code() 与 http://x');
+  // HTML 标签 <...> 不被删除（交由渲染层转义为文字，避免误删正常尖括号内容）
+  assert.ok(hs[3].text.includes('http://x'));
 });
 
 test('重复标题 id 去重', async () => {
@@ -86,4 +104,89 @@ test('与旧实现逐字符一致（回归）', async () => {
     }
     assert.ok(html.includes('outline-item'), 'sample=' + JSON.stringify(s));
   }
+});
+
+// ---- 面包屑路径计算 ----
+
+test('computeBreadcrumbPath: 无标题返回空路径', async () => {
+  const hs = extractHeadings('正文\n第二段', opts);
+  assert.deepStrictEqual(computeBreadcrumbPath(hs, 1), []);
+});
+
+test('computeBreadcrumbPath: 根标题覆盖后续正文', async () => {
+  const hs = extractHeadings('# 一级\n正文\n## 二级\n### 三级\n正文', opts);
+  // 光标在正文第 1 行 -> 仅一级
+  assert.deepStrictEqual(computeBreadcrumbPath(hs, 1).map((h) => h.text), ['一级']);
+  // 光标在三级标题行 -> 一/二/三级
+  assert.deepStrictEqual(computeBreadcrumbPath(hs, 3).map((h) => h.text), ['一级', '二级', '三级']);
+  // 光标在三级后的正文 -> 同上
+  assert.deepStrictEqual(computeBreadcrumbPath(hs, 4).map((h) => h.text), ['一级', '二级', '三级']);
+});
+
+test('computeBreadcrumbPath: 同级标题替换且子树回退', async () => {
+  const md = '# A\n## B\n### C\n## D\n### E\n正文';
+  const hs = extractHeadings(md, opts);
+  assert.deepStrictEqual(computeBreadcrumbPath(hs, 2).map((h) => h.text), ['A', 'B', 'C']);
+  // D 与 B 同级 -> B/C 出栈，路径变为 A/D；E 加深
+  assert.deepStrictEqual(computeBreadcrumbPath(hs, 4).map((h) => h.text), ['A', 'D', 'E']);
+  // E 后的正文仍保持 A/D/E
+  assert.deepStrictEqual(computeBreadcrumbPath(hs, 5).map((h) => h.text), ['A', 'D', 'E']);
+});
+
+test('computeBreadcrumbPath: 越级标题正确处理', async () => {
+  const md = '# A\n### B\n正文';
+  const hs = extractHeadings(md, opts);
+  assert.deepStrictEqual(computeBreadcrumbPath(hs, 2).map((h) => h.text), ['A', 'B']);
+});
+
+test('computeBreadcrumbPath: 负行号或超过最大标题不崩溃', async () => {
+  const hs = extractHeadings('# A\n## B', opts);
+  assert.deepStrictEqual(computeBreadcrumbPath(hs, -1), []);
+  assert.deepStrictEqual(computeBreadcrumbPath(hs, 999).map((h) => h.text), ['A', 'B']);
+});
+
+// ---- 面包屑渲染（截断 / 折叠策略） ----
+const ICON = '<svg class="breadcrumb-icon"></svg>';
+
+test('renderBreadcrumbHtml: 文件名带引号被转义且文字进 crumb-label', async () => {
+  const html = renderBreadcrumbHtml([], 'a"b', { iconSvg: ICON });
+  assert.ok(html.includes('editor-breadcrumb-file'));
+  assert.ok(html.includes('title="a&quot;b"'));
+  assert.ok(html.includes('<span class="crumb-label">a"b</span>'));
+  assert.ok(html.includes(ICON));
+});
+
+test('renderBreadcrumbHtml: 层级较少全部渲染，末尾加 active', async () => {
+  const hs = [
+    { line: 1, text: '一' },
+    { line: 2, text: '二' },
+    { line: 3, text: '三' },
+  ];
+  const html = renderBreadcrumbHtml(hs, 'f.md', {});
+  assert.ok(html.includes('data-breadcrumb-line="1"'));
+  assert.ok(html.includes('data-breadcrumb-line="2"'));
+  assert.ok(html.includes('data-breadcrumb-line="3"'));
+  // 最后一个标题为 active
+  assert.ok(html.includes('editor-breadcrumb-item active" data-breadcrumb-line="3"'));
+});
+
+test('renderBreadcrumbHtml: 层级再多也全部渲染（不折叠），滚动可看全每一层', async () => {
+  const hs = [];
+  for (let i = 1; i <= 9; i++) hs.push({ line: i, text: 'H' + i });
+  const html = renderBreadcrumbHtml(hs, 'f.md', {});
+  // 所有层级（含 H2~H7）都渲染出来，无一被永久隐藏
+  for (let i = 1; i <= 9; i++) {
+    assert.ok(html.includes('data-breadcrumb-line="' + i + '"'), '缺失层级 H' + i);
+  }
+  // 不应出现折叠占位符
+  assert.ok(!html.includes('editor-breadcrumb-ellipsis'));
+  // 最后一个标题为 active
+  assert.ok(html.includes('editor-breadcrumb-item active" data-breadcrumb-line="9"'));
+});
+
+test('renderBreadcrumbHtml: 标题含 < 被转义，不破坏结构', async () => {
+  const hs = [{ line: 1, text: 'A < B' }];
+  const html = renderBreadcrumbHtml(hs, 'f.md', {});
+  assert.ok(html.includes('&lt;'));
+  assert.ok(!html.includes('< B</span>'));
 });

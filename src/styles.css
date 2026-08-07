@@ -525,6 +525,122 @@ body {
 
 .tab-bar-scroll::-webkit-scrollbar { display: none; }
 
+/* Editor breadcrumb (VSCode-style heading navigation) */
+.editor-breadcrumb {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 26px;
+  min-height: 26px;
+  max-height: 26px;
+  padding: 0 8px 0 0;
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  box-sizing: border-box;
+  font-size: 12px;
+}
+.editor-breadcrumb.hidden {
+  display: none;
+}
+
+/* 左侧溢出指示器：内容左滚离开起点后出现，点击平滑回到开头 */
+.editor-breadcrumb-overflow {
+  position: relative;
+  z-index: 2;
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 100%;
+  border: none;
+  background: linear-gradient(to right, var(--bg-primary) 55%, rgba(0, 0, 0, 0));
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.editor-breadcrumb.show-overflow .editor-breadcrumb-overflow {
+  display: flex;
+}
+.editor-breadcrumb-overflow:hover {
+  color: var(--accent-color);
+}
+
+.editor-breadcrumb-scroll {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  min-width: 0;
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE/Edge */
+}
+.editor-breadcrumb-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.editor-breadcrumb-content {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  padding: 0 10px;
+}
+
+/* 单个标题 / 文件名的文字容器：超长时省略号截断，防止占满整行 */
+.crumb-label {
+  display: block;
+  max-width: 200px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-breadcrumb-item,
+.editor-breadcrumb-file {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+.editor-breadcrumb-item:hover,
+.editor-breadcrumb-file:hover {
+  background-color: var(--accent-subtle);
+  color: var(--text-primary);
+}
+.editor-breadcrumb-item.active {
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.editor-breadcrumb-separator {
+  color: var(--text-secondary);
+  opacity: 0.55;
+  font-size: 11px;
+  padding: 0 1px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.editor-breadcrumb-file {
+  gap: 5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.editor-breadcrumb-file .breadcrumb-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
 .toolbar-btn {
   padding: 0 10px;
   height: 24px;
@@ -1376,20 +1492,6 @@ body.is-resizing .side-btn {
 
 [data-theme="dark"] .cm-s-material-darker .CodeMirror-gutters {
   background: var(--bg-primary);
-}
-
-.pane-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 12px;
-  background-color: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
 }
 
 .resizer {
@@ -2274,7 +2376,6 @@ body.is-resizing .side-btn {
 .editor-container.preview-mode .editor-pane,
 .editor-container.preview-mode .resizer { display: none; }
 .editor-container.preview-mode .preview-pane { flex: 1; }
-.editor-container.preview-mode .preview-pane .pane-header { display: none; }
 .editor-container.preview-mode .preview-content { padding: 32px; }
 
 .editor-container.editor-collapsed .resizer { display: none; }
@@ -4474,7 +4575,7 @@ body.is-resizing .side-btn {
   body { height: auto !important; overflow: visible !important; background: white !important; }
 
   header, .toolbar, .editor-pane, .resizer, .outline-sidebar, .outline-resizer,
-  .side-btn, .pane-header, .scroll-top-btn, .toast, footer, .statusbar,
+  .side-btn, .scroll-top-btn, .toast, footer, .statusbar,
   #update-status, .dropdown-menu, .dropdown-backdrop, #toast-container,
   #find-panel, #preview-find-panel { display: none !important; }
 

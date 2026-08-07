@@ -294,8 +294,6 @@ const I18N = {
     folderWatchRecovered: '已重新监听文件夹',
     editor: '编辑器',
     previewSection: '预览',
-    paneEdit: '编辑',
-    panePreview: '预览',
     column1: '列1',
     column2: '列2',
     column3: '列3',
@@ -717,8 +715,6 @@ const I18N = {
     folderWatchRecovered: 'Folder watcher restarted',
     editor: 'Editor',
     previewSection: 'Preview',
-    paneEdit: 'Edit',
-    panePreview: 'Preview',
     column1: 'Col 1',
     column2: 'Col 2',
     column3: 'Col 3',
@@ -988,6 +984,7 @@ class MarkdownEditor {
     this.initCrossSearch();
     this.initOutline();
     this.initOutlineResizer();
+    this.initBreadcrumb();
     this.updateOutlineCheck();
     this.initContextMenu();
     this.initFormatToolbar();
@@ -1163,10 +1160,6 @@ class MarkdownEditor {
     document.querySelectorAll('.dialog-close').forEach(btn => {
       btn.setAttribute('aria-label', t('closeAria'));
     });
-
-    // Pane headers & outline
-    document.querySelector('#editor-pane .pane-header span').textContent = t('paneEdit');
-    document.querySelector('#preview-pane .pane-header span').textContent = t('panePreview');
 
     // Settings dialog — use form element IDs as stable anchors
     document.querySelector('#settings-dialog .dialog-header h2').textContent = t('settings');
@@ -2045,10 +2038,119 @@ class MarkdownEditor {
     this.updateSidebarChecks();
   }
 
+  initBreadcrumb() {
+    const bc = document.getElementById('editor-breadcrumb');
+    const scroll = document.getElementById('editor-breadcrumb-scroll');
+    const overflowBtn = document.getElementById('editor-breadcrumb-overflow');
+    if (!bc || !scroll) return;
+    this._breadcrumbOverflowBtn = overflowBtn;
+
+    // 滚轮横向滚动：鼠标滚轮在面包屑上时转换为左右滚动
+    bc.addEventListener('wheel', (e) => {
+      if (e.deltaY !== 0 && scroll.scrollWidth > scroll.clientWidth) {
+        e.preventDefault();
+        scroll.scrollLeft += e.deltaY;
+        this._updateBreadcrumbOverflow();
+      }
+    }, { passive: false });
+
+    // 横向滚动时同步左侧溢出指示器（回到开头按钮）的显隐
+    scroll.addEventListener('scroll', () => this._updateBreadcrumbOverflow(), { passive: true });
+
+    // 点击左侧指示器平滑回到开头（查看被折叠/滚走的根标题）
+    if (overflowBtn) {
+      overflowBtn.addEventListener('click', () => {
+        scroll.scrollTo({ left: 0, behavior: 'smooth' });
+      });
+    }
+
+    // 点击标题跳转（事件委托）
+    bc.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-breadcrumb-line]');
+      if (!item || !this.cm) return;
+      const line = parseInt(item.dataset.breadcrumbLine, 10);
+      if (Number.isNaN(line)) return;
+      this._jumpToHeadingLine(line);
+    });
+  }
+
+  // 当内容溢出且已向左滚动离开起点时，显示左侧"回到开头"指示器
+  _updateBreadcrumbOverflow() {
+    const bc = document.getElementById('editor-breadcrumb');
+    const scroll = document.getElementById('editor-breadcrumb-scroll');
+    if (!bc || !scroll || !this._breadcrumbOverflowBtn) return;
+    const show = scroll.scrollWidth > scroll.clientWidth && scroll.scrollLeft > 1;
+    bc.classList.toggle('show-overflow', show);
+  }
+
+  _jumpToHeadingLine(line) {
+    if (!this.cm) return;
+    this.cm.setCursor({ line, ch: 0 });
+    this.cm.focus();
+    // WebView 中 scrollIntoView 不触发，改用精确滚动公式
+    const y = this.cm.heightAtLine(line, 'local');
+    this.cm.scrollTo(0, Math.max(0, y - 80));
+  }
+
+  updateBreadcrumb(force = false, line = null) {
+    if (!this.cm) return;
+    const content = this.cm.getValue();
+    if (force || this._breadcrumbLastContent !== content) {
+      this._breadcrumbHeadings = Outline.extractHeadings(content, { headingToId: (t) => this.headingToId(t) });
+      this._breadcrumbLastContent = content;
+    }
+    const targetLine = typeof line === 'number' ? line : this.cm.getCursor().line;
+    const path = Outline.computeBreadcrumbPath(this._breadcrumbHeadings, targetLine);
+    this._renderBreadcrumb(path);
+  }
+
+  _renderBreadcrumb(path) {
+    const bc = document.getElementById('editor-breadcrumb');
+    const content = document.getElementById('editor-breadcrumb-content');
+    const scroll = document.getElementById('editor-breadcrumb-scroll');
+    if (!bc || !content) return;
+
+    // diff guard：路径或文件名未变时不重写 DOM，避免滚动/光标高频事件导致重排
+    const rawFileName = this.activeTab?.name || '';
+    const key = (path ? path.map((h) => h.line + ':' + h.text).join('|') : '') + '|' + rawFileName;
+    if (this._breadcrumbLastKey === key) return;
+    this._breadcrumbLastKey = key;
+
+    if (!path || path.length === 0) {
+      bc.classList.add('hidden');
+      content.innerHTML = '';
+      return;
+    }
+
+    bc.classList.remove('hidden');
+    const fileIcon = '<svg class="breadcrumb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><polyline points="14 3 14 8 19 8"/></svg>';
+    content.innerHTML = Outline.renderBreadcrumbHtml(path, rawFileName || this.t('untitled'), {
+      iconSvg: fileIcon,
+    });
+
+    // 自动定位当前项：仅当活动标题（最后一个）不完全可见时滚动到末尾，
+    // 避免用户手动左滚查看开头时被强行拉回。
+    if (scroll) {
+      const activeEl = content.querySelector('.editor-breadcrumb-item.active');
+      if (activeEl) {
+        const right = activeEl.offsetLeft + activeEl.offsetWidth;
+        if (right > scroll.scrollLeft + scroll.clientWidth) {
+          scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
+        }
+      }
+      this._updateBreadcrumbOverflow();
+    }
+  }
+
   updateOutline() {
     const content = this.cm.getValue();
     const outlineContent = document.getElementById('outline-content');
     const headings = Outline.extractHeadings(content, { headingToId: (t) => this.headingToId(t) });
+
+    // 面包屑共享同一套标题数据，避免重复抽取
+    this._breadcrumbHeadings = headings;
+    this._breadcrumbLastContent = content;
+    this._renderBreadcrumb(Outline.computeBreadcrumbPath(headings, this.cm.getCursor().line));
 
     if (headings.length === 0) {
       outlineContent.innerHTML = `<div class="outline-empty">${this.t('noHeadings')}</div>`;
@@ -3392,6 +3494,7 @@ class MarkdownEditor {
       const cursor = this.cm.getCursor();
       this.activeTab.cursorPos = cursor;
       this.cursorPosition.textContent = this.t('cursorPos', { line: cursor.line + 1, col: cursor.ch + 1 });
+      this.updateBreadcrumb();
     });
 
     // 双标志锁机制（demo 风格：canScroll.editor / canScroll.showDom）
@@ -3408,6 +3511,12 @@ class MarkdownEditor {
       if (container.classList.contains('preview-mode') || container.classList.contains('editor-collapsed')) return;
       const info = this.cm.getScrollInfo();
       this.activeTab.scrollPos = { top: info.top, left: info.left };
+
+      // 滚动时按视口顶部行更新面包屑，实现「滚动到某标题时面包屑自动切换」
+      if (this._breadcrumbHeadings && this._breadcrumbHeadings.length) {
+        const topLine = this.cm.lineAtHeight(info.top + 4, 'local');
+        this.updateBreadcrumb(false, Math.max(0, topLine));
+      }
 
       if (!this.settings.scrollSync || !this._canScroll.editor) return;
       if (container.classList.contains('preview-collapsed') || container.classList.contains('preview-mode')) return;

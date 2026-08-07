@@ -420,16 +420,16 @@
         </div>
         <div class="editor-row">
           <div class="editor-pane" id="editor-pane">
-            <div class="pane-header">
-              <span>编辑</span>
+            <div id="editor-breadcrumb" class="editor-breadcrumb hidden" aria-label="面包屑导航">
+              <button id="editor-breadcrumb-overflow" class="editor-breadcrumb-overflow" type="button" title="回到开头" aria-label="回到开头">&#8249;</button>
+              <div class="editor-breadcrumb-scroll" id="editor-breadcrumb-scroll">
+                <div class="editor-breadcrumb-content" id="editor-breadcrumb-content"></div>
+              </div>
             </div>
             <div id="editor-wrapper"></div>
           </div>
           <div class="resizer" id="resizer"></div>
           <div class="preview-pane" id="preview-pane">
-            <div class="pane-header">
-              <span>预览</span>
-            </div>
             <div id="preview-wrapper">
               <div id="preview" class="preview-content"></div>
               <button id="scroll-top-btn" class="scroll-top-btn hidden" title="回到顶部">
