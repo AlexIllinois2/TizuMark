@@ -2233,6 +2233,91 @@ class MarkdownEditor {
       outlineContent.querySelectorAll('.outline-item').forEach(el => el.classList.remove('active'));
       item.classList.add('active');
     };
+
+    // 渲染后按当前光标行设置高亮（DOM 已重建，重置 guard 再派生）
+    this._outlineActiveKey = null;
+    this.updateOutlineActive(this.cm.getCursor().line);
+  }
+
+  // 大纲动态跟随：根据给定行号高亮当前标题，并将该标题滚动进 outline 视口，
+  // 与面包屑共用 computeBreadcrumbPath，保证二者指向同一当前标题。
+  // 用于：编辑器滚动、光标移动、内容/标签页切换后保持大纲与文档/面包屑一致。
+  updateOutlineActive(line) {
+    const outlineContent = document.getElementById('outline-content');
+    if (!outlineContent) return;
+    const items = outlineContent.querySelectorAll('.outline-item');
+    const headings = this._breadcrumbHeadings;
+
+    if (!headings || !headings.length || typeof line !== 'number') {
+      items.forEach(el => el.classList.remove('active'));
+      this._outlineActiveKey = null;
+      return;
+    }
+
+    // 当前标题 = 面包屑路径最后一个（最深、且行号 <= line 的标题），与面包屑完全一致
+    const path = Outline.computeBreadcrumbPath(headings, line);
+    const current = path.length ? path[path.length - 1] : null;
+
+    let target = null;
+    if (current) {
+      target = outlineContent.querySelector(`.outline-item[data-line="${current.line}"][data-id="${CSS.escape(String(current.id))}"]`)
+           || outlineContent.querySelector(`.outline-item[data-line="${current.line}"]`);
+    }
+
+    const key = current ? (current.line + ':' + current.id) : '';
+    // diff guard：当前标题未变时跳过 DOM 写入与滚动，避免同段内滚动抖动
+    if (this._outlineActiveKey === key && target) return;
+    this._outlineActiveKey = key;
+
+    items.forEach(el => el.classList.remove('active'));
+    if (!target) return;
+    target.classList.add('active');
+
+    // 纵向跟随：仅当该标题离开 outline 视口时才滚动其回可见区域（不改横向滚动）
+    // 若标题因父级折叠而隐藏（offsetParent 为 null），仅保留高亮、跳过滚动
+    if (target.offsetParent === null) return;
+    const cRect = outlineContent.getBoundingClientRect();
+    const tRect = target.getBoundingClientRect();
+    if (tRect.top < cRect.top + 4 || tRect.bottom > cRect.bottom - 4) {
+      const delta = (tRect.top + tRect.bottom) / 2 - (cRect.top + cRect.bottom) / 2;
+      outlineContent.scrollTop += delta;
+    }
+  }
+
+  // 预览模式大纲跟随：编辑器隐藏时，按预览滚动位置推导当前标题（源码行）再高亮。
+  // 视图模式切换后预览 recreate，标题 id 与大纲 id 同源（均由 headingToId 生成），
+  // 故可直接用预览 DOM 中的 h1~h6[id] 反查源码行，保证大纲与预览内容一致。
+  updateOutlineFromPreview() {
+    const preview = this.preview;
+    const headings = this._breadcrumbHeadings;
+    if (!preview || !headings || !headings.length) {
+      this.updateOutlineActive(-1); // 无标题：清空高亮
+      return;
+    }
+    let line = null;
+    if (this._previewVirtual && Number.isFinite(this._previewFocusLine)) {
+      // 大文档虚拟预览：渲染切片不含所有标题，直接用窗口焦点行推导当前标题
+      line = this._previewFocusLine;
+    } else {
+      const pRect = preview.getBoundingClientRect();
+      const els = preview.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]');
+      let foundId = null;
+      for (const el of els) {
+        const r = el.getBoundingClientRect();
+        // 取最后一个顶部已滚过视口上沿的标题（文档顺序 == 标题顺序，遇未越过者即停）
+        if (r.top - pRect.top <= 4) foundId = el.id; else break;
+      }
+      if (foundId) {
+        const h = headings.find((hh) => hh.id === foundId);
+        if (h) line = h.line;
+      }
+    }
+    if (line == null) {
+      // 滚到首个标题之前：清空高亮（line 取首标题前一行，computeBreadcrumbPath 返回空）
+      this.updateOutlineActive(headings[0].line - 1);
+    } else {
+      this.updateOutlineActive(line);
+    }
   }
 
   headingToId(text) {
@@ -3495,6 +3580,8 @@ class MarkdownEditor {
       this.activeTab.cursorPos = cursor;
       this.cursorPosition.textContent = this.t('cursorPos', { line: cursor.line + 1, col: cursor.ch + 1 });
       this.updateBreadcrumb();
+      // 光标移动时大纲同步高亮当前标题（与面包屑一致）
+      this.updateOutlineActive(cursor.line);
     });
 
     // 双标志锁机制（demo 风格：canScroll.editor / canScroll.showDom）
@@ -3516,6 +3603,8 @@ class MarkdownEditor {
       if (this._breadcrumbHeadings && this._breadcrumbHeadings.length) {
         const topLine = this.cm.lineAtHeight(info.top + 4, 'local');
         this.updateBreadcrumb(false, Math.max(0, topLine));
+        // 大纲同步跟随：滚动到某标题时，大纲高亮并滚动到当前标题
+        this.updateOutlineActive(Math.max(0, topLine));
       }
 
       if (!this.settings.scrollSync || !this._canScroll.editor) return;
@@ -3533,6 +3622,13 @@ class MarkdownEditor {
       // 预览折叠时其 scrollTop 不可靠，跳过以免覆盖有效值。
       if (this.activeTab && !container.classList.contains('preview-collapsed')) {
         this.activeTab.previewScrollTop = this.preview.scrollTop;
+      }
+      // 纯预览模式：编辑器隐藏，其滚动同步会提前退出，大纲须直接跟随预览内容。
+      // 注意：先驱动虚拟预览懒加载（若需），再统一派生当前标题，避免漏渲染。
+      if (container.classList.contains('preview-mode')) {
+        if (this._previewVirtual && this.previewWindow) this._syncPreviewVirtualScroll();
+        this.updateOutlineFromPreview();
+        return;
       }
       // 纯预览模式 + 大文档虚拟滚动：驱动预览自身懒加载（拖到任意位置查看全文）
       if (container.classList.contains('preview-mode') && this._previewVirtual && this.previewWindow) {
@@ -8474,6 +8570,8 @@ input[type="checkbox"]:checked::after { display: none !important; }
             const pMax = Math.max(this.preview.scrollHeight - this.preview.clientHeight, 0);
             this.preview.scrollTop = Math.min(rTab.previewScrollTop || 0, pMax);
           }
+          // 进入预览后立即按预览位置校准大纲高亮（不依赖 scroll 事件触发）
+          this.updateOutlineFromPreview();
         } else {
           // 切回编辑（分屏）：编辑器已 refresh，用锚点行在编辑器里的像素位置定位
           let restored = false;

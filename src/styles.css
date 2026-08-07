@@ -2489,6 +2489,8 @@ body.is-resizing .side-btn {
 .sidebar-tabs {
   display: flex;
   align-items: stretch;
+  gap: 4px;
+  padding: 6px;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
@@ -2496,26 +2498,47 @@ body.is-resizing .side-btn {
 
 .sidebar-tab {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
-  padding: 8px 6px;
+  padding: 7px 8px;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+  border-radius: 7px;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sidebar-tab-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
 }
 
 .sidebar-tab:hover {
   color: var(--text-primary);
-  background-color: var(--bg-hover, rgba(128, 128, 128, 0.08));
+  background-color: var(--bg-hover);
+}
+
+.sidebar-tab:hover .sidebar-tab-icon { opacity: 1; }
+
+.sidebar-tab:active {
+  transform: translateY(0.5px);
 }
 
 .sidebar-tab.active {
   color: var(--accent-color);
-  border-bottom-color: var(--accent-color);
+  background-color: var(--bg-primary);
+  box-shadow: var(--shadow-sm);
 }
+
+.sidebar-tab.active .sidebar-tab-icon { opacity: 1; }
 
 .sidebar-panel {
   flex: 1;
@@ -2529,9 +2552,21 @@ body.is-resizing .side-btn {
 
 #outline-close.outline-close-btn {
   flex: 0 0 auto;
-  width: 24px;
-  border-radius: 4px;
-  margin: 4px 4px 4px 0;
+  width: 28px;
+  height: 32px;
+  border-radius: 7px;
+  margin: 0 0 0 2px;
+  color: var(--text-secondary);
+}
+
+#outline-close.outline-close-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+#outline-close.outline-close-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 /* ====== 文件夹 / 文件树 ====== */
@@ -2681,22 +2716,25 @@ body.is-resizing .side-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px 4px 0;
+  margin: 1px 6px;
+  padding: 4px 8px;
   font-size: 12px;
   color: var(--text-secondary);
   cursor: default;
   white-space: nowrap;
-  transition: background-color 0.15s, color 0.15s;
+  border-radius: 6px;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .tree-row:hover {
-  background-color: var(--bg-hover, rgba(128, 128, 128, 0.08));
+  background-color: var(--bg-hover);
   color: var(--text-primary);
 }
 
 .tree-row.active {
   color: var(--accent-color);
-  background-color: var(--bg-secondary);
+  background-color: var(--accent-subtle);
+  font-weight: 600;
 }
 
 .tree-arrow {
@@ -2794,45 +2832,52 @@ body.is-resizing .side-btn {
 .outline-item {
   display: flex;
   align-items: center;
-  padding: 4px 12px;
+  gap: 4px;
+  margin: 1px 6px;
+  padding: 5px 8px;
   font-size: 12px;
   color: var(--text-secondary);
   cursor: default;
   text-decoration: none;
-  transition: background-color 0.15s, color 0.15s;
-  border-left: 2px solid transparent;
+  border-radius: 6px;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .outline-item:hover {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-hover);
   color: var(--text-primary);
 }
 
 .outline-item.active {
   color: var(--accent-color);
-  border-left-color: var(--accent-color);
-  background-color: var(--bg-secondary);
+  background-color: var(--accent-subtle);
+  font-weight: 600;
 }
 
 .outline-toggle {
   cursor: pointer;
-  font-size: 8px;
-  margin-right: 4px;
+  font-size: 9px;
+  margin-right: 2px;
   user-select: none;
-  display: inline-block;
-  width: 12px;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
   flex-shrink: 0;
-  transition: transform 0.15s;
+  color: var(--text-tertiary, #9aa0a6);
+  transition: transform 0.15s, color 0.15s, background-color 0.15s;
 }
 
 .outline-toggle:hover {
   color: var(--accent-color);
+  background-color: var(--bg-hover);
 }
 
 .outline-label {
-  flex: none;
-  max-width: 800px;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2840,7 +2885,7 @@ body.is-resizing .side-btn {
 }
 
 .outline-children {
-  padding-left: 20px;
+  padding-left: 16px;
 }
 
 .outline-children.collapsed {
