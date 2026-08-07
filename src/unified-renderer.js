@@ -273,7 +273,64 @@ function guardMathBlocks(content) {
       continue;
     }
 
-    if (content[i] === '$' && i + 1 < len && content[i + 1] === '$') {
+    if (!inBacktick && content[i] === '\\' && i + 1 < len && content[i + 1] === '(') {
+      // 行内 LaTeX 数学：\( ... \) —— 归一化为行内 $...$，交给现有 KaTeX($) 管线渲染。
+      // 关键：CommonMark 会把 \( 的反斜杠当转义吃掉（变成 (），所以必须在 markdown 解析前
+      // （此处原文阶段）拦截。仅限单行：遇换行仍未闭合则回退字面量（与行内 $...$ 一致）。
+      const start = i;
+      let j = i + 2;
+      let foundEnd = false;
+      let inner = '';
+      while (j < len) {
+        if (content[j] === '\n' || content[j] === '\r') break;
+        if (content[j] === '\\' && j + 1 < len && content[j + 1] === ')') {
+          inner = content.substring(start + 2, j);
+          j += 2;
+          foundEnd = true;
+          break;
+        }
+        j++;
+      }
+      if (foundEnd) {
+        const idx = placeholders.length;
+        placeholders.push({ text: '$' + inner + '$', display: false });
+        result += '<!--MATHBLOCK_' + idx + '-->';
+        i = j;
+      } else {
+        result += '\\(';
+        i = start + 2;
+      }
+    } else if (!inBacktick && content[i] === '\\' && i + 1 < len && content[i + 1] === '[') {
+      // 块级 LaTeX 数学：\[ ... \] —— 归一化为块级 $$...$$，交给现有 KaTeX($$) 管线渲染。
+      // \[...\] 在 LaTeX 中始终为 display math，无“行内”歧义，故无需像 $$ 那样限定块起点。
+      // 可跨行（与 $$...$$ 一致）：遇空行（\n\n）停止配对，避免吞掉后续段落/列表/引用。
+      const start = i;
+      const lineNum = content.substring(0, start).split('\n').length;
+      let j = i + 2;
+      let foundEnd = false;
+      let inner = '';
+      while (j + 1 < len) {
+        if (content[j] === '\n' && (content[j + 1] === '\n' || content[j + 1] === '\r')) break;
+        if (content[j] === '\\' && j + 1 < len && content[j + 1] === ']') {
+          inner = content.substring(start + 2, j);
+          j += 2;
+          foundEnd = true;
+          break;
+        }
+        j++;
+      }
+      if (foundEnd) {
+        const idx = placeholders.length;
+        placeholders.push({ text: '$$' + inner + '$$', display: true, line: lineNum });
+        const newlineCount = (inner.match(/\n/g) || []).length;
+        result += '<div class="math-placeholder" data-math-idx="' + idx + '" data-source-line="' + lineNum + '"></div>';
+        for (let n = 0; n < newlineCount; n++) { result += '\n'; }
+        i = j;
+      } else {
+        result += '\\[';
+        i = start + 2;
+      }
+    } else if (content[i] === '$' && i + 1 < len && content[i + 1] === '$') {
       // Display math: $$...$$ — 仅在块级起点（行首或引用前缀后）触发；行内 $$ 一律当字面量，避免跨段配对
       const atBlockStart = isAtBlockStart(content, i);
       if (!atBlockStart) {
