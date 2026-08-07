@@ -4156,19 +4156,34 @@ class MarkdownEditor {
       if (this.handleShortcutRecording(e)) return;
 
       // 文件树右键菜单快捷键（合并自 PR #36）：_fileTreeCtx 存在时，F2/Delete/Ctrl+X/C/V 对其生效。
-      // 编辑器聚焦时 Ctrl+X/C/V 让 CodeMirror 处理；F2/Delete 始终对文件树生效（编辑器不占用）。
+      // 关键修复：点击文件打开后焦点落在编辑器（.CodeMirror），旧逻辑用「!inEditor」拦截导致
+      // Ctrl+C/V 被 CodeMirror 吞掉、文件复制/粘贴「不起作用」。现改为：Ctrl+C/X/V 以文件树操作为先，
+      // 仅当编辑器存在文本选区时才让位给编辑器的文本复制/剪切/粘贴（cm.somethingSelected()）。
+      // 用户真正点进编辑器编辑时（editorWrapper mousedown）会清掉 _fileTreeCtx，恢复纯文本操作。
       if (this._fileTreeCtx) {
-        const inEditor = e.target.closest('.CodeMirror');
         const inInput = e.target.closest('input, textarea, select');
         if (!inInput) {
           const ctrl = e.ctrlKey || e.metaKey;
           if (e.key === 'F2') { e.preventDefault(); this.fileTreeRename(); return; }
           if (e.key === 'Delete') { e.preventDefault(); this.fileTreeDelete(); return; }
-          if (ctrl && !e.shiftKey && !e.altKey && !inEditor) {
+          if (ctrl && !e.shiftKey && !e.altKey) {
             const k = e.key.toLowerCase();
-            if (k === 'x') { e.preventDefault(); this.fileTreeCut(); return; }
-            if (k === 'c') { e.preventDefault(); this.fileTreeCopy(); return; }
-            if (k === 'v') { e.preventDefault(); this.fileTreePaste(); return; }
+            // 复制 / 剪切：编辑器有文本选区时交给编辑器；否则按文件树复制/剪切
+            if (k === 'x' || k === 'c') {
+              if (this.cm && this.cm.somethingSelected()) return;
+              e.preventDefault();
+              if (k === 'c') this.fileTreeCopy(); else this.fileTreeCut();
+              return;
+            }
+            // 粘贴：文件树选中节点（目录或文件）且编辑器无文本选区时，粘贴文件。
+            // 选中目录→粘贴进该目录；选中文件→粘贴进其所在目录（同级）。编辑器有选区时交给文本粘贴。
+            if (k === 'v') {
+              if (!(this.cm && this.cm.somethingSelected())) {
+                e.preventDefault();
+                this.fileTreePaste();
+              }
+              return;
+            }
           }
           if (ctrl && e.altKey && !e.shiftKey && e.key.toLowerCase() === 'n') {
             e.preventDefault();
@@ -6470,30 +6485,36 @@ class MarkdownEditor {
 
   async fileTreePaste() {
     const ctx = this._fileTreeCtx;
-    if (!ctx || !ctx.isDir || !this._fileClipboard) {
+    if (!ctx || !this._fileClipboard) {
+      this.showToast(this.t('clipboardEmpty'), 'danger');
+      return;
+    }
+    // 目标目录：选中目录时为目标本身；选中文件时取其所在目录（粘贴到同级）。
+    const targetDir = ctx.isDir ? ctx.path : this.parentPath(ctx.path);
+    if (!targetDir) {
       this.showToast(this.t('clipboardEmpty'), 'danger');
       return;
     }
     const clip = this._fileClipboard;
     // 安全检查：禁止把目录复制/移动到自身或自身子目录内，否则递归复制直到路径超长
     const normClip = clip.path.replace(/[\/\\]+$/, '');
-    const normCtx = ctx.path.replace(/[\/\\]+$/, '');
-    if (normClip === normCtx
-        || normCtx.startsWith(normClip + '/')
-        || normCtx.startsWith(normClip + '\\')) {
+    const normTarget = targetDir.replace(/[\/\\]+$/, '');
+    if (normClip === normTarget
+        || normTarget.startsWith(normClip + '/')
+        || normTarget.startsWith(normClip + '\\')) {
       this.showToast(this.t('pasteIntoSelf'), 'danger');
       return;
     }
     const srcName = this.baseName(clip.path);
-    let dstPath = this.joinPath(ctx.path, srcName);
+    let dstPath = this.joinPath(targetDir, srcName);
     // 同名冲突时加 (n) 后缀
     if (await this.pathExists(dstPath)) {
       const dot = srcName.lastIndexOf('.');
       const base = dot > 0 ? srcName.substring(0, dot) : srcName;
       const ext = dot > 0 ? srcName.substring(dot) : '';
       let i = 1;
-      while (await this.pathExists(this.joinPath(ctx.path, `${base} (${i})${ext}`))) i++;
-      dstPath = this.joinPath(ctx.path, `${base} (${i})${ext}`);
+      while (await this.pathExists(this.joinPath(targetDir, `${base} (${i})${ext}`))) i++;
+      dstPath = this.joinPath(targetDir, `${base} (${i})${ext}`);
     }
     try {
       if (clip.op === 'cut') {
@@ -6508,7 +6529,7 @@ class MarkdownEditor {
       } else {
         await TauriApi.copyPath({ from: clip.path, to: dstPath });
       }
-      this.expandedFolders.add(ctx.path);
+      this.expandedFolders.add(targetDir);
       this.renderFolderTree();
       this.setStatus(this.t('filePasteDone') + ': ' + this.baseName(dstPath));
     } catch (e) {
@@ -8992,6 +9013,14 @@ input[type="checkbox"]:checked::after { display: none !important; }
       e.preventDefault();
       this.hideAllContextMenus();
       this.showContextMenu('context-menu-editor', e.clientX, e.clientY);
+    });
+
+    // 点击编辑器区域即视为离开文件树：清除树选中态，恢复编辑器的文本复制/剪切/粘贴。
+    // 否则 _fileTreeCtx 持续存在会让 Ctrl+C/V 优先按文件树操作，误拦截编辑器文本操作。
+    // 注意：从目录树点击文件打开编辑器是 openFilePath 程序化 focus，不会触发此 mousedown，
+    // 因此「点文件 → Ctrl+C 复制文件」的常用流程不受影响。
+    editorWrapper.addEventListener('mousedown', () => {
+      if (this._fileTreeCtx) this._fileTreeCtx = null;
     });
 
     previewWrapper.addEventListener('contextmenu', (e) => {

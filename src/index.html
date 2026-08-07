@@ -400,8 +400,10 @@
        <div class="editor-column">
       <div id="large-file-banner" class="large-file-banner hidden" role="alert" aria-live="polite">
        <span id="large-file-banner-text"></span>
-       <button id="large-file-banner-dont-remind" class="large-file-banner-dont-remind" type="button">不再提醒</button>
-       <button id="large-file-banner-close" class="large-file-banner-dont-remind" type="button">关闭</button>
+       <div class="large-file-banner-actions">
+         <button id="large-file-banner-dont-remind" class="large-file-banner-dont-remind" type="button">不再提醒</button>
+         <button id="large-file-banner-close" class="large-file-banner-dont-remind" type="button">关闭</button>
+       </div>
      </div>
          <div class="tab-bar-wrapper">
           <button id="tab-scroll-left" class="tab-scroll-arrow hidden" title="向左滚动">&#9664;</button>
@@ -872,8 +874,8 @@
   </div>
 
   <!-- 文件搜索对话框 (VSCode 风格 Ctrl+P，合并自 PR #36)
-       与跨文件搜索(Ctrl+H)保持一致：浮动非模态面板 + 标题栏拖动 + 仅靠 X 按钮/输入框 ESC 关闭。 -->
-  <div id="file-search-dialog" class="dialog-overlay file-search-overlay hidden" role="dialog" aria-modal="false" aria-labelledby="file-search-title">
+       浮动非模态面板 + 标题栏拖动；关闭方式：X 按钮、输入框 ESC、点击面板以外区域（VSCode 命令面板风格）。 -->
+  <div id="file-search-dialog" class="dialog-overlay file-search-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="file-search-title">
     <div class="dialog file-search-dialog" id="fs-panel">
       <div class="dialog-header fs-drag-handle" id="fs-drag-handle">
         <h2 id="file-search-title">文件搜索</h2>

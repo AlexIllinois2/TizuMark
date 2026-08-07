@@ -152,6 +152,91 @@ test('file-ops: fileTreeNewFile / fileTreeNewFolder 走 TauriApi 写盘', async 
   } finally { cleanup(w); }
 });
 
+test('keydown: 树选中文件后 Ctrl+C 复制文件（即便编辑器聚焦、无文本选区）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed._fileTreeCtx = { path: '/root/a.md', isDir: false, nodeEl: null };
+    let copied = false;
+    ed.fileTreeCopy = () => { copied = true; };
+    assert.strictEqual(ed.cm.somethingSelected(), false, '前置：编辑器无文本选区');
+    w.document.body.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true }));
+    assert.ok(copied, 'Ctrl+C 应触发 fileTreeCopy（复制文件），修复「点文件后 Ctrl+C 不起作用」');
+  } finally { cleanup(w); }
+});
+
+test('keydown: 编辑器有文本选区时 Ctrl+C 交给编辑器（不复制文件）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed._fileTreeCtx = { path: '/root/a.md', isDir: false, nodeEl: null };
+    let copied = false;
+    ed.fileTreeCopy = () => { copied = true; };
+    ed.cm.setValue('abcdefghij'); // 测试环境文档为空，先填入内容才能产生选区
+    const doc = ed.cm.getDoc();
+    doc.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 3 });
+    assert.strictEqual(ed.cm.somethingSelected(), true, '前置：编辑器有选区');
+    w.document.body.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'c', ctrlKey: true, bubbles: true }));
+    assert.ok(!copied, '编辑器有选区时 Ctrl+C 不应复制文件（交给编辑器文本复制）');
+  } finally { cleanup(w); }
+});
+
+test('keydown: 树选中目录后 Ctrl+V 粘贴文件（无文本选区时）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed._fileTreeCtx = { path: '/root/docs', isDir: true, nodeEl: null };
+    ed._fileClipboard = { op: 'copy', path: '/root/src.md', isDir: false };
+    let pasted = false;
+    ed.fileTreePaste = async () => { pasted = true; };
+    w.document.body.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'v', ctrlKey: true, bubbles: true }));
+    assert.ok(pasted, '选中目录时 Ctrl+V 应触发 fileTreePaste（粘贴文件）');
+  } finally { cleanup(w); }
+});
+
+test('keydown: 树选中文件（非目录）时 Ctrl+V 粘贴到同级目录（不交给编辑器）', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed._fileTreeCtx = { path: '/root/a.md', isDir: false, nodeEl: null };
+    ed._fileClipboard = { op: 'copy', path: '/root/src.md', isDir: false };
+    let pasted = false;
+    ed.fileTreePaste = async () => { pasted = true; };
+    w.document.body.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'v', ctrlKey: true, bubbles: true }));
+    assert.ok(pasted, '选中文件（非目录）时 Ctrl+V 应触发 fileTreePaste（粘贴到该文件所在目录）');
+  } finally { cleanup(w); }
+});
+
+test('fileTreePaste: 选中文件时目标目录为父目录（同级），选中目录时为目录本身', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    const calls = [];
+    stubUi(ed, { prompt: async () => 'x', confirm: async () => true });
+    w.TauriApi.copyPath = async (a) => { calls.push(a); };
+    w.TauriApi.movePath = async (a) => { calls.push(a); };
+    w.TauriApi.listDir = async () => [];
+    // 选中文件 → 目标应为其所在目录 /root
+    ed._fileTreeCtx = { path: '/root/a.md', isDir: false, nodeEl: null };
+    ed._fileClipboard = { op: 'copy', path: '/src.md', isDir: false };
+    await ed.fileTreePaste();
+    assert.strictEqual(calls.length, 1, '应调用一次 copyPath');
+    assert.strictEqual(calls[0].to, '/root/a.md'.replace('a.md', 'src.md'), '目标应为父目录 /root 下的 src.md');
+    assert.strictEqual(calls[0].to, '/root/src.md', `实际目标: ${calls[0].to}`);
+    // 选中目录 → 目标应为目录本身 /root/docs
+    calls.length = 0;
+    ed._fileTreeCtx = { path: '/root/docs', isDir: true, nodeEl: null };
+    ed._fileClipboard = { op: 'copy', path: '/src.md', isDir: false };
+    await ed.fileTreePaste();
+    assert.strictEqual(calls[0].to, '/root/docs/src.md', `目录选中时目标应为目录本身: ${calls[0].to}`);
+  } finally { cleanup(w); }
+});
+
+test('editorWrapper mousedown：点进编辑器清除树选中态，恢复文本复制/粘贴', async () => {
+  const { w, ed } = await makeEditor();
+  try {
+    ed._fileTreeCtx = { path: '/root/a.md', isDir: false, nodeEl: null };
+    const wrapper = w.document.getElementById('editor-wrapper');
+    wrapper.dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true }));
+    assert.strictEqual(ed._fileTreeCtx, null, '点进编辑器后 _fileTreeCtx 应被清掉');
+  } finally { cleanup(w); }
+});
+
 test('file-ops: 文件树操作不直接 window.__TAURI__.core.invoke（ADR-1 唯一 IPC 边界）', async () => {
   const { w, ed } = await makeEditor();
   try {

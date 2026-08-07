@@ -26,8 +26,14 @@ function initFileSearch() {
   const closeBtn = document.getElementById('file-search-close');
   if (closeBtn) closeBtn.addEventListener('click', fsCloseDialog);
 
-  // 注意：文件搜索与跨文件搜索(Ctrl+H)保持一致的关闭逻辑——只靠 X 按钮与输入框 ESC 关闭，
-  // 不响应遮罩点击（遮罩已是 pointer-events:none 的透明层，点击穿透到下方，与 Ctrl+H 一致）。
+  // 关闭交互：X 按钮、输入框 ESC、点击面板以外的任意区域均可关闭弹框（VSCode 命令面板风格）。
+  // 遮罩层 pointer-events:none，点击空白处会穿透到下方（编辑器），因此用 document 级 mousedown 监听：
+  // 若按下位置不在面板内（__fs_dialog 不含 target）则关闭；面板内（输入/列表/标题栏拖动/X）不关闭。
+  document.addEventListener('mousedown', (e) => {
+    if (!isFsOpen()) return;
+    if (__fs_dialog.contains(e.target)) return; // 面板内交互不触发关闭
+    fsCloseDialog();
+  });
 
   // 阻止所有键盘事件冒泡到编辑器
   __fs_dialog.addEventListener('keydown', (e) => { e.stopPropagation(); });

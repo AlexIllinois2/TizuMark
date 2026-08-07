@@ -154,27 +154,36 @@ test('命令缺失时回退前端 list_dir 递归扫描（保证不整体失效�
   });
 });
 
-test('与 Ctrl+H 一致：浮动非模态面板（file-search-overlay + aria-modal=false + 拖动手柄），打开时定位', async () => withEditor({ captureInitErr: true, invokeImpl }, async (w, ed) => {
+test('浮动面板（file-search-overlay + 拖动手柄），打开时定位', async () => withEditor({ captureInitErr: true, invokeImpl }, async (w, ed) => {
   ed.workspaceFolder = 'C:/ws';
   w.openFileSearchDialog();
   await tick();
   const dlg = w.document.getElementById('file-search-dialog');
   assert.ok(dlg.classList.contains('file-search-overlay'), 'overlay 应带 file-search-overlay 类（与 Ctrl+H 的 cross-search-overlay 对应）');
-  assert.strictEqual(dlg.getAttribute('aria-modal'), 'false', '应非模态，点击遮罩不关闭（与 Ctrl+H 一致）');
+  assert.strictEqual(dlg.getAttribute('aria-modal'), 'true', '应可点击面板外关闭（aria-modal 标记为模态）');
   assert.ok(w.document.getElementById('fs-drag-handle'), '标题栏应带拖动手柄 fs-drag-handle（与 cs-drag-handle 对应）');
   const panel = w.document.getElementById('fs-panel');
   assert.ok(panel && panel.style.left && panel.style.top, '打开时浮动面板应被定位（设置 left/top，支持拖动）');
 }));
 
-test('与 Ctrl+H 一致：关闭靠 X 按钮 / 输入框 ESC；点遮罩不关闭', async () => withEditor({ captureInitErr: true, invokeImpl }, async (w, ed) => {
+test('点击面板以外区域可关闭弹框；面板内点击不关闭；X 与 ESC 仍可关闭', async () => withEditor({ captureInitErr: true, invokeImpl }, async (w, ed) => {
   ed.workspaceFolder = 'C:/ws';
   w.openFileSearchDialog();
   await tick();
   const dlg = w.document.getElementById('file-search-dialog');
+  const panel = w.document.getElementById('fs-panel');
   assert.ok(!dlg.classList.contains('hidden'), '打开后可见');
-  // 点遮罩（target 为 overlay 本身）不应关闭
-  dlg.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
-  assert.ok(!dlg.classList.contains('hidden'), '点遮罩不应关闭（与 Ctrl+H 一致，遮罩 pointer-events:none 点击穿透）');
+
+  // 点击面板外的文档区域（模拟点击遮罩/编辑器，target 不在面板内）应关闭
+  w.document.body.dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true }));
+  assert.ok(dlg.classList.contains('hidden'), '点击面板外（document.body）应关闭弹框');
+
+  // 重新打开：点击面板内部（标题栏等）不应关闭
+  w.openFileSearchDialog();
+  await tick();
+  panel.dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true }));
+  assert.ok(!dlg.classList.contains('hidden'), '点击面板内部不应关闭');
+
   // 输入框 ESC 应关闭
   const input = w.document.getElementById('file-search-input');
   input.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
