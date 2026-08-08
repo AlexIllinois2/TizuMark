@@ -5,7 +5,7 @@
   "identifier": "com.tizu.markdown",
   "build": {
     "beforeDevCommand": "node scripts/dev-server.mjs",
-    "beforeBuildCommand": "npm run build:renderer && npm run build-frontend",
+    "beforeBuildCommand": "npm run build:renderer && node scripts/ensure-vendor.mjs && npm run build-frontend",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
