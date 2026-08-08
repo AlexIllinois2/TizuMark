@@ -2,9 +2,10 @@
 // 覆盖 emoji 短码、数学(KaTeX 未加载时安全跳过)、缩写(abbr)、标题锚点、复制按钮、mermaid 跳过。
 const test = require('node:test');
 const assert = require('node:assert');
-const { createPreviewDom, installGlobals } = require('./helpers/dom.js');
+const { createPreviewDom, installGlobals, loadHljs } = require('./helpers/dom.js');
 const { renderMarkdown } = require('../src/unified-renderer.js');
 const PP = require('../src/modules/preview-post.js');
+const { processCodeBlocks } = require('../src/modules/code-block.js');
 const { B } = require('./helpers/dom.js');
 
 const { preview: _g } = createPreviewDom();
@@ -137,4 +138,51 @@ test('集成：完整 markdown 经 unified 渲染 + 后处理后结构正常', a
   assert.strictEqual(preview.querySelector('h1').id, '标题-hello', '标题锚点应与 headingToId 一致');
   assert.ok(preview.querySelector('p').textContent.includes('⭐'), 'emoji 应替换');
   assert.strictEqual(preview.querySelector('pre .copy-btn') !== null, true, '代码块应有复制按钮');
+});
+
+// 构造带行号包裹的代码块：渲染 + 行号后处理，得到 .code-line-num + .code-line-text 结构
+function buildCodeBlock(md, lineNumbers) {
+  const { preview, window } = createPreviewDom();
+  const hljs = loadHljs(window);
+  const cache = new Map();
+  preview.innerHTML = renderMarkdown(md, { softBreaks: false });
+  processCodeBlocks(preview, { hljs, cache, lineNumbers });
+  return preview;
+}
+
+test('复制按钮：多行代码块复制原始代码（无行号、保留缩进与空行）', async () => {
+  const md = B + B + B + 'python\n' +
+    'def foo():\n' +
+    '    if True:\n' +
+    '        return 1\n' +
+    '\n' +
+    '    return 0\n' +
+    B + B + B;
+  const preview = buildCodeBlock(md, true);
+  // 断言结构确实含行号（复现 bug 前提：旧实现会把这些数字拼进 textContent）
+  assert.ok(preview.querySelector('.code-line-num'), '渲染结构应含 .code-line-num（bug 前提）');
+
+  const copied = PP.getRawCodeText(preview.querySelector('pre'));
+  const expected = 'def foo():\n    if True:\n        return 1\n\n    return 0';
+  assert.strictEqual(copied, expected, '复制内容应与编辑器原始代码一致（无行号、保留缩进与空行）');
+  // 行号数字不应出现在复制内容中（不能被误拼进代码）
+  assert.ok(!/^\d/.test(copied) && !/\n\d/.test(copied), '复制内容不应混入行号数字');
+  assert.ok(copied.includes('    if True:'), '缩进空格应被保留');
+});
+
+test('复制按钮：单行代码块复制原始内容（无行号包裹）', async () => {
+  const md = B + B + B + 'js\nconst a = 1;\n' + B + B + B;
+  const preview = buildCodeBlock(md, true);
+  const copied = PP.getRawCodeText(preview.querySelector('pre'));
+  assert.strictEqual(copied, 'const a = 1;', '单行块应原样复制');
+});
+
+test('复制按钮：行号关闭时仍复制原始代码（无行号、保留缩进）', async () => {
+  const md = B + B + B + 'python\n' +
+    'def bar():\n' +
+    '    pass\n' +
+    B + B + B;
+  const preview = buildCodeBlock(md, false);
+  const copied = PP.getRawCodeText(preview.querySelector('pre'));
+  assert.strictEqual(copied, 'def bar():\n    pass', '行号关闭时复制内容应与原始代码一致');
 });

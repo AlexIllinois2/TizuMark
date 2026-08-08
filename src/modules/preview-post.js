@@ -321,6 +321,28 @@ async function processMermaid(preview, opts) {
   }
 }
 
+// 取代码块原始文本（不含行号、保留缩进与换行）。
+// 渲染后结构为 .code-scroll > .code-line >(.code-line-num + .code-line-text)，
+// 若直接读 code.textContent 会把「行号数字」和「代码」无换行地拼在一起，
+// 导致粘贴后格式/缩进丢失且混入行号。这里只取每行 .code-line-text。
+function getRawCodeText(pre) {
+  const code = pre.querySelector('code');
+  if (!code) return pre.textContent;
+  const lineTexts = code.querySelectorAll('.code-line-text');
+  if (lineTexts.length === 0) {
+    // 单行块（无 .code-line 包裹）或未做行号包裹的原始 <code>：
+    // 直接 textContent 即可，已含正确换行与缩进，且不含行号。
+    const t = code.textContent;
+    return t === ' ' ? '' : t;
+  }
+  // 多行块：逐行取 .code-line-text（仅原始代码，不含行号），按 \n 还原。
+  // 渲染时空行被替换为 &nbsp; 占位，这里还原为空，避免粘贴出多余不间断空格。
+  return Array.from(lineTexts, span => {
+    const t = span.textContent;
+    return t === ' ' ? '' : t;
+  }).join('\n');
+}
+
 function addCopyButtons(preview, opts) {
   const { t } = opts;
   preview.querySelectorAll('pre').forEach(pre => {
@@ -333,8 +355,7 @@ function addCopyButtons(preview, opts) {
     btn.title = t('copyCode');
 
     btn.addEventListener('click', async () => {
-      const code = pre.querySelector('code');
-      const text = code ? code.textContent : pre.textContent;
+      const text = getRawCodeText(pre);
       try {
         await navigator.clipboard.writeText(text);
         btn.textContent = t('copied');
@@ -368,13 +389,13 @@ function addCopyButtons(preview, opts) {
 if (typeof window !== 'undefined' && typeof module === 'undefined') {
   window.PreviewPost = {
     processEmojiShortcodes, processMath, processAbbreviations,
-    processHeadings, processMermaid, addCopyButtons,
+    processHeadings, processMermaid, addCopyButtons, getRawCodeText,
   };
 }
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     processEmojiShortcodes, processMath, processAbbreviations,
     processHeadings, processMermaid, addCopyButtons, EMOJI_MAP,
-    protectUnpairedDollar,
+    protectUnpairedDollar, getRawCodeText,
   };
 }
