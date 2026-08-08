@@ -1,11 +1,10 @@
-# 专用于 master 分支的 Linux x64 打包工作流。
-# 推送到 master 时自动构建 deb / rpm / AppImage 三种包。
-# 使用 tauri-apps/tauri-action 执行 tauri build，产物上传到 GitHub Release。
+# 推送 v* 开头的 tag 时自动构建 deb / rpm / AppImage 三种包并发布到 GitHub Release。
+# 使用 tauri-apps/tauri-action 执行 tauri build，产物上传到 Release 与 Actions Artifacts。
 name: CI-linux
 
 on:
   push:
-    branches: [master]  # 只在推送到 master 分支时触发
+    tags: ['v*']  # 推送 v 开头的 tag 时触发（如 v1.2.0、v1.3.0-beta）
 
 jobs:
   build-linux-x64:
@@ -68,10 +67,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           # 自动检测 src-tauri，无需 projectPath
-          tagName: dev2-build-${{ github.run_number }}
-          releaseName: 'Dev2 Linux Build #${{ github.run_number }}'
+          tagName: ${{ github.ref_name }}
+          releaseName: 'TizuMark ${{ github.ref_name }}'
           releaseBody: |
-            自动构建产物，来自 master 分支（commit ${{ github.sha }}）。
+            自动构建产物，来自 tag ${{ github.ref_name }}（commit ${{ github.sha }}）。
           releaseDraft: false
           prerelease: false
           args: ''             # 默认即可，Linux x64 不需要额外 target 参数
@@ -80,7 +79,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-x64-bundles-${{ github.run_number }}
+          name: linux-x64-bundles-${{ github.ref_name }}
           path: |
             src-tauri/target/release/bundle/deb/*.deb
             src-tauri/target/release/bundle/rpm/*.rpm
