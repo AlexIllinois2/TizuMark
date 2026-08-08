@@ -203,7 +203,7 @@ test('settings: resetSettings 恢复默认并保留自定义字体', async () =>
     // 预置 resetSettings 操作的设置表单元素，避免 jsdom 下 null 崩溃
     const ids = ['set-font-size', 'font-size-label', 'set-tab-size', 'set-line-wrap', 'set-line-numbers',
       'set-preview-font-size', 'preview-font-size-label', 'set-line-height', 'set-max-width', 'set-theme-mode',
-      'set-color-scheme', 'set-font-scheme', 'set-default-view', 'set-scroll-sync', 'set-soft-breaks',
+      'set-color-scheme', 'set-font-scheme', 'set-scroll-sync', 'set-soft-breaks',
       'set-language', 'settings-image-asset-path', 'setting-image-asset-path-hint-text'];
     for (const id of ids) {
       if (!w.document.getElementById(id)) {
@@ -624,8 +624,6 @@ test('settings: 切换英文后设置对话框无残留中文（除字体预览�
     assert.deepStrictEqual([...theme.options].map(o => o.text), ['Light', 'Dark', 'Follow System']);
     const close = w.document.getElementById('set-close-action');
     assert.deepStrictEqual([...close.options].map(o => o.text), ['Ask every time', 'Quit app', 'Minimize to tray']);
-    const view = w.document.getElementById('set-default-view');
-    assert.deepStrictEqual([...view.options].map(o => o.text), ['Preview', 'Edit']);
     const tab = w.document.getElementById('set-tab-size');
     assert.deepStrictEqual([...tab.options].map(o => o.text), ['2 spaces', '4 spaces', '8 spaces']);
     const mw = w.document.getElementById('set-max-width');

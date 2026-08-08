@@ -946,12 +946,13 @@ class MarkdownEditor {
     this._previewChildrenCount = 0;
     this._editorPercent = null;
     this.isDark = false;
-    this.viewMode = 'preview';
+
+    this.settings = this.loadSettings();
+    // viewMode 直接取 settings.defaultView（胶囊按钮即改 defaultView 并落盘，二者永远一致）
+    this.viewMode = this.settings.defaultView === 'edit' ? 'edit' : 'preview';
     // 会话级「不再提醒」标志：仅本次应用运行期间有效，关闭应用后新会话自然复位为 false。
     // 注意：不在 switchTab / openFile 等处重置，否则会丢失用户在本次会话内的选择。
     this._largeFileNoticeSessionSuppressed = false;
-
-    this.settings = this.loadSettings();
     this.shortcuts = this.loadShortcuts();
     this.shortcutScheme = this.loadShortcutScheme();
     this._recentFiles = [];
@@ -1185,8 +1186,7 @@ class MarkdownEditor {
     setRowLabel('set-preview-font-size', t('previewFontSize'));
     setRowLabel('set-line-height', t('lineHeight'));
     setRowLabel('set-max-width', t('maxWidth'));
-    setSectionTitle('set-default-view', t('behavior'));
-    setRowLabel('set-default-view', t('defaultView'));
+    setSectionTitle('set-scroll-sync', t('behavior'));
     setRowLabel('set-scroll-sync', t('scrollSync'));
     setRowLabel('set-soft-breaks', t('softBreaks'));
     setRowLabel('set-code-line-numbers', t('codeLineNumbers'));
@@ -1564,12 +1564,6 @@ class MarkdownEditor {
       themeSel.options[1].text = t('themeDark');
       themeSel.options[2].text = t('followSystem');
     }
-    // Default view
-    const viewSel = document.getElementById('set-default-view');
-    if (viewSel) {
-      viewSel.options[0].text = t('preview');
-      viewSel.options[1].text = t('edit');
-    }
     // Tab size
     const tabSizeSel = document.getElementById('set-tab-size');
     if (tabSizeSel) {
@@ -1721,7 +1715,6 @@ class MarkdownEditor {
     document.getElementById('set-theme-mode').value = s.themeMode;
     document.getElementById('set-color-scheme').value = s.colorScheme || 'default';
     document.getElementById('set-font-scheme').value = s.fontScheme || 'system-sans';
-    document.getElementById('set-default-view').value = s.defaultView;
     document.getElementById('set-scroll-sync').checked = s.scrollSync;
     document.getElementById('set-code-line-numbers').checked = s.codeLineNumbers;
     document.getElementById('set-code-wrap').checked = s.codeWrap;
@@ -1843,9 +1836,6 @@ class MarkdownEditor {
     });
     document.getElementById('set-font-scheme').addEventListener('change', (e) => {
       this.settings.fontScheme = e.target.value;
-    });
-    document.getElementById('set-default-view').addEventListener('change', (e) => {
-      this.settings.defaultView = e.target.value;
     });
     document.getElementById('set-scroll-sync').addEventListener('change', (e) => {
       this.settings.scrollSync = e.target.checked;
@@ -2388,7 +2378,11 @@ class MarkdownEditor {
     this.preview.classList.toggle('code-line-numbers', s.codeLineNumbers);
     this.preview.classList.toggle('code-wrap', s.codeWrap);
     this.preview.classList.toggle('code-no-scroll', s.codeScroll === false);
+    // viewMode 永远等于 settings.defaultView，无需在此同步
     if (this._hljsCache) this._hljsCache.clear();
+    // softBreaks / tabSize / codeLineNumbers / codeWrap / codeScroll / maxWidth 等
+    // 均影响预览内容渲染，统一重渲染预览，让设置即时可见
+    await this.updatePreview();
     await this.applyThemeMode();
     this.applyFontScheme();
     this.applyCustomFonts();
@@ -6061,7 +6055,8 @@ class MarkdownEditor {
   }
 
   newFile() {
-    this.setViewMode('edit');
+    // 新建文件跟随当前视图模式（=settings.defaultView），不强制切到 edit
+    // —— 否则会把用户的默认视图设置改成 edit 并落盘
     this.addTab(this.t('untitled'), '', null);
     this.setStatus(this.t('newFileCreated'));
   }
@@ -6131,8 +6126,7 @@ class MarkdownEditor {
           console.error('Failed to open file:', filePath, e);
         }
       }
-      this.viewMode = 'preview';
-      this.applyViewMode();
+      // viewMode 永远等于 settings.defaultView，打开文件时无需重置视图模式
       this.updateWordCount();
       this.setStatus(openedCount > 0 ? this.t('openedFiles', { n: openedCount }) : this.t('alreadyOpen'));
     } catch (error) {
@@ -6272,8 +6266,7 @@ class MarkdownEditor {
       const content = await this.readFileNormalized(filePath);
       const name = filePath.split(/[/\\]/).pop();
       await this.addTab(name, content, filePath);
-      this.viewMode = 'preview';
-      this.applyViewMode();
+      // viewMode 永远等于 settings.defaultView，打开文件时无需重置视图模式
       this.updateWordCount();
       this.setStatus(this.t('fileOpened', { name }));
       this.saveSession();
@@ -8470,7 +8463,7 @@ input[type="checkbox"]:checked::after { display: none !important; }
 
   setViewMode(mode) {
     if (this.viewMode === mode) return;
-    
+
     if (mode === 'preview') {
       document.getElementById('find-panel').classList.add('hidden');
     } else {
@@ -8499,6 +8492,10 @@ input[type="checkbox"]:checked::after { display: none !important; }
     }
 
     this.viewMode = mode;
+    // 胶囊按钮直接绑定 settings.defaultView：点击即改设置并落盘，
+    // viewMode 永远等于 defaultView，不再有「全局视图状态 vs 默认视图」两套概念
+    this.settings.defaultView = mode;
+    this.saveSettings();
     this.applyViewMode();
   }
 
@@ -9639,7 +9636,9 @@ input[type="checkbox"]:checked::after { display: none !important; }
       // 3. 按用户偏好执行关闭行为
       const action = await this._resolveCloseAction();
       if (!action) return; // 用户在弹框点了取消
-      if (action === 'quit') {
+      const showTray = this.settings.showTrayIcon !== false;
+      if (action === 'quit' || !showTray) {
+        // 托盘已隐藏时不能最小化到托盘（用户无法恢复窗口），兜底改为直接退出
         await TauriApi.quitApp();
       } else {
         await appWindow.hide();
@@ -9656,6 +9655,12 @@ input[type="checkbox"]:checked::after { display: none !important; }
   async hideToTray() {
     // 快捷键「关闭到托盘」：仅把窗口隐藏到系统托盘，应用进程与文档保留在内存中，
     // 因此不会丢失未保存内容；下次从托盘图标恢复窗口即可继续编辑。
+    const showTray = this.settings.showTrayIcon !== false;
+    if (!showTray) {
+      // 托盘已隐藏，hide() 后用户无法恢复窗口，改为走完整关闭流程（含未保存确认）
+      await this.closeWindow();
+      return;
+    }
     try {
       this.saveSession();
       const w = TauriApi.currentWindow();
@@ -9670,7 +9675,10 @@ input[type="checkbox"]:checked::after { display: none !important; }
   }
 
   async _resolveCloseAction() {
-    const action = this.settings.closeAction || 'ask';
+    const showTray = this.settings.showTrayIcon !== false;
+    let action = this.settings.closeAction || 'ask';
+    // 若隐藏了系统托盘，则「最小化到托盘」无法恢复窗口，按 UI 提示语义强制改为退出应用
+    if (!showTray && action === 'minimize') action = 'quit';
     if (action === 'quit') return 'quit';
     if (action === 'minimize') return 'minimize';
     // ask — 弹出确认对话框
@@ -9679,11 +9687,14 @@ input[type="checkbox"]:checked::after { display: none !important; }
       doc: document,
     });
     if (!result) return null; // cancelled
+    let resolvedAction = result.action;
+    // 同上：用户在对话框中选择了 minimize，但托盘已隐藏 → 强制 quit
+    if (!showTray && resolvedAction === 'minimize') resolvedAction = 'quit';
     if (result.remember) {
-      this.settings.closeAction = result.action;
+      this.settings.closeAction = resolvedAction;
       this.saveSettings();
     }
-    return result.action;
+    return resolvedAction;
   }
 
   initFormatToolbar() {
