@@ -2315,14 +2315,14 @@ class MarkdownEditor {
       nextTab: { key: 'Ctrl+Tab', label: '下一个标签页' },
       prevTab: { key: 'Ctrl+Shift+Tab', label: '上一个标签页' },
       bold: { key: 'Ctrl+B', label: '加粗' },
-      toggleSidebar: { key: 'Ctrl+B', label: '显示/隐藏侧边栏' },
+      toggleSidebar: { key: '', label: '显示/隐藏侧边栏' },
       italic: { key: 'Ctrl+I', label: '斜体' },
       insertLink: { key: 'Ctrl+K', label: '插入链接' },
       exportPDF: { key: 'Ctrl+P', label: '导出 PDF' },
       fileSearch: { key: '', label: '文件搜索' },
       globalSearch: { key: '', label: '全局搜索' },
       inlineCode: { key: 'Ctrl+`', label: '行内代码' },
-      strikethrough: { key: 'Ctrl+Shift+S', label: '删除线' },
+      strikethrough: { key: 'Ctrl+Shift+X', label: '删除线' },
       codeBlock: { key: 'Ctrl+Shift+C', label: '代码块' },
       blockquote: { key: 'Ctrl+Shift+Q', label: '引用块' },
       toggleView: { key: '', label: '切换视图' },
@@ -2391,26 +2391,28 @@ class MarkdownEditor {
     };
   }
 
+  // 构建某个方案解析后的完整快捷键表（以默认键位为基，叠加预置方案的覆盖项）。
+  // default/custom 之外缺失的 action 回落为空串，保证 this.shortcuts 始终含全部 action。
+  buildSchemeShortcuts(name) {
+    const defaults = this.getDefaultShortcuts();
+    if (!name || name === 'default') return JSON.parse(JSON.stringify(defaults));
+    const preset = this.getShortcutPresets()[name];
+    if (!preset) return JSON.parse(JSON.stringify(defaults));
+    const next = {};
+    for (const [aid, def] of Object.entries(defaults)) {
+      const k = preset[aid];
+      next[aid] = { key: (k != null ? k : ''), label: def.label };
+    }
+    return next;
+  }
+
   applyShortcutScheme(name) {
     if (name === 'custom') {
       this.shortcutScheme = 'custom';
       this.saveShortcutScheme('custom');
       return;
     }
-    const defaults = this.getDefaultShortcuts();
-    let next;
-    if (name === 'default') {
-      next = JSON.parse(JSON.stringify(defaults)); // 整体恢复默认键位
-    } else {
-      const preset = this.getShortcutPresets()[name];
-      if (!preset) return;
-      next = {};
-      for (const [aid, def] of Object.entries(defaults)) {
-        const k = preset[aid];
-        next[aid] = { key: (k != null ? k : ''), label: def.label };
-      }
-    }
-    this.shortcuts = next;
+    this.shortcuts = this.buildSchemeShortcuts(name);
     this.shortcutScheme = name;
     this.saveShortcuts();
     this.saveShortcutScheme(name);
@@ -2428,20 +2430,7 @@ class MarkdownEditor {
       this.renderShortcutsList();
       return;
     }
-    const defaults = this.getDefaultShortcuts();
-    let next;
-    if (name === 'default') {
-      next = JSON.parse(JSON.stringify(defaults)); // 整体恢复默认键位
-    } else {
-      const preset = this.getShortcutPresets()[name];
-      if (!preset) return;
-      next = {};
-      for (const [aid, def] of Object.entries(defaults)) {
-        const k = preset[aid];
-        next[aid] = { key: (k != null ? k : ''), label: def.label };
-      }
-    }
-    this.shortcuts = next;
+    this.shortcuts = this.buildSchemeShortcuts(name);
     this.shortcutScheme = name;
     this.renderShortcutsList();
   }
@@ -2450,6 +2439,10 @@ class MarkdownEditor {
     const defaults = this.getDefaultShortcuts();
     try {
       const saved = this._validConfigObject(JSON.parse(localStorage.getItem('tizumark-shortcuts')));
+      if (!saved) {
+        // 首次启动（无已保存快捷键）：默认采用 VS Code 方案
+        return this.buildSchemeShortcuts('vscode');
+      }
       const merged = { ...defaults, ...saved };
       // 迁移：Ctrl+Shift+F 被中文输入法拦截，迁移到 Ctrl+H（不受输入法拦截）。
       // 此前中间版本用过 Ctrl+Shift+L，也一并迁移到 Ctrl+H。
@@ -2462,7 +2455,7 @@ class MarkdownEditor {
       if (merged.previewFind) delete merged.previewFind;
       return merged;
     } catch {
-      return defaults;
+      return this.buildSchemeShortcuts('vscode');
     }
   }
 
@@ -2474,6 +2467,8 @@ class MarkdownEditor {
     const VALID = ['default', 'vscode', 'typora', 'sublime', 'custom'];
     const stored = localStorage.getItem('tizumark-shortcut-scheme');
     if (stored && VALID.includes(stored)) return stored; // 白名单校验，防脏数据
+    // 全新安装（无 scheme 且无已保存快捷键）→ 默认采用 VS Code 方案
+    if (!localStorage.getItem('tizumark-shortcuts')) return 'vscode';
     // 旧数据无 scheme：与默认逐项比对，有差异视为自定义（保留用户旧自定义数据）
     const def = this.getDefaultShortcuts();
     const cur = this.shortcuts || def;
