@@ -421,6 +421,7 @@ const I18N = {
     discardAll: '放弃全部',
     fileOpened: '已打开: {name}',
     openFolder: '打开文件夹',
+    locateActiveFile: '定位到当前文件',
     files: '文件',
     closeFolder: '关闭文件夹',
     folderOpened: '已打开文件夹: {path}',
@@ -790,6 +791,7 @@ const I18N = {
     discardAll: 'Discard All',
     fileOpened: 'Opened: {name}',
     openFolder: 'Open Folder',
+    locateActiveFile: 'Locate Active File',
     files: 'Files',
     closeFolder: 'Close Folder',
     folderOpened: 'Opened folder: {path}',
@@ -3684,6 +3686,14 @@ class MarkdownEditor {
     document.getElementById('folder-close').addEventListener('click', () => {
       this.closeFolder();
     });
+    const locateBtn = document.getElementById('folder-locate');
+    if (locateBtn) {
+      locateBtn.title = this.t('locateActiveFile');
+      locateBtn.addEventListener('click', () => {
+        this.showSidebarTab('files');
+        this.locateActiveFile();
+      });
+    }
     document.getElementById('tab-outline').addEventListener('click', () => {
       this.showSidebarTab('outline');
     });
@@ -3847,6 +3857,20 @@ class MarkdownEditor {
         const shortcutsDialog = document.getElementById('shortcuts-dialog');
         if (!shortcutsDialog.classList.contains('hidden')) {
           this.hideShortcutsDialog();
+          return;
+        }
+        // 查找栏打开时，任意焦点下按 Esc 都应关闭（且阻止默认，避免 WebView2 把 Esc 当字符插入 ␛）
+        const findPanel = document.getElementById('find-panel');
+        const previewFindPanel = document.getElementById('preview-find-panel');
+        if (findPanel && !findPanel.classList.contains('hidden')) {
+          e.preventDefault();
+          this.closeFindPanel();
+          return;
+        }
+        if (previewFindPanel && !previewFindPanel.classList.contains('hidden')) {
+          e.preventDefault();
+          previewFindPanel.classList.add('hidden');
+          this.clearPreviewHighlight();
           return;
         }
       }
@@ -4186,7 +4210,13 @@ class MarkdownEditor {
         e.preventDefault();
         document.getElementById('find-next').click();
       }
-      if (e.key === 'Escape') this.closeFindPanel();
+      if (e.key === 'Escape') {
+        // 阻止默认行为，避免 Esc 在 WebView2 中触发 keypress(charCode=27) 被 CodeMirror 当作
+        // 可打印字符插入「␛」；同时阻止冒泡到文档级处理器。
+        e.preventDefault();
+        e.stopPropagation();
+        this.closeFindPanel();
+      }
     });
 
     replaceInput.addEventListener('keydown', (e) => {
@@ -4194,7 +4224,11 @@ class MarkdownEditor {
         e.preventDefault();
         document.getElementById('replace-one').click();
       }
-      if (e.key === 'Escape') this.closeFindPanel();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.closeFindPanel();
+      }
     });
 
     this.initPreviewFind();
@@ -4348,6 +4382,8 @@ class MarkdownEditor {
         doPreviewFind(e.shiftKey);
       }
       if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
         document.getElementById('preview-find-panel').classList.add('hidden');
         this.clearPreviewHighlight();
       }
@@ -5935,6 +5971,48 @@ class MarkdownEditor {
         if (row) row.classList.add('active');
       }
     });
+  }
+
+  // 定位到当前打开的文件：展开所有祖先目录，滚动并高亮对应节点（类似 IDEA 的「从源定位」）
+  async locateActiveFile() {
+    const treeEl = document.getElementById('folder-tree');
+    if (!treeEl) return;
+    const activePath = (this.activeTab && this.activeTab.filePath) ? this.activeTab.filePath : null;
+    if (!activePath || !this.workspaceFolder) return;
+
+    // 计算 activePath 相对 workspaceFolder 的祖先目录，确保它们被展开
+    const base = this.workspaceFolder.replace(/[\\/]+$/, '');
+    const sep = base.includes('\\') ? '\\' : '/';
+    let rel = activePath;
+    if (activePath.startsWith(base)) {
+      rel = activePath.slice(base.length);
+    }
+    const segs = rel.split(/[\\/]/).filter(Boolean);
+    segs.pop(); // 去掉文件名本身，剩余为祖先目录段
+    let cur = base;
+    for (const seg of segs) {
+      cur = cur + sep + seg;
+      this.expandedFolders.add(cur);
+    }
+
+    await this.renderFolderTree();
+
+    // 渲染完成后查找目标节点并滚动/高亮
+    let target = null;
+    treeEl.querySelectorAll('.tree-node.tree-file').forEach(n => {
+      if (n.dataset.path === activePath) target = n;
+    });
+    if (target) {
+      const row = target.querySelector('.tree-row');
+      if (row) {
+        row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        row.classList.remove('flash');
+        // 触发重排以便重新播放动画
+        void row.offsetWidth;
+        row.classList.add('flash');
+        setTimeout(() => row.classList.remove('flash'), 1200);
+      }
+    }
   }
 
   // ====== 文件树右键菜单：状态更新 + 动作 ======

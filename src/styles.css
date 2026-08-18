@@ -987,7 +987,7 @@ body {
   align-items: center;
   gap: 6px;
   padding: 4px 12px;
-  background-color: var(--bg-tab);
+  background-color: var(--bg-tab-active);
   border-radius: 8px 8px 0 0;
   cursor: pointer;
   font-size: 12px;
@@ -1010,7 +1010,7 @@ body {
 .tab:hover { background-color: var(--bg-secondary); }
 
 .tab.active {
-  background-color: var(--bg-tab-active);
+  background-color: var(--bg-tab);
   color: var(--text-primary);
   border-bottom: 2px solid var(--accent-color);
   box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.04);
@@ -2590,6 +2590,42 @@ body.is-resizing .side-btn {
 .folder-close-btn:hover {
   background-color: var(--bg-hover, rgba(128, 128, 128, 0.08));
   color: var(--text-primary);
+}
+
+.folder-locate-btn {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  padding: 0;
+}
+
+.folder-locate-btn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.folder-locate-btn:hover {
+  background-color: var(--bg-hover, rgba(128, 128, 128, 0.08));
+  color: var(--accent-color);
+}
+
+/* 定位到当前文件时的高亮闪烁动画 */
+.tree-row.flash {
+  animation: tree-row-flash 1.2s ease;
+}
+
+@keyframes tree-row-flash {
+  0% { background-color: var(--accent-color, #2196f3); color: #fff; }
+  100% { background-color: transparent; color: var(--accent-color); }
 }
 
 .folder-tree {
