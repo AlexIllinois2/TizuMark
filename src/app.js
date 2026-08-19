@@ -3111,10 +3111,83 @@ class MarkdownEditor {
     document.addEventListener('mousemove', this._gutterMouseMove);
     document.addEventListener('mouseup', this._gutterMouseUp);
 
+    // 编辑区：Ctrl/Cmd + 点击链接 → 用系统浏览器（系统默认程序）打开。
+    // 仅左键 + Ctrl/⌘ 触发；Shift 多选、右键等保留 CodeMirror 原生行为。
+    this.cm.on('mousedown', (cm, ev) => {
+      if (!ev || ev.button !== 0) return;
+      if (!(ev.ctrlKey || ev.metaKey) || ev.shiftKey) return;
+      const pos = cm.coordsChar({ left: ev.clientX, top: ev.clientY }, 'window');
+      if (pos.line < 0 || pos.line > cm.lastLine()) return;
+      const url = this._extractEditorLink(cm.getLine(pos.line), pos.ch);
+      if (!url) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      this.openExternal(url);
+    });
+
+    // Ctrl/⌘ 悬停在链接上时把光标变成手型，提示「可点击打开」
+    let _lastEditorLinkHover = false;
+    this.cm.on('mousemove', (cm, ev) => {
+      if (!ev || !(ev.ctrlKey || ev.metaKey)) {
+        if (_lastEditorLinkHover) { _lastEditorLinkHover = false; this._setEditorLinkCursor(false); }
+        return;
+      }
+      const pos = cm.coordsChar({ left: ev.clientX, top: ev.clientY }, 'window');
+      const url = (pos.line >= 0 && pos.line <= cm.lastLine())
+        ? this._extractEditorLink(cm.getLine(pos.line), pos.ch) : null;
+      if (!!url !== _lastEditorLinkHover) {
+        _lastEditorLinkHover = !!url;
+        this._setEditorLinkCursor(!!url);
+      }
+    });
+    // CodeMirror 不派发 mouseleave，改用 wrapper 原生事件复位光标
+    this.cm.getWrapperElement().addEventListener('mouseleave', () => {
+      if (_lastEditorLinkHover) { _lastEditorLinkHover = false; this._setEditorLinkCursor(false); }
+    });
+
     // IME 适配说明：已切换到 inputStyle:'contenteditable'，IME 候选框由
     // WebView2 原生锚定在光标行下方（与浏览器行为一致），不再需要
     // compositionstart 滚动补偿。之前的滚动处理器在视口边缘行上会打断
     // composition（输入不了）+ 触发滚动反馈循环（页面乱滚），已移除。
+  }
+
+  // 在编辑器的某一行文本中，找出包含第 ch 个字符的链接 URL。
+  // 支持：行内链接 [text](url)、自动链接 <url>、裸链接 https://...。
+  _extractEditorLink(lineText, ch) {
+    if (!lineText) return null;
+    const tests = [
+      // 行内链接：[text](url "title") 或 [text](url)
+      /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g,
+      // 自动链接：<https://...> / <mailto:...>
+      /<((?:https?:\/\/|mailto:)[^>\s]+)>/g,
+      // 裸链接：https://...
+      /(https?:\/\/[^\s<>"'()]+)/g,
+    ];
+    for (const re of tests) {
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(lineText)) !== null) {
+        const wholeStart = m.index;
+        const wholeEnd = m.index + m[0].length;
+        if (ch >= wholeStart && ch <= wholeEnd) {
+          return this._cleanEditorLink(m[1]);
+        }
+      }
+    }
+    return null;
+  }
+
+  // 清理提取到的链接：去首尾空白、去尖括号包裹、去常见尾随标点
+  _cleanEditorLink(raw) {
+    let u = (raw || '').trim();
+    if (u.startsWith('<') && u.endsWith('>')) u = u.slice(1, -1);
+    u = u.replace(/[.,;:!?]+$/, '');
+    return u;
+  }
+
+  _setEditorLinkCursor(isLink) {
+    const wrap = this.cm && this.cm.getWrapperElement();
+    if (wrap) wrap.style.cursor = isLink ? 'pointer' : '';
   }
 
   _selectLineRange(cm, fromLine, toLine) {
